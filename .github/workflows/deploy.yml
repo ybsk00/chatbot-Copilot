@@ -52,15 +52,11 @@ jobs:
         with:
           node-version: 20
 
-      - name: Get Cloud Run URL
-        id: backend-url
-        run: echo "url=https://ip-assist-backend-$(echo ${{ secrets.GCP_PROJECT_NUMBER }} | head -c 10)-du.a.run.app" > $GITHUB_OUTPUT
-
       - name: Install & Build
         working-directory: frontend
         run: |
           npm ci
-          VITE_API_URL=${{ secrets.CLOUD_RUN_URL }} npm run build
+          VITE_API_URL=https://ip-assist-backend-1058034030780.asia-northeast3.run.app npm run build
 
       - name: Deploy to Firebase Hosting
         uses: FirebaseExtended/action-hosting-deploy@v0

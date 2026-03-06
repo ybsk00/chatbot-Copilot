@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { api } from "../api/client";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://ip-assist-backend-1058034030780.asia-northeast3.run.app";
 
@@ -112,62 +113,67 @@ export default function ChatPage() {
     const history = messages.map(m => ({ role: m.role, content: m.text }));
 
     try {
-      // 3. 백엔드 API 호출
-      const res = await fetch(`${API_URL}/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          session_id: sessionId,
-          message: text,
-          category: null,
-          history,
-          phase,
-          filled_fields: getFilledFields(),
-        }),
-      });
-      const data = await res.json();
+      if (phase === "filling") {
+        // ── filling 단계: 동기 방식 (rfp_fields 추출 필요) ──
+        const data = await api.chat(sessionId, text, null, history, phase, getFilledFields());
 
-      // 4. Phase 전환 처리
-      if (data.phase_trigger === "purchase" && phase === "chat") {
-        setRightVisible(true);
-        setPhase("blank");
-      }
+        if (data.rfp_fields && Object.keys(data.rfp_fields).length > 0) {
+          applyFills(data.rfp_fields);
+        }
 
-      // 5. 분류 결과가 있으면 별도 메시지로 추가
-      if (data.classification) {
         setMessages(prev => [...prev, {
           id: msgIdCounter++, role: "assistant",
-          text: "분류 확인 완료",
-          classification: data.classification,
+          text: data.answer, sources: data.sources,
+          rag_score: data.rag_score, trigger: data.phase_trigger,
         }]);
+
+        if (data.phase_trigger === "complete") {
+          setTimeout(() => setPhase("complete"), 800);
+        }
+      } else {
+        // ── chat/asked 단계: SSE 스트리밍 ──
+        const aiMsgId = msgIdCounter++;
+        let metaData = {};
+
+        // 빈 AI 메시지 먼저 추가 (스트리밍용)
+        setMessages(prev => [...prev, { id: aiMsgId, role: "assistant", text: "", isStreaming: true }]);
+
+        await api.streamChat(
+          sessionId, text, null, history, phase, getFilledFields(),
+          // onToken: 토큰 실시간 추가
+          (token) => {
+            setMessages(prev => prev.map(m =>
+              m.id === aiMsgId ? { ...m, text: m.text + token } : m
+            ));
+          },
+          // onMeta: 소스/점수/트리거 저장
+          (meta) => {
+            metaData = meta;
+            setMessages(prev => prev.map(m =>
+              m.id === aiMsgId ? {
+                ...m,
+                sources: meta.sources,
+                rag_score: meta.rag_score,
+                trigger: meta.phase_trigger,
+              } : m
+            ));
+          },
+          // onDone: 스트리밍 완료
+          () => {
+            setMessages(prev => prev.map(m =>
+              m.id === aiMsgId ? { ...m, isStreaming: false } : m
+            ));
+
+            // Phase 전환 처리
+            if (metaData.phase_trigger === "rfp_agreed") {
+              setRightVisible(true);
+              setPhase("filling");
+            } else if (metaData.phase_trigger === "complete") {
+              setTimeout(() => setPhase("complete"), 800);
+            }
+          }
+        );
       }
-
-      // 6. RFP 모드 전환
-      if (data.phase_trigger === "purchase" || (phase === "blank" && data.rfp_fields && Object.keys(data.rfp_fields).length > 0)) {
-        setPhase("filling");
-      }
-
-      // 7. RFP 필드 채우기
-      if (data.rfp_fields && Object.keys(data.rfp_fields).length > 0) {
-        applyFills(data.rfp_fields);
-      }
-
-      // 8. AI 답변 메시지 추가
-      const aiMsg = {
-        id: msgIdCounter++,
-        role: "assistant",
-        text: data.answer,
-        sources: data.sources,
-        rag_score: data.rag_score,
-        trigger: data.phase_trigger,
-      };
-      setMessages(prev => [...prev, aiMsg]);
-
-      // 9. 완성 처리
-      if (data.phase_trigger === "complete") {
-        setTimeout(() => setPhase("complete"), 800);
-      }
-
     } catch (err) {
       setMessages(prev => [...prev, {
         id: msgIdCounter++, role: "assistant",
@@ -358,23 +364,24 @@ export default function ChatPage() {
       display:"flex", height:"100vh", background:C.bg,
       fontFamily:"'Pretendard','Apple SD Gothic Neo','Noto Sans KR',sans-serif",
       color:C.text, overflow:"hidden",
-      alignItems: phase === "chat" ? "center" : "stretch",
-      justifyContent: phase === "chat" ? "center" : "flex-start",
+      alignItems:"center",
+      justifyContent:"center",
+      gap: rightVisible ? 16 : 0,
+      padding:"0 20px",
     }}>
 
       {/* ════ LEFT: 채팅 패널 ════ */}
       <div style={{
-        width: rightVisible ? "44%" : "520px",
+        width: 520,
         minWidth: 360,
-        height: phase === "chat" ? "80vh" : "100vh",
+        maxWidth: 520,
+        height: "80vh",
         display:"flex", flexDirection:"column",
         background:C.card,
-        borderRight: rightVisible ? `1px solid ${C.border}` : "none",
+        borderRadius:16,
+        boxShadow:"0 4px 32px rgba(0,0,0,0.10)",
         transition:"all 0.4s ease",
-        ...(phase === "chat" ? {
-          borderRadius:16,
-          boxShadow:"0 4px 32px rgba(0,0,0,0.10)"
-        } : {})
+        flexShrink:0,
       }}>
         {/* 채팅 헤더 */}
         <div style={{ padding:"15px 20px 13px", borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"center", gap:12 }}>
@@ -478,21 +485,16 @@ export default function ChatPage() {
 
       {/* ════ RIGHT: RFP 패널 ════ */}
       {rightVisible && (
-        <div style={{ flex:1, display:"flex", flexDirection:"column", background:C.bg, animation:"slideIn 0.4s ease forwards" }}>
+        <div style={{ width:440, maxWidth:440, height:"80vh", display:"flex", flexDirection:"column", background:C.card, borderRadius:16, boxShadow:"0 4px 32px rgba(0,0,0,0.10)", animation:"slideIn 0.4s ease forwards", flexShrink:0, overflow:"hidden" }}>
           <style>{`@keyframes slideIn{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:translateX(0)}}`}</style>
-          <div style={{ background:C.card, borderBottom:`1px solid ${C.border}`, padding:"14px 24px", boxShadow:C.shadowSm, display:"flex", alignItems:"center", gap:10 }}>
+          <div style={{ background:C.card, borderBottom:`1px solid ${C.border}`, padding:"14px 20px", display:"flex", alignItems:"center", gap:10, flexShrink:0 }}>
             <div style={{ width:34, height:34, borderRadius:8, background:"linear-gradient(135deg,#1e3a8a,#1d4ed8)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:17 }}>📋</div>
             <div>
               <div style={{ fontSize:13, fontWeight:800 }}>{phase === "blank" ? "제안요청서 (RFP) — 빈 양식" : phase === "filling" ? "제안요청서 (RFP) — 작성 중" : "제안요청서 (RFP) — 작성 완료"}</div>
               <div style={{ fontSize:10, color:C.sub, marginTop:1 }}>대한민국 정부 표준 구매 양식 기준</div>
             </div>
-            <div style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:3 }}>
-              {[{ label:"요구수집", done: true }, { label:"RFP", done: phase==="filling"||phase==="complete", active: phase==="filling" }, { label:"공급업체", done: phase==="complete" }, { label:"완료", done: false }].map((s,i) => (
-                <div key={i} style={{ display:"flex", alignItems:"center", gap:3 }}>
-                  <div style={{ fontSize:10, padding:"3px 9px", borderRadius:20, fontWeight:600, background: s.done ? C.greenSoft : s.active ? C.accentSoft : "#f8fafc", color: s.done ? "#16a34a" : s.active ? C.accent : C.muted, border: s.done ? `1px solid ${C.greenMid}` : s.active ? `1.5px solid ${C.accent}` : `1px solid ${C.border}` }}>{s.done && !s.active ? "✓ " : ""}{s.label}</div>
-                  {i < 3 && <span style={{ color:C.muted, fontSize:9 }}>›</span>}
-                </div>
-              ))}
+            <div style={{ marginLeft:"auto" }}>
+              <span style={{ fontSize:10, padding:"3px 9px", borderRadius:20, fontWeight:600, background: phase==="complete" ? C.greenSoft : C.accentSoft, color: phase==="complete" ? "#16a34a" : C.accent, border: `1px solid ${phase==="complete" ? C.greenMid : C.accentMid}` }}>{phase==="complete" ? "✓ 완료" : "작성 중"}</span>
             </div>
           </div>
           {phase === "blank" && <PanelBlank />}

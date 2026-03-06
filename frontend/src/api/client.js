@@ -1,13 +1,49 @@
 const API_URL = import.meta.env.VITE_API_URL || "https://ip-assist-backend-1058034030780.asia-northeast3.run.app";
 
 export const api = {
-  async chat(sessionId, message, category, history = []) {
+  async chat(sessionId, message, category, history = [], phase = "chat", filledFields = {}) {
     const res = await fetch(`${API_URL}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ session_id: sessionId, message, category, history }),
+      body: JSON.stringify({
+        session_id: sessionId, message, category, history,
+        phase, filled_fields: filledFields,
+      }),
     });
     return res.json();
+  },
+
+  async streamChat(sessionId, message, category, history, phase, filledFields, onToken, onMeta, onDone) {
+    const res = await fetch(`${API_URL}/chat/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session_id: sessionId, message, category, history,
+        phase: phase || "chat", filled_fields: filledFields || {},
+      }),
+    });
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n\n");
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        try {
+          const data = JSON.parse(line.slice(6));
+          if (data.type === "token" && onToken) onToken(data.content);
+          else if (data.type === "meta" && onMeta) onMeta(data);
+          else if (data.type === "done" && onDone) onDone();
+        } catch (e) {
+          console.warn("SSE parse error:", e);
+        }
+      }
+    }
   },
 
   async generateRfp(category, requirements, sessionId) {

@@ -4,7 +4,7 @@ from app.db.supabase_client import get_client
 from app.config import RAG_TOP_K, BM25_WEIGHT
 
 
-def vector_search(query: str, category: str | None = None, top_k: int = RAG_TOP_K) -> list[dict]:
+def vector_search(query: str, category: str | None = None, top_k: int = RAG_TOP_K, min_similarity: float = 0.70) -> list[dict]:
     """Supabase pgvector 유사도 검색"""
     supabase = get_client()
     query_embedding = embed_query(query)
@@ -28,6 +28,7 @@ def vector_search(query: str, category: str | None = None, top_k: int = RAG_TOP_
             "similarity": row["similarity"],
         }
         for row in (result.data or [])
+        if row["similarity"] >= min_similarity
     ]
 
 
@@ -49,9 +50,9 @@ def bm25_rerank(query: str, chunks: list[dict]) -> list[dict]:
     return chunks
 
 
-def hybrid_search(query: str, category: str | None = None, top_k: int = RAG_TOP_K) -> list[dict]:
+def hybrid_search(query: str, category: str | None = None, top_k: int = RAG_TOP_K, min_similarity: float = 0.70) -> list[dict]:
     """벡터 + BM25 하이브리드 검색"""
-    chunks = vector_search(query, category, top_k * 2)
+    chunks = vector_search(query, category, top_k * 2, min_similarity)
     chunks = bm25_rerank(query, chunks)
 
     # 하이브리드 점수 계산 (벡터 0.7 + BM25 0.3)

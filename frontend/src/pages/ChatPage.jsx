@@ -135,7 +135,10 @@ export default function ChatPage() {
         const aiMsgId = msgIdCounter++;
         let metaData = {};
 
-        // 빈 AI 메시지 먼저 추가 (스트리밍용)
+        // 타이핑 인디케이터 해제 (스트리밍 버블이 대체)
+        setIsTyping(false);
+
+        // AI 메시지 추가 (isStreaming=true면 타이핑 애니메이션 표시)
         setMessages(prev => [...prev, { id: aiMsgId, role: "assistant", text: "", isStreaming: true }]);
 
         await api.streamChat(
@@ -420,7 +423,7 @@ export default function ChatPage() {
                     ))}
                   </div>
                 )}
-                {msg.text && (
+                {(msg.text || msg.isStreaming) && (
                   <div style={{
                     background: msg.role === "user" ? "linear-gradient(135deg,#5b6af0,#7c3aed)" : msg.trigger === "complete" ? C.greenSoft : C.card,
                     color: msg.role === "user" ? "#fff" : C.text,
@@ -430,7 +433,15 @@ export default function ChatPage() {
                     border: msg.trigger === "complete" ? `1px solid ${C.greenMid}` : msg.role === "user" ? "none" : `1px solid ${C.border}`
                   }}>
                     {msg.trigger === "complete" && <div style={{ fontSize:10, fontWeight:700, color:"#16a34a", marginBottom:4 }}>✅ RFP 작성 완료</div>}
-                    <span style={{ whiteSpace:"pre-wrap" }}>{msg.text}</span>
+                    {msg.text ? (
+                      <span style={{ whiteSpace:"pre-wrap" }}>{msg.text}</span>
+                    ) : msg.isStreaming ? (
+                      <span style={{ display:"flex", gap:5, alignItems:"center" }}>
+                        {[0,1,2].map(i => (
+                          <span key={i} style={{ width:7, height:7, borderRadius:"50%", background:C.accentMid, display:"inline-block", animation:`bop 1.2s ease-in-out ${i*0.2}s infinite` }} />
+                        ))}
+                      </span>
+                    ) : null}
                   </div>
                 )}
                 {/* 출처 표시 */}

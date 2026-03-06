@@ -444,8 +444,8 @@ export default function ChatPage() {
                     ) : null}
                   </div>
                 )}
-                {/* 출처 표시 */}
-                {msg.sources && msg.sources.length > 0 && (
+                {/* 출처 표시 (스트리밍 완료 후에만) */}
+                {msg.sources && msg.sources.length > 0 && !msg.isStreaming && (
                   <div style={{ display:"flex", gap:4, flexWrap:"wrap", marginTop:2 }}>
                     {msg.sources.slice(0,3).map((s,i) => (
                       <span key={i} style={{ fontSize:9, padding:"2px 6px", background:C.bg, border:`1px solid ${C.border}`, borderRadius:4, color:C.sub }}>📄 {s.replace(".pdf","")}</span>

@@ -27,10 +27,9 @@ PHASE_PROMPTS = {
     "chat": BASE_RULES + """
 현재 단계: 일반 대화
 
-답변 구조 (반드시 이 순서로):
-1단락: 사용자 질문에 대한 핵심 답변 (참조 문서 기반, 150~200자)
-2단락: 추가 세부사항이나 고려할 점 설명 (참조 문서 기반, 150~200자)
-3단락: "혹시 이런 부분도 궁금하신가요?" 와 함께 참조 문서에서 다룬 관련 주제 2~3개를 짧은 질문으로 제안하세요.
+답변 구조:
+- 사용자 질문에 대한 핵심 답변을 참조 문서 기반으로 충실하게 작성하세요.
+- 후속 질문은 답변에 포함하지 마세요. (별도 시스템에서 처리합니다)
 
 추가 규칙:
 - 사용자가 구매 의도를 표현하더라도, 바로 RFP를 언급하지 마세요.
@@ -159,3 +158,47 @@ def generate_answer_stream(
     for chunk in response:
         if chunk.text:
             yield chunk.text
+
+
+SUGGESTION_PROMPT = """아래는 RAG 검색으로 찾은 참조 문서들이에요.
+이 문서들에 실제로 적혀 있는 내용 중에서, 사용자의 현재 질문에 대한 답변에서 아직 다루지 않은 주제를 골라 후속 질문 3개를 만들어 주세요.
+
+절대 규칙:
+- 참조 문서에 실제로 있는 내용만으로 질문을 만드세요.
+- 참조 문서에 없는 내용으로 질문을 만들면 안 됩니다.
+- 각 질문은 20자 이내의 짧은 문장으로 작성하세요.
+- 쉼표로 구분해서 3개만 반환하세요. 설명 없이 질문만.
+
+참조 문서:
+{context}
+
+사용자 질문: {question}
+
+AI 답변 요약: {answer_summary}
+
+후속 질문 3개:"""
+
+
+def generate_suggestions(question: str, chunks: list[dict], answer_summary: str) -> list[str]:
+    """flash-lite로 검색된 청크 기반 후속 질문 생성 (경량, 빠름)"""
+    if not chunks:
+        return []
+
+    context = "\n\n".join(c["content"][:300] for c in chunks[:3])
+
+    prompt = SUGGESTION_PROMPT.format(
+        context=context,
+        question=question,
+        answer_summary=answer_summary[:200],
+    )
+
+    try:
+        response = _get_client().models.generate_content(
+            model=MODELS["refinement"],  # flash-lite (빠름)
+            contents=prompt,
+            config={"max_output_tokens": 128},
+        )
+        suggestions = [s.strip() for s in response.text.strip().split(",") if s.strip()]
+        return suggestions[:3]
+    except Exception:
+        return []

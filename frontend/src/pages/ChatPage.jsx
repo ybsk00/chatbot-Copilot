@@ -174,6 +174,12 @@ export default function ChatPage() {
             } else if (metaData.phase_trigger === "complete") {
               setTimeout(() => setPhase("complete"), 800);
             }
+          },
+          // onSuggestions: 후속 질문 버튼
+          (items) => {
+            setMessages(prev => prev.map(m =>
+              m.id === aiMsgId ? { ...m, suggestions: items } : m
+            ));
           }
         );
       }
@@ -451,6 +457,22 @@ export default function ChatPage() {
                       <span key={i} style={{ fontSize:9, padding:"2px 6px", background:C.bg, border:`1px solid ${C.border}`, borderRadius:4, color:C.sub }}>📄 {s.replace(".pdf","")}</span>
                     ))}
                     {msg.rag_score > 0 && <span style={{ fontSize:9, padding:"2px 6px", background:C.accentSoft, border:`1px solid ${C.accentMid}`, borderRadius:4, color:C.accent }}>{(msg.rag_score*100).toFixed(0)}% 일치</span>}
+                  </div>
+                )}
+                {/* 후속 질문 버튼 (클릭 시 자동 입력) */}
+                {msg.suggestions && msg.suggestions.length > 0 && !msg.isStreaming && (
+                  <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:6 }}>
+                    {msg.suggestions.map((s,i) => (
+                      <button key={i} onClick={() => { setUserInput(s); }} style={{
+                        fontSize:11, padding:"6px 12px", borderRadius:20,
+                        background:C.accentSoft, color:C.accent, border:`1px solid ${C.accentMid}`,
+                        cursor:"pointer", fontFamily:"inherit", fontWeight:600,
+                        transition:"all 0.2s",
+                      }}
+                      onMouseEnter={e => { e.target.style.background = C.accent; e.target.style.color = "#fff"; }}
+                      onMouseLeave={e => { e.target.style.background = C.accentSoft; e.target.style.color = C.accent; }}
+                      >{s}</button>
+                    ))}
                   </div>
                 )}
               </div>

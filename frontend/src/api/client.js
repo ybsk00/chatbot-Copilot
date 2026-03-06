@@ -13,7 +13,7 @@ export const api = {
     return res.json();
   },
 
-  async streamChat(sessionId, message, category, history, phase, filledFields, onToken, onMeta, onDone) {
+  async streamChat(sessionId, message, category, history, phase, filledFields, onToken, onMeta, onDone, onSuggestions) {
     const res = await fetch(`${API_URL}/chat/stream`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -38,6 +38,7 @@ export const api = {
           const data = JSON.parse(line.slice(6));
           if (data.type === "token" && onToken) onToken(data.content);
           else if (data.type === "meta" && onMeta) onMeta(data);
+          else if (data.type === "suggestions" && onSuggestions) onSuggestions(data.items);
           else if (data.type === "done" && onDone) onDone();
         } catch (e) {
           console.warn("SSE parse error:", e);

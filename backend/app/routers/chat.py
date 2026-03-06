@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from google import genai
 from app.config import GOOGLE_API_KEY, MODELS, PURCHASE_KEYWORDS, RFP_AGREE_KEYWORDS
 from app.rag.retriever import hybrid_search
-from app.rag.generator import generate_answer, generate_answer_stream
+from app.rag.generator import generate_answer, generate_answer_stream, generate_suggestions
 from app.rag import prefetcher
 from app.constitution.gate import check_constitution
 
@@ -132,7 +132,14 @@ async def chat_stream(req: ChatRequest):
             full_answer += token
             yield f"data: {json.dumps({'type': 'token', 'content': token}, ensure_ascii=False)}\n\n"
 
-        # 완료 신호
+        # 후속질문 에이전트 (flash-lite, 청크 기반)
+        def _gen_suggestions():
+            return generate_suggestions(req.message, chunks, full_answer[:200])
+
+        suggestions = await loop.run_in_executor(_executor, _gen_suggestions)
+
+        # 완료 신호 + 후속 질문
+        yield f"data: {json.dumps({'type': 'suggestions', 'items': suggestions}, ensure_ascii=False)}\n\n"
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
         # 백그라운드: prefetcher 실행

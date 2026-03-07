@@ -122,8 +122,8 @@ def _is_similar_text(a: str, b: str, threshold: float = 0.55) -> bool:
     return SequenceMatcher(None, a, b).ratio() > threshold
 
 
-def get_faq_suggestions(query_embedding: list[float], taxonomy_major: str | None = None, exclude_ids: list[int] | None = None, top_k: int = 3, min_similarity: float = 0.65, current_query: str = "", history_queries: list[str] | None = None) -> list[str]:
-    """유사도 기반 FAQ 후속질문 반환 (이미 물어본 질문 제외, 답변 보장)"""
+def get_faq_suggestions(query_embedding: list[float], taxonomy_major: str | None = None, exclude_ids: list[int] | None = None, top_k: int = 3, min_similarity: float = 0.65, current_query: str = "", history_queries: list[str] | None = None, answered_text: str = "") -> list[str]:
+    """유사도 기반 FAQ 후속질문 반환 (이미 물어본 질문 + AI 답변과 겹치는 FAQ 제외)"""
     try:
         supabase = get_client()
         # 순수 유사도 기반 검색 (대분류 필터 없음 → 주제가 가까운 FAQ만)
@@ -159,6 +159,9 @@ def get_faq_suggestions(query_embedding: list[float], taxonomy_major: str | None
                 continue
             # 이미 물어본 질문과 유사한 FAQ 제외
             if any(_is_similar_text(q, asked) for asked in asked_queries):
+                continue
+            # AI 답변에 이미 포함된 내용의 FAQ 제외
+            if answered_text and _is_similar_text(row["answer"][:200], answered_text[:400], threshold=0.35):
                 continue
             seen.add(q)
             suggestions.append(q)

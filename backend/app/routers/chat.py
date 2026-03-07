@@ -210,12 +210,13 @@ async def chat_stream(req: ChatRequest):
         user_msg_count = len([m for m in (req.history or []) if m.get("role") == "user"])
 
         if user_msg_count == 0:
-            # 첫 번째 답변: 유사 FAQ 1개 + RFP 유도
+            # 첫 번째 답변: 유사 FAQ 1개 + RFP 유도 (AI 답변과 겹치는 FAQ 제외)
             used_faq_ids = [c.get("metadata", {}).get("chunk_id") or c.get("id") for c in chunks]
+            _answer_text = full_answer  # 클로저 캡처
 
             def _gen_one_faq():
                 q_emb = embed_query(req.message)
-                return get_faq_suggestions(q_emb, taxonomy_major, used_faq_ids, top_k=1, current_query=req.message)
+                return get_faq_suggestions(q_emb, taxonomy_major, used_faq_ids, top_k=1, current_query=req.message, answered_text=_answer_text)
 
             faq_items = await loop.run_in_executor(_executor, _gen_one_faq)
             suggestions = faq_items[:1] + ["제안요청서(RFP)를 작성하시겠습니까?"]

@@ -1,3 +1,4 @@
+import re
 from google import genai
 from app.config import GOOGLE_API_KEY, MODELS
 
@@ -33,3 +34,29 @@ def refine_chunk(raw_text: str) -> str:
         contents=REFINE_PROMPT.format(text=raw_text),
     )
     return response.text.strip()
+
+
+QUESTION_PROMPT = """아래 텍스트의 핵심 내용을 묻는 자연스러운 한국어 질문 1개만 생성하세요.
+질문만 반환하세요. 설명이나 번호 없이 질문 1줄만.
+
+텍스트:
+{text}
+"""
+
+
+def generate_chunk_question(content: str) -> str:
+    """청크 내용에 대한 대표 질문 1개 생성 (검색 정확도 향상용)"""
+    try:
+        response = _get_client().models.generate_content(
+            model=MODELS["refinement"],
+            contents=QUESTION_PROMPT.format(text=content[:500]),
+            config={"max_output_tokens": 100},
+        )
+        q = response.text.strip()
+        # 번호나 불필요한 접두사 제거
+        q = re.sub(r'^[\d.\-)\s]+', '', q).strip()
+        if q and len(q) >= 5:
+            return q
+    except Exception:
+        pass
+    return ""

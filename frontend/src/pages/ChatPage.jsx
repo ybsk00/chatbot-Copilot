@@ -1,60 +1,189 @@
 import { useState, useEffect, useRef } from "react";
 import { api } from "../api/client";
+import { T } from "../styles/tokens";
+import { RFP_TEMPLATES } from "../data/rfpTemplates";
+import BackgroundBlobs from "../components/ui/BackgroundBlobs";
 
-const API_URL = import.meta.env.VITE_API_URL || "https://ip-assist-backend-1058034030780.asia-northeast3.run.app";
+// ═══════════════════════════════════════════
+// SVG Icons
+// ═══════════════════════════════════════════
+const IconBot = ({ size = 22 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v6m12-3v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9m0 0h18" />
+    <circle cx="9" cy="15" r="1.5" fill="currentColor" stroke="none" />
+    <circle cx="15" cy="15" r="1.5" fill="currentColor" stroke="none" />
+  </svg>
+);
 
-const C = {
-  bg: "#f5f6f8", card: "#ffffff", border: "#eaecf0",
-  accent: "#5b6af0", accentSoft: "#eef0fd", accentMid: "#c7cbfb",
-  green: "#22c55e", greenSoft: "#f0fdf4", greenMid: "#bbf7d0",
-  red: "#ef4444", redSoft: "#fff1f2",
-  navy: "#1e3a5f",
-  text: "#1a1d23", sub: "#6b7280", muted: "#b0b7c3",
-  shadowSm: "0 1px 6px rgba(0,0,0,0.06)",
-  shadow: "0 2px 16px rgba(0,0,0,0.07)",
+const IconSend = ({ size = 20 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M3.478 2.405a.75.75 0 0 0-.926.94l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.405Z" />
+  </svg>
+);
+
+const IconNewChat = ({ size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+  </svg>
+);
+
+const IconChevron = ({ open, size = 14 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+    style={{ transition: "transform 0.25s ease", transform: open ? "rotate(180deg)" : "rotate(0deg)" }}>
+    <polyline points="6 9 12 15 18 9" />
+  </svg>
+);
+
+const IconCheck = ({ size = 12 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="20 6 9 17 4 12" />
+  </svg>
+);
+
+const IconAlert = ({ size = 12 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 15c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm1-4h-2V7h2v6z" />
+  </svg>
+);
+
+const IconDoc = ({ size = 14 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <polyline points="14 2 14 8 20 8" />
+    <line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" />
+  </svg>
+);
+
+const IconDownload = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="7 10 12 15 17 10" />
+    <line x1="12" y1="15" x2="12" y2="3" />
+  </svg>
+);
+
+const IconSearch = ({ size = 14 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
+  </svg>
+);
+
+const IconParty = ({ size = 28 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M5.8 11.3 2 22l10.7-3.79" /><path d="M4 3h.01" /><path d="M22 8h.01" /><path d="M15 2h.01" /><path d="M22 20h.01" />
+    <path d="m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10" />
+    <path d="m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11-.11.7-.72 1.22-1.43 1.22H17" />
+    <path d="m11 2 .33.82c.34.86-.2 1.82-1.11 1.98C9.52 4.9 9 5.52 9 6.23V7" />
+    <path d="M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z" />
+  </svg>
+);
+
+const IconSendMail = ({ size = 14 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M22 2L11 13" /><path d="M22 2L15 22 11 13 2 9z" />
+  </svg>
+);
+
+// ─── RFP 유형별 SVG 아이콘 ───
+const IconBox = ({ size = 20, color = "currentColor" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+    <polyline points="3.27 6.96 12 12.01 20.73 6.96" /><line x1="12" y1="22.08" x2="12" y2="12" />
+  </svg>
+);
+
+const IconPenDoc = ({ size = 20, color = "currentColor" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+  </svg>
+);
+
+const IconWrenchTool = ({ size = 20, color = "currentColor" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+  </svg>
+);
+
+const IconCar = ({ size = 20, color = "currentColor" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 16H9m10 0h3v-3.15a1 1 0 0 0-.84-.99L16 11l-2.7-3.6a1 1 0 0 0-.8-.4H5.24a2 2 0 0 0-1.8 1.1l-.8 1.63A6 6 0 0 0 2 12.42V16h2" />
+    <circle cx="6.5" cy="16.5" r="2.5" /><circle cx="16.5" cy="16.5" r="2.5" />
+  </svg>
+);
+
+const IconHardHat = ({ size = 20, color = "currentColor" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M2 18v3c0 .6.4 1 1 1h4v-3h3v-3h2l1.4-1.4a6.5 6.5 0 1 0-4-4L8 12H5v3H2z" />
+    <circle cx="16.5" cy="7.5" r=".5" fill={color} />
+  </svg>
+);
+
+const IconBriefcase = ({ size = 20, color = "currentColor" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="7" width="20" height="14" rx="2" /><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+  </svg>
+);
+
+// ─── 섹션 SVG 아이콘 ───
+const IconBuilding = ({ size = 14 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="4" y="2" width="16" height="20" rx="2" /><path d="M9 22v-4h6v4" /><path d="M8 6h.01M16 6h.01M8 10h.01M16 10h.01M8 14h.01M16 14h.01" />
+  </svg>
+);
+
+const IconClipboard = ({ size = 14 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /><rect x="8" y="2" width="8" height="4" rx="1" />
+  </svg>
+);
+
+const IconGear = ({ size = 14 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="3" />
+    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+  </svg>
+);
+
+const IconBarChart = ({ size = 14 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" />
+  </svg>
+);
+
+const IconMailBox = ({ size = 14 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" /><polyline points="22,6 12,13 2,6" />
+  </svg>
+);
+
+// RFP 유형별 아이콘 (SVG)
+const RFP_TYPE_ICONS = {
+  purchase:         { icon: (c) => <IconBox size={20} color={c} />,          color: "#4A6CF7", bg: "#EEF0FD" },
+  service_contract: { icon: (c) => <IconPenDoc size={20} color={c} />,      color: "#7C3AED", bg: "#F3EFFE" },
+  service:          { icon: (c) => <IconWrenchTool size={20} color={c} />,  color: "#0EA5A0", bg: "#E6FAF9" },
+  rental:           { icon: (c) => <IconCar size={20} color={c} />,         color: "#F59E0B", bg: "#FFFBEB" },
+  construction:     { icon: (c) => <IconHardHat size={20} color={c} />,     color: "#EF4444", bg: "#FEF2F2" },
+  consulting:       { icon: (c) => <IconBriefcase size={20} color={c} />,   color: "#1E3A5F", bg: "#EFF6FF" },
 };
 
-const INIT_FIELDS = {
-  s1:  { label: "발주기관명",          value: "" },
-  s2:  { label: "담당부서",            value: "" },
-  s3:  { label: "담당자",              value: "" },
-  s4:  { label: "연락처",              value: "" },
-  s5:  { label: "이메일",              value: "" },
-  s6:  { label: "사업명",              value: "" },
-  s7:  { label: "사업목적",            value: "" },
-  s8:  { label: "계약형태",            value: "" },
-  s9:  { label: "수행기간",            value: "" },
-  s10: { label: "대상인원",            value: "" },
-  s11: { label: "서비스 범위",         value: "" },
-  s12: { label: "교육방식",            value: "" },
-  s13: { label: "기술요건",            value: "" },
-  s14: { label: "납기기준",            value: "" },
-  s15: { label: "SLA 기준",            value: "" },
-  s16: { label: "평가① 가격 경쟁력",   value: "30%" },
-  s17: { label: "평가② 콘텐츠·강사",   value: "25%" },
-  s18: { label: "평가③ ESG 대응",      value: "20%" },
-  s19: { label: "평가④ 신뢰도",        value: "15%" },
-  s20: { label: "평가⑤ 디지털 역량",   value: "10%" },
-  s21: { label: "제출기한",            value: "" },
-  s22: { label: "제출방식",            value: "" },
+// 섹션 아이콘 (SVG)
+const SECTION_ICONS = {
+  org:   <IconBuilding size={14} />,
+  doc:   <IconClipboard size={14} />,
+  gear:  <IconGear size={14} />,
+  chart: <IconBarChart size={14} />,
+  mail:  <IconMailBox size={14} />,
 };
-
-const RFP_SECTIONS = [
-  { title: "1. 발주기관 정보",       fields: ["s1","s2","s3","s4","s5"],            icon: "🏢" },
-  { title: "2. 사업 개요",           fields: ["s6","s7","s8","s9","s10"],           icon: "📋" },
-  { title: "3. 서비스 범위 및 요건", fields: ["s11","s12","s13","s14","s15"],       icon: "⚙️" },
-  { title: "4. 평가 기준",           fields: ["s16","s17","s18","s19","s20"],       icon: "📊" },
-  { title: "5. 제출 안내",           fields: ["s21","s22"],                         icon: "📬" },
-];
 
 let msgIdCounter = 1;
 
 export default function ChatPage() {
   const [phase, setPhase]               = useState("chat");
+  const [rfpType, setRfpType]           = useState(null);
   const [messages, setMessages]         = useState([
-    { id: msgIdCounter++, role: "assistant", text: "안녕하세요! 간접구매 AI 코파일럿입니다. 😊\n\n구매하려는 품목이나 서비스를 말씀해 주세요.\n견적 요청부터 공급업체 추천, 계약서 작성까지 함께 도와드립니다." }
+    { id: msgIdCounter++, role: "assistant", text: "안녕하세요! 간접구매 AI 코파일럿입니다.\n\n구매하려는 품목이나 서비스를 말씀해 주세요.\n견적 요청부터 공급업체 추천, 계약서 작성까지 함께 도와드립니다." }
   ]);
-  const [fields, setFields]             = useState(INIT_FIELDS);
+  const [fields, setFields]             = useState({});
   const [justFilled, setJustFilled]     = useState(new Set());
   const [isTyping, setIsTyping]         = useState(false);
   const [userInput, setUserInput]       = useState("");
@@ -62,13 +191,16 @@ export default function ChatPage() {
   const [openSec, setOpenSec]           = useState({0:true,1:true,2:true,3:true,4:true});
   const [rightVisible, setRightVisible] = useState(false);
   const [sessionId]                     = useState(() => crypto.randomUUID());
+  const [inputFocused, setInputFocused] = useState(false);
   const msgEndRef  = useRef(null);
   const fieldRefs  = useRef({});
   const inputRef   = useRef(null);
 
+  const currentTemplate = rfpType ? RFP_TEMPLATES[rfpType] : null;
+  const currentSections = currentTemplate?.sections || [];
   const filled = Object.values(fields).filter(f => f.value.trim()).length;
   const total  = Object.keys(fields).length;
-  const pct    = Math.round(filled / total * 100);
+  const pct    = total > 0 ? Math.round(filled / total * 100) : 0;
 
   useEffect(() => {
     msgEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -90,7 +222,6 @@ export default function ChatPage() {
     setTimeout(() => setJustFilled(new Set()), 2500);
   };
 
-  // 현재 채워진 필드 맵 (백엔드에 전달용)
   const getFilledFields = () => {
     const result = {};
     Object.entries(fields).forEach(([k, v]) => {
@@ -99,57 +230,63 @@ export default function ChatPage() {
     return result;
   };
 
+  const handleRfpTypeSelect = (type) => {
+    setRfpType(type);
+    const templateFields = {};
+    Object.entries(RFP_TEMPLATES[type].fields).forEach(([k, v]) => {
+      templateFields[k] = { ...v };
+    });
+    setFields(templateFields);
+    setRightVisible(true);
+    setPhase("filling");
+
+    const tmpl = RFP_TEMPLATES[type];
+    const icon = RFP_TYPE_ICONS[type];
+    setMessages(prev => [
+      ...prev,
+      { id: msgIdCounter++, role: "user", text: tmpl.label },
+      { id: msgIdCounter++, role: "assistant", text: `${tmpl.label} 제안요청서 작성을 시작하겠습니다.\n먼저 발주기관 정보를 알려주십시오.\n기관명, 담당부서, 담당자, 연락처, 이메일이 필요합니다.` }
+    ]);
+  };
+
   const handleSend = async () => {
     const text = userInput.trim();
     if (!text || isTyping) return;
 
-    // 1. 사용자 메시지 추가
     const userMsg = { id: msgIdCounter++, role: "user", text };
     setMessages(prev => [...prev, userMsg]);
     setUserInput("");
     setIsTyping(true);
 
-    // 2. 대화 이력 구성
     const history = messages.map(m => ({ role: m.role, content: m.text }));
 
     try {
       if (phase === "filling") {
-        // ── filling 단계: 동기 방식 (rfp_fields 추출 필요) ──
-        const data = await api.chat(sessionId, text, null, history, phase, getFilledFields());
-
+        const data = await api.chat(sessionId, text, null, history, phase, getFilledFields(), rfpType);
         if (data.rfp_fields && Object.keys(data.rfp_fields).length > 0) {
           applyFills(data.rfp_fields);
         }
-
         setMessages(prev => [...prev, {
           id: msgIdCounter++, role: "assistant",
           text: data.answer, sources: data.sources,
           rag_score: data.rag_score, trigger: data.phase_trigger,
         }]);
-
         if (data.phase_trigger === "complete") {
           setTimeout(() => setPhase("complete"), 800);
         }
       } else {
-        // ── chat/asked 단계: SSE 스트리밍 ──
         const aiMsgId = msgIdCounter++;
         let metaData = {};
-
-        // 타이핑 인디케이터 해제 (스트리밍 버블이 대체)
         setIsTyping(false);
-
-        // AI 메시지 추가 (isStreaming=true면 타이핑 애니메이션 표시)
         setMessages(prev => [...prev, { id: aiMsgId, role: "assistant", text: "", isStreaming: true }]);
 
         await api.streamChat(
           sessionId, text, null, history, phase, getFilledFields(),
-          // onToken: 토큰 실시간 추가
           (token) => {
             setMessages(prev => prev.map(m =>
               m.id === aiMsgId ? { ...m, text: m.text + token } : m
             ));
           },
-          // onMeta: 소스/점수/트리거 저장
           (meta) => {
             metaData = meta;
             setMessages(prev => prev.map(m =>
@@ -158,35 +295,34 @@ export default function ChatPage() {
                 sources: meta.sources,
                 rag_score: meta.rag_score,
                 trigger: meta.phase_trigger,
+                classification: meta.classification,
               } : m
             ));
           },
-          // onDone: 스트리밍 완료
           () => {
             setMessages(prev => prev.map(m =>
               m.id === aiMsgId ? { ...m, isStreaming: false } : m
             ));
-
-            // Phase 전환 처리
             if (metaData.phase_trigger === "rfp_agreed") {
-              setRightVisible(true);
-              setPhase("filling");
+              setMessages(prev => prev.map(m =>
+                m.id === aiMsgId ? { ...m, rfpTypeSelect: true } : m
+              ));
             } else if (metaData.phase_trigger === "complete") {
               setTimeout(() => setPhase("complete"), 800);
             }
           },
-          // onSuggestions: 후속 질문을 답변 텍스트에 대화형으로 추가
           (items) => {
             if (items && items.length > 0) {
-              const suggestionText = "\n\n" + items.map(s => s.endsWith("?") ? s : s + "에 대해서 알려드릴까요?").join("\n");
+              const suggestionText = "\n\n" + items.join("\n");
               setMessages(prev => prev.map(m =>
                 m.id === aiMsgId ? { ...m, text: m.text + suggestionText } : m
               ));
             }
-          }
+          },
+          rfpType
         );
       }
-    } catch (err) {
+    } catch {
       setMessages(prev => [...prev, {
         id: msgIdCounter++, role: "assistant",
         text: "죄송합니다. 서버 연결에 실패했습니다. 잠시 후 다시 시도해 주세요.",
@@ -204,102 +340,183 @@ export default function ChatPage() {
     }
   };
 
+  // ─── Status Dot with pulse ───
+  const StatusDot = () => (
+    <span style={{ position:"relative", width:8, height:8, display:"inline-flex", alignItems:"center", justifyContent:"center" }}>
+      <span style={{
+        position:"absolute", width:8, height:8, borderRadius:"50%",
+        background: T.green,
+        animation: "status-pulse 2s ease-in-out infinite",
+      }} />
+      <span style={{
+        position:"relative", width:8, height:8, borderRadius:"50%",
+        background: T.green,
+      }} />
+    </span>
+  );
+
+  // ─── Badge Chip ───
   const Chip = ({ children, color, bg, border }) => (
     <span style={{
-      fontSize:10, padding:"2px 8px", borderRadius:6, fontWeight:600,
-      background: bg || C.greenSoft,
-      color: color || "#16a34a",
-      border: `1px solid ${border || C.greenMid}`
+      fontSize: 10, padding: "2px 8px", borderRadius: 6, fontWeight: 600,
+      background: bg || T.greenLight,
+      color: color || T.greenDark,
+      border: `1px solid ${border || T.greenMid}`,
+      lineHeight: "16px",
     }}>{children}</span>
   );
 
-  // ══ 오른쪽 패널: 빈 RFP 양식 ══
-  const PanelBlank = () => (
-    <div style={{ flex:1, overflowY:"auto", padding:"24px 28px" }}>
-      <div style={{
-        background:C.card, borderRadius:14, padding:"22px 26px",
-        textAlign:"center", marginBottom:16,
-        border:`2px solid ${C.navy}`, boxShadow:C.shadowSm
-      }}>
-        <div style={{ fontSize:10, letterSpacing:3, color:C.sub, marginBottom:8 }}>대한민국 정부 표준 구매 양식</div>
-        <div style={{ fontSize:22, fontWeight:900, letterSpacing:6, color:C.navy }}>제 안 요 청 서</div>
-        <div style={{ fontSize:11, color:C.muted, marginTop:5 }}>Request for Proposal (RFP)</div>
-        <div style={{ marginTop:14, paddingTop:12, borderTop:`1px solid ${C.border}`, fontSize:11, color:C.sub }}>
-          왼쪽 채팅에서 대화를 시작하면 이 양식이 자동으로 채워집니다.
-        </div>
-      </div>
-      {RFP_SECTIONS.map((sec, si) => (
-        <div key={si} style={{ marginBottom:10 }}>
-          <div style={{ background:"#f0f2f5", padding:"9px 16px", display:"flex", alignItems:"center", gap:8, borderRadius:"8px 8px 0 0", border:`1px solid ${C.border}` }}>
-            <span>{sec.icon}</span>
-            <span style={{ fontSize:12, fontWeight:700, color:C.navy }}>{sec.title}</span>
-          </div>
-          <div style={{ background:C.card, border:`1px solid ${C.border}`, borderTop:"none", borderRadius:"0 0 8px 8px", overflow:"hidden" }}>
-            {sec.fields.map((fk, fi) => (
-              <div key={fk} style={{ display:"flex", borderBottom: fi < sec.fields.length-1 ? "1px solid #f4f5f7" : "none" }}>
-                <div style={{ width:140, padding:"10px 14px", background:"#fafbfc", borderRight:"1px solid #f0f1f3", fontSize:11, fontWeight:700, color:C.sub, display:"flex", alignItems:"center", flexShrink:0 }}>{INIT_FIELDS[fk].label}</div>
-                <div style={{ flex:1, padding:"10px 16px", minHeight:38, display:"flex", alignItems:"center" }}>
-                  {["s16","s17","s18","s19","s20"].includes(fk)
-                    ? <span style={{ fontSize:11, color:C.sub }}>{INIT_FIELDS[fk].value}</span>
-                    : <div style={{ width:"75%", height:1.5, background:"#e2e5ea" }} />}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-      <div style={{ background:C.card, borderRadius:10, padding:"20px 24px", border:`1px solid ${C.border}` }}>
-        <div style={{ display:"flex", justifyContent:"space-around" }}>
-          {["작성일","담당자 (서명)","발주기관"].map(l => (
-            <div key={l} style={{ textAlign:"center" }}>
-              <div style={{ fontSize:10, color:C.sub, marginBottom:10 }}>{l}</div>
-              <div style={{ width:100, borderBottom:`1.5px solid ${C.border}`, paddingBottom:4, minHeight:18 }} />
+  // ═══ RFP 유형 선택 카드 ═══
+  const RfpTypeSelector = () => (
+    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:12 }}>
+      {Object.entries(RFP_TEMPLATES).map(([key, tmpl]) => {
+        const iconCfg = RFP_TYPE_ICONS[key];
+        return (
+          <button
+            key={key}
+            onClick={() => handleRfpTypeSelect(key)}
+            style={{
+              display:"flex", alignItems:"center", gap:10,
+              padding:"12px 14px", borderRadius: T.r12,
+              border:`1.5px solid ${T.border}`, background: T.card,
+              cursor:"pointer", textAlign:"left", fontFamily:"inherit",
+              transition:"all 0.2s ease",
+              boxShadow: T.shadowXs,
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.borderColor = iconCfg.color;
+              e.currentTarget.style.background = iconCfg.bg;
+              e.currentTarget.style.transform = "translateY(-2px)";
+              e.currentTarget.style.boxShadow = T.shadowMd;
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.borderColor = T.border;
+              e.currentTarget.style.background = T.card;
+              e.currentTarget.style.transform = "translateY(0)";
+              e.currentTarget.style.boxShadow = T.shadowXs;
+            }}
+          >
+            <span style={{
+              width: 40, height: 40, borderRadius: T.r10,
+              background: iconCfg.bg,
+              display:"flex", alignItems:"center", justifyContent:"center",
+              flexShrink: 0,
+            }}>{iconCfg.icon(iconCfg.color)}</span>
+            <div>
+              <div style={{ fontSize:12, fontWeight:700, color: T.text }}>{tmpl.label}</div>
+              <div style={{ fontSize:10, color: T.sub, marginTop:2 }}>{tmpl.desc}</div>
             </div>
-          ))}
-        </div>
-      </div>
+          </button>
+        );
+      })}
     </div>
   );
 
   // ══ 오른쪽 패널: 채워지는 RFP ══
   const PanelFilling = () => (
-    <div style={{ flex:1, overflowY:"auto", padding:"20px 24px" }}>
-      <div style={{ background:C.card, borderRadius:12, padding:"14px 18px", marginBottom:14, border:`1px solid ${C.border}`, boxShadow:C.shadowSm }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:9 }}>
-          <span style={{ fontSize:12, fontWeight:700 }}>RFP 완성도</span>
-          <span style={{ fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:20, background: pct >= 80 ? C.greenSoft : C.accentSoft, color: pct >= 80 ? "#16a34a" : C.accent, border: `1px solid ${pct >= 80 ? C.greenMid : C.accentMid}` }}>{filled} / {total} · {pct}%</span>
+    <div className="custom-scroll" style={{ flex:1, overflowY:"auto", padding:"20px 22px" }}>
+      {/* 진행률 카드 */}
+      <div style={{
+        background: `linear-gradient(135deg, ${T.primaryLight} 0%, ${T.tealLight} 100%)`,
+        borderRadius: T.r16, padding:"16px 20px", marginBottom:16,
+        border: `1px solid ${T.primaryMid}`,
+        boxShadow: T.shadowSm,
+      }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+          <span style={{ fontSize:12, fontWeight:700, color: T.text }}>RFP 완성도</span>
+          <span style={{
+            fontSize:11, fontWeight:700, padding:"4px 12px", borderRadius:20,
+            background: pct >= 80 ? T.greenLight : T.card,
+            color: pct >= 80 ? T.greenDark : T.primary,
+            border: `1px solid ${pct >= 80 ? T.greenMid : T.primaryMid}`,
+            boxShadow: T.shadowXs,
+          }}>{filled} / {total} · {pct}%</span>
         </div>
-        <div style={{ height:7, background:"#f1f5f9", borderRadius:4, overflow:"hidden" }}>
-          <div style={{ height:"100%", width:`${pct}%`, borderRadius:4, background:`linear-gradient(90deg, ${C.accent}, #7c3aed)`, transition:"width 0.6s ease" }} />
+        <div style={{ height:8, background:"rgba(255,255,255,0.7)", borderRadius:4, overflow:"hidden" }}>
+          <div style={{
+            height:"100%", width:`${pct}%`, borderRadius:4,
+            background: `linear-gradient(90deg, ${T.primary}, ${T.teal})`,
+            backgroundSize: "200% 100%",
+            animation: pct > 0 && pct < 100 ? "shimmer 2s linear infinite" : "none",
+            transition:"width 0.6s ease",
+          }} />
         </div>
-        {pct < 100 && <div style={{ marginTop:9, fontSize:11, color:C.red }}>⚠ 미완료 항목이 있습니다. 왼쪽 채팅에서 정보를 입력해 주세요.</div>}
+        {pct < 100 && <div style={{ marginTop:10, fontSize:11, color: T.red, display:"flex", alignItems:"center", gap:4 }}>
+          <IconAlert size={13} /> 미완료 항목이 있습니다. 왼쪽 채팅에서 정보를 입력해 주세요.
+        </div>}
       </div>
-      {RFP_SECTIONS.map((sec, si) => {
+
+      {/* 섹션 아코디언 */}
+      {currentSections.map((sec, si) => {
         const sectionDone = sec.fields.every(f => fields[f]?.value);
         return (
-          <div key={si} style={{ marginBottom:9 }}>
-            <div onClick={() => setOpenSec(p => ({...p,[si]:!p[si]}))} style={{ background:C.card, padding:"11px 14px", border:`1px solid ${C.border}`, borderRadius: openSec[si] ? "10px 10px 0 0" : 10, display:"flex", alignItems:"center", gap:8, cursor:"pointer" }}>
-              <span style={{ width:22, height:22, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:800, flexShrink:0, background: sectionDone ? C.greenSoft : "#fff1f2", color: sectionDone ? "#16a34a" : C.red }}>{sectionDone ? "✓" : "!"}</span>
-              <span style={{ fontSize:12, fontWeight:700, flex:1 }}>{sec.title}</span>
-              {sectionDone ? <Chip>완료</Chip> : <Chip color={C.red} bg={C.redSoft} border="#fecaca">미완료</Chip>}
-              <span style={{ color:C.muted, fontSize:10 }}>{openSec[si] ? "▲" : "▼"}</span>
+          <div key={si} style={{ marginBottom:10 }}>
+            <div
+              onClick={() => setOpenSec(p => ({...p,[si]:!p[si]}))}
+              style={{
+                background: T.card, padding:"12px 16px",
+                border: `1px solid ${T.border}`,
+                borderRadius: openSec[si] ? `${T.r12}px ${T.r12}px 0 0` : T.r12,
+                display:"flex", alignItems:"center", gap:10, cursor:"pointer",
+                transition:"all 0.2s ease",
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = T.bgSubtle}
+              onMouseLeave={e => e.currentTarget.style.background = T.card}
+            >
+              <span style={{
+                width:24, height:24, borderRadius:"50%",
+                display:"flex", alignItems:"center", justifyContent:"center",
+                flexShrink:0,
+                background: sectionDone ? T.greenLight : T.redLight,
+                color: sectionDone ? T.greenDark : T.red,
+              }}>{sectionDone ? <IconCheck size={12} /> : <IconAlert size={12} />}</span>
+              <span style={{ fontSize:12, fontWeight:700, flex:1, color: T.text }}>
+                {SECTION_ICONS[sec.icon]} {sec.title}
+              </span>
+              {sectionDone
+                ? <Chip>완료</Chip>
+                : <Chip color={T.red} bg={T.redLight} border={T.redMid}>미완료</Chip>
+              }
+              <span style={{ color: T.muted }}>
+                <IconChevron open={openSec[si]} />
+              </span>
             </div>
             {openSec[si] && (
-              <div style={{ background:C.card, border:`1px solid ${C.border}`, borderTop:"none", borderRadius:"0 0 10px 10px", overflow:"hidden" }}>
+              <div style={{
+                background: T.card, border:`1px solid ${T.border}`, borderTop:"none",
+                borderRadius:`0 0 ${T.r12}px ${T.r12}px`, overflow:"hidden",
+              }}>
                 {sec.fields.map((fk, fi) => {
                   const f = fields[fk];
+                  if (!f) return null;
                   const isNew = justFilled.has(fk);
                   return (
-                    <div key={fk} ref={el => fieldRefs.current[fk] = el} style={{ display:"flex", alignItems:"flex-start", borderBottom: fi < sec.fields.length-1 ? "1px solid #f4f5f7" : "none", animation: isNew ? "flashNew 2.5s ease forwards" : "none" }}>
-                      <style>{`@keyframes flashNew { 0%,40% { background:#fef9c3; } 100% { background:transparent; } }`}</style>
-                      <div style={{ width:140, padding:"10px 14px", flexShrink:0, background:"#fafbfc", borderRight:"1px solid #f0f1f3", fontSize:11, fontWeight:700, color:C.sub, display:"flex", alignItems:"center", minHeight:38 }}>{f.label}</div>
-                      <div style={{ flex:1, padding:"10px 14px", fontSize:12, lineHeight:1.7, minHeight:38, display:"flex", alignItems:"center" }}>
+                    <div key={fk} ref={el => fieldRefs.current[fk] = el} style={{
+                      display:"flex", alignItems:"flex-start",
+                      borderBottom: fi < sec.fields.length-1 ? `1px solid ${T.borderLight}` : "none",
+                      animation: isNew ? "field-highlight 2.5s ease forwards" : "none",
+                      background: fi % 2 === 1 ? "#FAFBFD" : "transparent",
+                    }}>
+                      <div style={{
+                        width:136, padding:"10px 14px", flexShrink:0,
+                        background:"#F8F9FB", borderRight:`1px solid ${T.borderLight}`,
+                        fontSize:11, fontWeight:700, color: T.sub,
+                        display:"flex", alignItems:"center", minHeight:40,
+                      }}>{f.label}</div>
+                      <div style={{
+                        flex:1, padding:"10px 14px", fontSize:12,
+                        lineHeight:1.7, minHeight:40, display:"flex", alignItems:"center",
+                      }}>
                         {f.value ? (
-                          <span style={{ color:C.text, whiteSpace:"pre-wrap" }}>
-                            {isNew && <span style={{ fontSize:9, marginRight:6, padding:"1px 5px", background:"#fef9c3", border:"1px solid #fde68a", borderRadius:4, color:"#92400e", fontWeight:700 }}>NEW</span>}
+                          <span style={{ color: T.text, whiteSpace:"pre-wrap" }}>
+                            {isNew && <span style={{
+                              fontSize:9, marginRight:6, padding:"2px 6px",
+                              background: T.tealLight, border:`1px solid ${T.tealMid}`,
+                              borderRadius:4, color: T.tealDark, fontWeight:700,
+                            }}>NEW</span>}
                             {f.value}
                           </span>
-                        ) : <span style={{ color:C.muted, fontStyle:"italic", fontSize:11 }}>대화를 통해 자동 입력됩니다</span>}
+                        ) : <span style={{ color: T.muted, fontStyle:"italic", fontSize:11 }}>대화를 통해 자동 입력됩니다</span>}
                       </div>
                     </div>
                   );
@@ -309,59 +526,155 @@ export default function ChatPage() {
           </div>
         );
       })}
-      <div style={{ display:"flex", gap:8, marginTop:10 }}>
-        <button style={{ flex:1, padding:"11px", borderRadius:10, border:`1px solid ${C.border}`, background:C.card, color:C.sub, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>📥 초안 다운로드</button>
-        <button disabled style={{ flex:1, padding:"11px", borderRadius:10, border:"none", background:"#e9ecef", color:C.muted, fontSize:12, fontWeight:700, fontFamily:"inherit", cursor:"not-allowed" }}>📨 RFP 발송</button>
+
+      {/* 하단 버튼 */}
+      <div style={{ display:"flex", gap:8, marginTop:12 }}>
+        <button style={{
+          flex:1, padding:"12px", borderRadius: T.r10,
+          border:`1px solid ${T.border}`, background: T.card,
+          color: T.sub, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
+          display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+          transition:"all 0.2s",
+        }}
+          onMouseEnter={e => { e.currentTarget.style.background = T.bgSubtle; e.currentTarget.style.borderColor = T.primary; }}
+          onMouseLeave={e => { e.currentTarget.style.background = T.card; e.currentTarget.style.borderColor = T.border; }}
+        >
+          <IconDownload size={14} /> 초안 다운로드
+        </button>
+        <button disabled style={{
+          flex:1, padding:"12px", borderRadius: T.r10,
+          border:"none", background: T.borderLight,
+          color: T.muted, fontSize:12, fontWeight:700, fontFamily:"inherit", cursor:"not-allowed",
+          display:"flex", alignItems:"center", justifyContent:"center", gap:5,
+        }}><IconSendMail size={13} /> RFP 발송</button>
       </div>
     </div>
   );
 
   // ══ 오른쪽 패널: 완성된 RFP ══
   const PanelComplete = () => (
-    <div style={{ flex:1, overflowY:"auto", padding:"20px 24px" }}>
-      <div style={{ background:C.greenSoft, borderRadius:14, padding:"16px 22px", marginBottom:16, border:`1.5px solid ${C.greenMid}`, display:"flex", alignItems:"center", gap:12 }}>
-        <span style={{ fontSize:28 }}>🎉</span>
+    <div className="custom-scroll" style={{ flex:1, overflowY:"auto", padding:"20px 22px" }}>
+      {/* 성공 배너 */}
+      <div style={{
+        background: `linear-gradient(135deg, ${T.greenLight}, #D1FAE5)`,
+        borderRadius: T.r16, padding:"18px 22px", marginBottom:18,
+        border:`1.5px solid ${T.greenMid}`,
+        display:"flex", alignItems:"center", gap:14,
+      }}>
+        <IconParty size={32} />
         <div>
-          <div style={{ fontSize:14, fontWeight:800, color:"#15803d" }}>RFP 작성 완료!</div>
-          <div style={{ fontSize:11, color:"#16a34a", marginTop:2 }}>모든 항목이 입력되었습니다. 다운로드 후 공급업체에 발송하세요.</div>
+          <div style={{ fontSize:14, fontWeight:800, color: T.greenDark }}>RFP 작성 완료!</div>
+          <div style={{ fontSize:11, color:"#16a34a", marginTop:3 }}>모든 항목이 입력되었습니다. 다운로드 후 공급업체에 발송하세요.</div>
         </div>
-        <button onClick={() => setDownloaded(true)} style={{ marginLeft:"auto", padding:"9px 20px", borderRadius:10, border:"none", background: downloaded ? "#15803d" : `linear-gradient(135deg,${C.accent},#7c3aed)`, color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap", transition:"all 0.3s" }}>{downloaded ? "✅ 다운로드 완료" : "📥 RFP 다운로드"}</button>
+        <button
+          onClick={() => setDownloaded(true)}
+          style={{
+            marginLeft:"auto", padding:"10px 22px", borderRadius: T.r10,
+            border:"none",
+            background: downloaded ? T.greenDark : T.gradPrimary,
+            color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
+            whiteSpace:"nowrap", transition:"all 0.3s",
+            display:"flex", alignItems:"center", gap:6,
+            boxShadow: downloaded ? "none" : T.shadowBlue,
+          }}
+          onMouseEnter={e => { if(!downloaded) e.currentTarget.style.transform = "scale(1.04)"; }}
+          onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
+        >
+          {downloaded ? <><IconCheck /> 다운로드 완료</> : <><IconDownload /> RFP 다운로드</>}
+        </button>
       </div>
-      <div style={{ background:C.card, borderRadius:14, padding:"20px 26px", textAlign:"center", marginBottom:14, border:`2px solid ${C.green}`, boxShadow:`0 0 0 4px ${C.greenSoft}` }}>
-        <div style={{ fontSize:10, letterSpacing:3, color:C.sub, marginBottom:6 }}>대한민국 정부 표준 구매 양식</div>
-        <div style={{ fontSize:20, fontWeight:900, letterSpacing:4, color:C.navy }}>제 안 요 청 서</div>
-        <div style={{ marginTop:10 }}>
-          <span style={{ fontSize:12, fontWeight:700, padding:"4px 14px", background:C.accentSoft, color:C.accent, borderRadius:8, border:`1px solid ${C.accentMid}` }}>{fields.s6.value || "사업명 미입력"}</span>
-        </div>
+
+      {/* RFP 문서 헤더 */}
+      <div style={{
+        background: T.card, borderRadius: T.r16, padding:"22px 28px", textAlign:"center",
+        marginBottom:16, border:`2px solid ${T.teal}`,
+        boxShadow:`0 0 0 4px ${T.tealLight}`,
+        position:"relative", overflow:"hidden",
+      }}>
+        <div style={{
+          position:"absolute", top:0, left:0, right:0, height:3,
+          background: T.gradTeal,
+        }} />
+        <div style={{ fontSize:10, letterSpacing:3, color: T.sub, marginBottom:8 }}>대한민국 정부 표준 구매 양식</div>
+        <div style={{ fontSize:20, fontWeight:900, letterSpacing:4, color: T.navy }}>제 안 요 청 서</div>
+        {currentTemplate && (
+          <div style={{ marginTop:12, display:"flex", justifyContent:"center", gap:8 }}>
+            <span style={{
+              fontSize:12, fontWeight:700, padding:"4px 14px",
+              background: T.primaryLight, color: T.primary,
+              borderRadius:8, border:`1px solid ${T.primaryMid}`,
+              display:"flex", alignItems:"center", gap:5,
+            }}>{RFP_TYPE_ICONS[rfpType]?.icon(T.primary)} {currentTemplate.label}</span>
+            {fields.s6?.value && <span style={{
+              fontSize:12, fontWeight:700, padding:"4px 14px",
+              background: T.primaryLight, color: T.primary,
+              borderRadius:8, border:`1px solid ${T.primaryMid}`,
+            }}>{fields.s6.value}</span>}
+          </div>
+        )}
       </div>
-      {RFP_SECTIONS.map((sec, si) => (
-        <div key={si} style={{ marginBottom:10 }}>
-          <div style={{ background:"#f0f2f5", padding:"9px 16px", display:"flex", alignItems:"center", gap:8, borderRadius:"8px 8px 0 0", border:`1px solid ${C.border}` }}>
-            <span>{sec.icon}</span>
-            <span style={{ fontSize:12, fontWeight:700, color:C.navy }}>{sec.title}</span>
+
+      {/* 섹션 내용 */}
+      {currentSections.map((sec, si) => (
+        <div key={si} style={{ marginBottom:12 }}>
+          <div style={{
+            background: T.bgSubtle, padding:"10px 16px",
+            display:"flex", alignItems:"center", gap:8,
+            borderRadius:`${T.r10}px ${T.r10}px 0 0`,
+            border:`1px solid ${T.border}`,
+          }}>
+            <span>{SECTION_ICONS[sec.icon]}</span>
+            <span style={{ fontSize:12, fontWeight:700, color: T.navy }}>{sec.title}</span>
             <Chip>완료 ✓</Chip>
           </div>
-          <div style={{ background:C.card, border:`1px solid ${C.border}`, borderTop:"none", borderRadius:"0 0 8px 8px", overflow:"hidden" }}>
-            {sec.fields.map((fk, fi) => (
-              <div key={fk} style={{ display:"flex", alignItems:"flex-start", borderBottom: fi < sec.fields.length-1 ? "1px solid #f4f5f7" : "none" }}>
-                <div style={{ width:140, padding:"10px 14px", background:"#fafbfc", borderRight:"1px solid #f0f1f3", fontSize:11, fontWeight:700, color:C.sub, flexShrink:0, display:"flex", alignItems:"center" }}>{fields[fk].label}</div>
-                <div style={{ flex:1, padding:"10px 14px", fontSize:12, color:C.text, lineHeight:1.7 }}>{fields[fk].value}</div>
-              </div>
-            ))}
+          <div style={{
+            background: T.card, border:`1px solid ${T.border}`, borderTop:"none",
+            borderRadius:`0 0 ${T.r10}px ${T.r10}px`, overflow:"hidden",
+          }}>
+            {sec.fields.map((fk, fi) => {
+              const f = fields[fk];
+              if (!f) return null;
+              return (
+                <div key={fk} style={{
+                  display:"flex", alignItems:"flex-start",
+                  borderBottom: fi < sec.fields.length-1 ? `1px solid ${T.borderLight}` : "none",
+                }}>
+                  <div style={{
+                    width:136, padding:"10px 14px",
+                    background:"#F8F9FB", borderRight:`1px solid ${T.borderLight}`,
+                    fontSize:11, fontWeight:700, color: T.sub, flexShrink:0,
+                    display:"flex", alignItems:"center",
+                  }}>{f.label}</div>
+                  <div style={{ flex:1, padding:"10px 14px", fontSize:12, color: T.text, lineHeight:1.7 }}>{f.value}</div>
+                </div>
+              );
+            })}
           </div>
         </div>
       ))}
-      <div style={{ background:C.card, borderRadius:10, padding:"20px 24px", border:`1px solid ${C.border}` }}>
+
+      {/* 서명 영역 */}
+      <div style={{ background: T.card, borderRadius: T.r12, padding:"22px 26px", border:`1px solid ${T.border}` }}>
         <div style={{ display:"flex", justifyContent:"space-around" }}>
-          {[{ label:"작성일", value: new Date().toLocaleDateString("ko-KR") }, { label:"담당자 (서명)", value: fields.s3.value }, { label:"발주기관", value: fields.s1.value }].map(item => (
+          {[
+            { label:"작성일", value: new Date().toLocaleDateString("ko-KR") },
+            { label:"담당자 (서명)", value: fields.s3?.value || "" },
+            { label:"발주기관", value: fields.s1?.value || "" },
+          ].map(item => (
             <div key={item.label} style={{ textAlign:"center" }}>
-              <div style={{ fontSize:10, color:C.sub, marginBottom:8 }}>{item.label}</div>
-              <div style={{ width:110, borderBottom:`1.5px solid ${C.border}`, paddingBottom:4, fontSize:12, color:C.text }}>{item.value}</div>
+              <div style={{ fontSize:10, color: T.sub, marginBottom:10 }}>{item.label}</div>
+              <div style={{
+                width:120, borderBottom:`1.5px solid ${T.border}`, paddingBottom:6,
+                fontSize:12, color: T.text,
+              }}>{item.value}</div>
             </div>
           ))}
         </div>
-        <div style={{ marginTop:14, textAlign:"center" }}>
-          <span style={{ fontSize:10, color:C.muted, padding:"4px 12px", background:C.bg, borderRadius:20, border:`1px solid ${C.border}` }}>📚 RAG 기반 생성 · 구매전략·표준프로세스 문서 근거</span>
+        <div style={{ marginTop:16, textAlign:"center" }}>
+          <span style={{
+            fontSize:10, color: T.muted, padding:"5px 14px",
+            background: T.bg, borderRadius:20, border:`1px solid ${T.border}`,
+          }}>RAG 기반 생성 · 구매전략·표준프로세스 문서 근거</span>
         </div>
       </div>
       <div style={{ height:20 }} />
@@ -373,150 +686,343 @@ export default function ChatPage() {
   // ══════════════════════════════════════════════
   return (
     <div style={{
-      display:"flex", height:"100vh", background:C.bg,
-      fontFamily:"'Pretendard','Apple SD Gothic Neo','Noto Sans KR',sans-serif",
-      color:C.text, overflow:"hidden",
-      alignItems:"center",
-      justifyContent:"center",
-      gap: rightVisible ? 16 : 0,
-      padding:"0 20px",
+      display:"flex", height:"100vh",
+      background: T.gradBg,
+      fontFamily: T.font,
+      color: T.text, overflow:"hidden",
+      alignItems:"center", justifyContent:"center",
+      gap: rightVisible ? 20 : 0,
+      padding:"0 24px",
+      position:"relative",
     }}>
+      <BackgroundBlobs />
 
       {/* ════ LEFT: 채팅 패널 ════ */}
       <div style={{
-        width: 520,
-        minWidth: 360,
-        maxWidth: 520,
-        height: "80vh",
+        width: 520, minWidth: 360, maxWidth: 520,
+        height: "85vh",
         display:"flex", flexDirection:"column",
-        background:C.card,
-        borderRadius:16,
-        boxShadow:"0 4px 32px rgba(0,0,0,0.10)",
+        background: T.glass,
+        backdropFilter: "blur(24px) saturate(1.3)",
+        WebkitBackdropFilter: "blur(24px) saturate(1.3)",
+        borderRadius: T.r24,
+        border: `1px solid ${T.glassBorder}`,
+        boxShadow: `${T.shadowXl}, ${T.shadowGlow}`,
         transition:"all 0.4s ease",
         flexShrink:0,
+        position:"relative",
+        zIndex:1,
+        overflow:"hidden",
       }}>
-        {/* 채팅 헤더 */}
-        <div style={{ padding:"15px 20px 13px", borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"center", gap:12 }}>
-          <div style={{ width:44, height:44, borderRadius:13, flexShrink:0, background:"linear-gradient(135deg,#5b6af0,#8b5cf6)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, boxShadow:"0 4px 12px rgba(91,106,240,0.32)" }}>🛒</div>
-          <div>
-            <div style={{ fontSize:15, fontWeight:800, letterSpacing:"-0.4px" }}>간접구매 코파일럿</div>
-            <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:2 }}>
-              <span style={{ width:7, height:7, borderRadius:"50%", background:C.green, display:"inline-block" }} />
-              <span style={{ fontSize:11, color:C.sub }}>
-                {phase === "chat" ? "대화 시작 대기중" : phase === "blank" ? "요구사항 수집 중" : phase === "filling" ? "RFP 작성 진행 중" : "RFP 작성 완료 ✓"}
+        {/* ── 채팅 헤더 (서울온케어 스타일) ── */}
+        <div style={{
+          padding:"14px 20px",
+          borderBottom:`1px solid ${T.borderLight}`,
+          display:"flex", alignItems:"center", gap:12,
+          background: "rgba(255,255,255,0.95)",
+        }}>
+          {/* 봇 아바타 */}
+          <div style={{
+            width:44, height:44, borderRadius: T.r14, flexShrink:0,
+            background: T.gradPrimary,
+            display:"flex", alignItems:"center", justifyContent:"center",
+            color: "#fff",
+            boxShadow: T.shadowBlue,
+          }}>
+            <IconBot size={22} />
+          </div>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:15, fontWeight:800, letterSpacing:"-0.3px", color: T.text }}>
+              IP Assist
+            </div>
+            <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:3 }}>
+              <StatusDot />
+              <span style={{ fontSize:11, color: T.sub }}>
+                {phase === "chat" ? "상담 대기중" : phase === "filling" ? "RFP 작성 진행 중" : "RFP 작성 완료"}
               </span>
             </div>
           </div>
-          <div style={{ marginLeft:"auto", display:"flex", gap:6 }}>
-            <span style={{ fontSize:10, padding:"3px 9px", borderRadius:20, fontWeight:600, background:C.greenSoft, color:"#16a34a", border:`1px solid ${C.greenMid}` }}>● RAG 활성</span>
-            <span style={{ fontSize:10, padding:"3px 9px", borderRadius:20, fontWeight:600, background:C.accentSoft, color:C.accent, border:`1px solid ${C.accentMid}` }}>헌법 준수</span>
+          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+            <span style={{
+              fontSize:10, padding:"3px 10px", borderRadius:20, fontWeight:600,
+              background: T.greenLight, color: T.greenDark,
+              border:`1px solid ${T.greenMid}`,
+            }}>RAG</span>
+            <button
+              onClick={() => {
+                setMessages([{ id: msgIdCounter++, role: "assistant", text: "안녕하세요! 간접구매 AI 코파일럿입니다.\n\n구매하려는 품목이나 서비스를 말씀해 주세요.\n견적 요청부터 공급업체 추천, 계약서 작성까지 함께 도와드립니다." }]);
+                setPhase("chat"); setRfpType(null); setFields({}); setRightVisible(false); setDownloaded(false);
+              }}
+              style={{
+                width:34, height:34, borderRadius: T.r8,
+                border:`1px solid ${T.border}`, background:"transparent",
+                display:"flex", alignItems:"center", justifyContent:"center",
+                cursor:"pointer", color: T.sub,
+                transition:"all 0.2s",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = T.bgSubtle; e.currentTarget.style.color = T.primary; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = T.sub; }}
+              title="새 대화"
+            >
+              <IconNewChat size={16} />
+            </button>
           </div>
         </div>
 
-        {/* 메시지 목록 */}
-        <div style={{ flex:1, overflowY:"auto", padding:"18px 14px", display:"flex", flexDirection:"column", gap:12, background:"linear-gradient(180deg,#f7f8fc,#f5f6f8)" }}>
-          {messages.map(msg => (
-            <div key={msg.id} style={{ display:"flex", flexDirection: msg.role === "user" ? "row-reverse" : "row", gap:8, alignItems:"flex-start" }}>
+        {/* ── 메시지 목록 ── */}
+        <div className="custom-scroll" style={{
+          flex:1, overflowY:"auto", padding:"20px 16px",
+          display:"flex", flexDirection:"column", gap:16,
+          background: T.gradChat,
+        }}>
+          {messages.map((msg, mi) => (
+            <div key={msg.id} style={{
+              display:"flex",
+              flexDirection: msg.role === "user" ? "row-reverse" : "row",
+              gap:10, alignItems:"flex-start",
+              animation: "message-in 0.3s ease-out",
+              animationFillMode: "backwards",
+              animationDelay: `${mi * 0.02}s`,
+            }}>
               {msg.role === "assistant" && (
-                <div style={{ width:32, height:32, borderRadius:9, flexShrink:0, background:"linear-gradient(135deg,#5b6af0,#8b5cf6)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:15 }}>🛒</div>
+                <div style={{
+                  width:34, height:34, borderRadius: T.r10, flexShrink:0,
+                  background: T.gradPrimary,
+                  display:"flex", alignItems:"center", justifyContent:"center",
+                  color:"#fff",
+                  boxShadow: T.shadowSm,
+                }}>
+                  <IconBot size={17} />
+                </div>
               )}
-              <div style={{ maxWidth:"80%", display:"flex", flexDirection:"column", gap:5 }}>
+              <div style={{ maxWidth:"78%", display:"flex", flexDirection:"column", gap:6 }}>
+                {/* 봇 이름 + 시간 */}
+                {msg.role === "assistant" && (
+                  <div style={{ display:"flex", alignItems:"center", gap:6, paddingLeft:2 }}>
+                    <span style={{ fontSize:11, fontWeight:600, color: T.sub }}>IP Assist</span>
+                    <span style={{ fontSize:10, color: T.muted }}>
+                      {new Date().toLocaleTimeString("ko-KR", { hour:"2-digit", minute:"2-digit" })}
+                    </span>
+                  </div>
+                )}
+
+                {/* 분류 결과 */}
                 {msg.classification && (
-                  <div style={{ background:C.accentSoft, border:`1px solid ${C.accentMid}`, borderRadius:"10px 10px 10px 2px", padding:"10px 14px" }}>
-                    <div style={{ fontSize:10, fontWeight:700, color:C.accent, marginBottom:6 }}>🔍 분류 결과</div>
+                  <div style={{
+                    background: T.primaryLight,
+                    borderLeft: `3px solid ${T.primary}`,
+                    borderRadius: `2px ${T.r12}px ${T.r12}px 2px`,
+                    padding:"12px 16px",
+                  }}>
+                    <div style={{ fontSize:10, fontWeight:700, color: T.primary, marginBottom:8, display:"flex", alignItems:"center", gap:4 }}><IconSearch size={12} /> 분류 결과</div>
                     {Object.entries(msg.classification).map(([k,v]) => (
-                      <div key={k} style={{ fontSize:11, display:"flex", gap:6, lineHeight:1.9 }}>
-                        <span style={{ color:C.muted, width:56, flexShrink:0 }}>{k}</span>
-                        <span style={{ fontWeight:600, color:C.text }}>{v}</span>
+                      <div key={k} style={{ fontSize:11, display:"flex", gap:8, lineHeight:1.9 }}>
+                        <span style={{ color: T.muted, width:56, flexShrink:0 }}>{k}</span>
+                        <span style={{ fontWeight:600, color: T.text }}>{v}</span>
                       </div>
                     ))}
                   </div>
                 )}
+
+                {/* 메시지 버블 */}
                 {(msg.text || msg.isStreaming) && (
                   <div style={{
-                    background: msg.role === "user" ? "linear-gradient(135deg,#5b6af0,#7c3aed)" : msg.trigger === "complete" ? C.greenSoft : C.card,
-                    color: msg.role === "user" ? "#fff" : C.text,
-                    borderRadius: msg.role === "user" ? "12px 2px 12px 12px" : "2px 12px 12px 12px",
-                    padding:"11px 15px", fontSize:13, lineHeight:1.7,
-                    boxShadow: msg.role === "user" ? "0 4px 14px rgba(91,106,240,0.24)" : C.shadowSm,
-                    border: msg.trigger === "complete" ? `1px solid ${C.greenMid}` : msg.role === "user" ? "none" : `1px solid ${C.border}`
+                    background: msg.role === "user"
+                      ? T.gradPrimary
+                      : msg.trigger === "complete" ? T.greenLight : T.card,
+                    color: msg.role === "user" ? T.inverse : T.text,
+                    borderRadius: msg.role === "user"
+                      ? `${T.r16}px ${T.r4}px ${T.r16}px ${T.r16}px`
+                      : `${T.r4}px ${T.r16}px ${T.r16}px ${T.r16}px`,
+                    padding:"12px 16px", fontSize:13, lineHeight:1.75,
+                    boxShadow: msg.role === "user" ? T.shadowBlue : T.shadowSm,
+                    border: msg.trigger === "complete"
+                      ? `1px solid ${T.greenMid}`
+                      : msg.role === "user" ? "none" : `1px solid ${T.borderLight}`,
                   }}>
-                    {msg.trigger === "complete" && <div style={{ fontSize:10, fontWeight:700, color:"#16a34a", marginBottom:4 }}>✅ RFP 작성 완료</div>}
+                    {msg.trigger === "complete" && (
+                      <div style={{ fontSize:10, fontWeight:700, color: T.greenDark, marginBottom:6, display:"flex", alignItems:"center", gap:4 }}>
+                        <IconCheck size={11} /> RFP 작성 완료
+                      </div>
+                    )}
                     {msg.text ? (
                       <span style={{ whiteSpace:"pre-wrap" }}>{msg.text}</span>
                     ) : msg.isStreaming ? (
-                      <span style={{ display:"flex", gap:5, alignItems:"center" }}>
+                      <span style={{ display:"flex", gap:6, alignItems:"center", padding:"2px 0" }}>
                         {[0,1,2].map(i => (
-                          <span key={i} style={{ width:7, height:7, borderRadius:"50%", background:C.accentMid, display:"inline-block", animation:`bop 1.2s ease-in-out ${i*0.2}s infinite` }} />
+                          <span key={i} style={{
+                            width:7, height:7, borderRadius:"50%",
+                            background: T.primaryMid, display:"inline-block",
+                            animation:`dot-wave 1.4s ease-in-out ${i * 0.16}s infinite`,
+                          }} />
                         ))}
                       </span>
                     ) : null}
                   </div>
                 )}
-                {/* 출처 표시 (스트리밍 완료 후에만, 유사도 점수 숨김) */}
+
+                {/* RFP 유형 선택 카드 */}
+                {msg.rfpTypeSelect && !rfpType && <RfpTypeSelector />}
+
+                {/* 출처 표시 */}
                 {msg.sources && msg.sources.length > 0 && !msg.isStreaming && (
-                  <div style={{ display:"flex", gap:4, flexWrap:"wrap", marginTop:2 }}>
+                  <div style={{ display:"flex", gap:5, flexWrap:"wrap", marginTop:2 }}>
                     {msg.sources.slice(0,3).map((s,i) => (
-                      <span key={i} style={{ fontSize:9, padding:"2px 6px", background:C.bg, border:`1px solid ${C.border}`, borderRadius:4, color:C.sub }}>📄 {s.replace(".pdf","")}</span>
+                      <span key={i} style={{
+                        fontSize:9, padding:"3px 8px",
+                        background: T.bgSubtle, border:`1px solid ${T.border}`,
+                        borderRadius: T.r6, color: T.sub,
+                        display:"flex", alignItems:"center", gap:3,
+                      }}>
+                        <IconDoc size={10} /> {s.replace(".pdf","")}
+                      </span>
                     ))}
                   </div>
                 )}
               </div>
             </div>
           ))}
+
+          {/* 타이핑 인디케이터 */}
           {isTyping && (
-            <div style={{ display:"flex", gap:8 }}>
-              <div style={{ width:32, height:32, borderRadius:9, background:"linear-gradient(135deg,#5b6af0,#8b5cf6)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:15 }}>🛒</div>
-              <div style={{ background:C.card, borderRadius:"2px 12px 12px 12px", padding:"12px 16px", border:`1px solid ${C.border}`, display:"flex", gap:5, alignItems:"center" }}>
+            <div style={{ display:"flex", gap:10, animation:"message-in 0.3s ease-out" }}>
+              <div style={{
+                width:34, height:34, borderRadius: T.r10,
+                background: T.gradPrimary,
+                display:"flex", alignItems:"center", justifyContent:"center",
+                color:"#fff", boxShadow: T.shadowSm,
+              }}>
+                <IconBot size={17} />
+              </div>
+              <div style={{
+                background: T.card,
+                borderRadius:`${T.r4}px ${T.r16}px ${T.r16}px ${T.r16}px`,
+                padding:"14px 18px",
+                border:`1px solid ${T.borderLight}`,
+                display:"flex", gap:6, alignItems:"center",
+                boxShadow: T.shadowSm,
+              }}>
                 {[0,1,2].map(i => (
-                  <span key={i} style={{ width:7, height:7, borderRadius:"50%", background:C.accentMid, display:"inline-block", animation:`bop 1.2s ease-in-out ${i*0.2}s infinite` }} />
+                  <span key={i} style={{
+                    width:7, height:7, borderRadius:"50%",
+                    background: T.primaryMid, display:"inline-block",
+                    animation:`dot-wave 1.4s ease-in-out ${i * 0.16}s infinite`,
+                  }} />
                 ))}
-                <style>{`@keyframes bop{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)}}`}</style>
               </div>
             </div>
           )}
           <div ref={msgEndRef} />
         </div>
 
-        {/* 입력창 */}
-        <div style={{ background:C.card, borderTop:`1px solid ${C.border}` }}>
-          <div style={{ padding:"10px 14px 10px", display:"flex", gap:8, alignItems:"center" }}>
+        {/* ── 입력창 ── */}
+        <div style={{
+          background: "rgba(255,255,255,0.95)",
+          borderTop:`1px solid ${T.borderLight}`,
+        }}>
+          <div style={{ padding:"12px 16px 10px", display:"flex", gap:10, alignItems:"center" }}>
             <input
               ref={inputRef}
               value={userInput}
               onChange={e => setUserInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={phase === "chat" ? "구매 관련 내용을 입력해주세요..." : phase === "complete" ? "공급업체 추천 또는 추가 질문..." : "추가 정보를 입력하세요..."}
-              style={{ flex:1, height:44, background:C.bg, border:`1.5px solid ${C.border}`, borderRadius:11, padding:"0 14px", color:C.text, fontSize:13, outline:"none", fontFamily:"inherit" }}
+              onFocus={() => setInputFocused(true)}
+              onBlur={() => setInputFocused(false)}
+              placeholder={
+                phase === "chat" ? "궁금한 내용을 입력해주세요..."
+                  : phase === "complete" ? "공급업체 추천 또는 추가 질문..."
+                  : "추가 정보를 입력하세요..."
+              }
+              style={{
+                flex:1, height:48, background: inputFocused ? T.card : T.bgSubtle,
+                border:`1.5px solid ${inputFocused ? T.primary : "transparent"}`,
+                borderRadius: T.r14, padding:"0 16px",
+                color: T.text, fontSize:14, outline:"none", fontFamily:"inherit",
+                transition:"all 0.2s ease",
+                boxShadow: inputFocused ? `0 0 0 3px rgba(74,108,247,0.10)` : "none",
+              }}
             />
-            <button onClick={handleSend} disabled={isTyping || !userInput.trim()} style={{
-              width:44, height:44, borderRadius:11, border:"none",
-              background: isTyping || !userInput.trim() ? C.border : `linear-gradient(135deg,${C.accent},#7c3aed)`,
-              color: isTyping || !userInput.trim() ? C.muted : "#fff",
-              fontSize:17, display:"flex", alignItems:"center", justifyContent:"center", cursor: isTyping ? "not-allowed" : "pointer"
-            }}>➤</button>
+            <button
+              onClick={handleSend}
+              disabled={isTyping || !userInput.trim()}
+              aria-label="메시지 전송"
+              style={{
+                width:48, height:48, borderRadius: T.r14, border:"none",
+                background: isTyping || !userInput.trim() ? T.borderLight : T.gradPrimary,
+                color: isTyping || !userInput.trim() ? T.muted : "#fff",
+                display:"flex", alignItems:"center", justifyContent:"center",
+                cursor: isTyping || !userInput.trim() ? "not-allowed" : "pointer",
+                transition:"all 0.2s ease",
+                boxShadow: isTyping || !userInput.trim() ? "none" : T.shadowBlue,
+              }}
+              onMouseEnter={e => {
+                if (!isTyping && userInput.trim()) e.currentTarget.style.transform = "scale(1.05)";
+              }}
+              onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
+            >
+              <IconSend size={18} />
+            </button>
           </div>
-          <div style={{ padding:"2px 14px 9px", fontSize:10, color:C.muted, textAlign:"center" }}>
-            본 답변은 RAG 기반 참조 응답이며, 최종 결정은 담당자 검토 후 진행하시기 바랍니다.
+          <div style={{
+            padding:"2px 16px 10px", fontSize:10, color: T.muted, textAlign:"center",
+            display:"flex", alignItems:"center", justifyContent:"center", gap:8,
+          }}>
+            <span style={{ flex:1, height:1, background: T.borderLight }} />
+            <span>본 답변은 RAG 기반 참조 응답이며, 최종 결정은 담당자 검토 후 진행하시기 바랍니다.</span>
+            <span style={{ flex:1, height:1, background: T.borderLight }} />
           </div>
         </div>
       </div>
 
       {/* ════ RIGHT: RFP 패널 ════ */}
       {rightVisible && (
-        <div style={{ width:440, maxWidth:440, height:"80vh", display:"flex", flexDirection:"column", background:C.card, borderRadius:16, boxShadow:"0 4px 32px rgba(0,0,0,0.10)", animation:"slideIn 0.4s ease forwards", flexShrink:0, overflow:"hidden" }}>
-          <style>{`@keyframes slideIn{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:translateX(0)}}`}</style>
-          <div style={{ background:C.card, borderBottom:`1px solid ${C.border}`, padding:"14px 20px", display:"flex", alignItems:"center", gap:10, flexShrink:0 }}>
-            <div style={{ width:34, height:34, borderRadius:8, background:"linear-gradient(135deg,#1e3a8a,#1d4ed8)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:17 }}>📋</div>
-            <div>
-              <div style={{ fontSize:13, fontWeight:800 }}>{phase === "blank" ? "제안요청서 (RFP) — 빈 양식" : phase === "filling" ? "제안요청서 (RFP) — 작성 중" : "제안요청서 (RFP) — 작성 완료"}</div>
-              <div style={{ fontSize:10, color:C.sub, marginTop:1 }}>대한민국 정부 표준 구매 양식 기준</div>
+        <div style={{
+          width:440, maxWidth:440, height:"85vh",
+          display:"flex", flexDirection:"column",
+          background: T.glass,
+          backdropFilter: "blur(24px) saturate(1.3)",
+          WebkitBackdropFilter: "blur(24px) saturate(1.3)",
+          borderRadius: T.r24,
+          border: `1px solid ${T.glassBorder}`,
+          boxShadow: `${T.shadowXl}, ${T.shadowGlow}`,
+          animation:"panel-slide-in 0.45s cubic-bezier(0.16, 1, 0.3, 1)",
+          flexShrink:0, overflow:"hidden",
+          position:"relative", zIndex:1,
+        }}>
+          {/* RFP 헤더 */}
+          <div style={{
+            background: "rgba(255,255,255,0.95)",
+            borderBottom:`1px solid ${T.borderLight}`,
+            padding:"14px 20px",
+            display:"flex", alignItems:"center", gap:12, flexShrink:0,
+          }}>
+            <div style={{
+              width:38, height:38, borderRadius: T.r10,
+              background: T.gradNavy,
+              display:"flex", alignItems:"center", justifyContent:"center",
+              color:"#fff",
+              boxShadow: T.shadowSm,
+            }}>
+              <IconDoc size={18} />
             </div>
-            <div style={{ marginLeft:"auto" }}>
-              <span style={{ fontSize:10, padding:"3px 9px", borderRadius:20, fontWeight:600, background: phase==="complete" ? C.greenSoft : C.accentSoft, color: phase==="complete" ? "#16a34a" : C.accent, border: `1px solid ${phase==="complete" ? C.greenMid : C.accentMid}` }}>{phase==="complete" ? "✓ 완료" : "작성 중"}</span>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:13, fontWeight:800, color: T.text }}>
+                {phase === "filling"
+                  ? `제안요청서 (RFP) — ${currentTemplate?.label || ""}`
+                  : `제안요청서 (RFP) — ${currentTemplate?.label || ""}`}
+              </div>
+              <div style={{ fontSize:10, color: T.sub, marginTop:2 }}>
+                {phase === "filling" ? "작성 진행 중" : "작성 완료"}
+                {" · "}대한민국 정부 표준 구매 양식 기준
+              </div>
             </div>
+            <span style={{
+              fontSize:10, padding:"4px 10px", borderRadius:20, fontWeight:600,
+              background: phase === "complete" ? T.greenLight : T.primaryLight,
+              color: phase === "complete" ? T.greenDark : T.primary,
+              border: `1px solid ${phase === "complete" ? T.greenMid : T.primaryMid}`,
+            }}>{phase === "complete" ? "✓ 완료" : "작성 중"}</span>
           </div>
-          {phase === "blank" && <PanelBlank />}
           {phase === "filling" && <PanelFilling />}
           {phase === "complete" && <PanelComplete />}
         </div>

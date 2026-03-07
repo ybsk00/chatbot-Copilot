@@ -1,4 +1,5 @@
 from google import genai
+from google.genai import types
 from app.config import GOOGLE_API_KEY, MODELS
 
 _client = None
@@ -111,10 +112,11 @@ def generate_answer(
     response = _get_client().models.generate_content(
         model=MODELS["generation"],
         contents=prompt,
-        config={
-            "system_instruction": system_prompt,
-            "max_output_tokens": 2048,
-        },
+        config=types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            max_output_tokens=800,
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
+        ),
     )
 
     avg_score = sum(c.get("similarity", 0) for c in chunks) / max(len(chunks), 1)
@@ -159,10 +161,11 @@ def generate_answer_stream(
     response = _get_client().models.generate_content_stream(
         model=MODELS["generation"],
         contents=prompt,
-        config={
-            "system_instruction": system_prompt,
-            "max_output_tokens": 2048,
-        },
+        config=types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            max_output_tokens=800,
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
+        ),
     )
 
     for chunk in response:

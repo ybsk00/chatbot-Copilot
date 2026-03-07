@@ -7,7 +7,7 @@ load_dotenv()
 MODELS = {
     "refinement": "gemini-2.5-flash-lite",
     "embedding":  "gemini-embedding-001",
-    "generation": "gemini-2.5-flash-lite",
+    "generation": "gemini-2.5-flash-lite",      # flash-lite: thinking 없이 빠른 TTFT
 }
 EMBEDDING_DIM = 1536
 
@@ -21,6 +21,7 @@ RAG_TOP_K       = 3
 BM25_WEIGHT     = 0.3
 MAX_CHUNK_TOKENS = 400
 VECTOR_MIN_SIMILARITY = 0.70   # 벡터 폴백 최소 유사도
+CONFIDENCE_THRESHOLD  = 0.65   # 신뢰도 거부 임계값 (이하 시 답변 생성 안 함)
 
 # 헌법 벡터 검색 파라미터
 CONSTITUTION_TOP_K = 3         # 질문당 검색할 헌법 규칙 수

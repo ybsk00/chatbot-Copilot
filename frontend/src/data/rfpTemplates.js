@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════
-// RFP 유형별 템플릿 (6가지)
+// RFP 유형별 템플릿 (9가지)
 // ═══════════════════════════════════════════
 
 export const RFP_TEMPLATES = {
@@ -190,23 +190,107 @@ export const RFP_TEMPLATES = {
       { title: "5. 제출 안내",      fields: ["s18","s19"],               icon: "mail" },
     ],
   },
-};
-
-// RFP 유형별 이모지 아이콘 매핑 (SVG 아이콘으로 대체될 때까지)
-export const RFP_EMOJI = {
-  purchase: "📦",
-  service_contract: "📝",
-  service: "🔧",
-  rental: "🚗",
-  construction: "🏗️",
-  consulting: "💼",
-};
-
-// 섹션 아이콘 매핑
-export const SECTION_EMOJI = {
-  org: "🏢",
-  doc: "📋",
-  gear: "⚙️",
-  chart: "📊",
-  mail: "📬",
+  purchase_maintenance: {
+    label: "구매+유지보수", desc: "사무가구, 생산장비 등 구매 후 유지보수 포함", icon: "purchase_maintenance",
+    fields: {
+      s1:  { label: "발주기관명", value: "" },
+      s2:  { label: "담당부서", value: "" },
+      s3:  { label: "담당자", value: "" },
+      s4:  { label: "연락처", value: "" },
+      s5:  { label: "이메일", value: "" },
+      s6:  { label: "구매 품목", value: "" },
+      s7:  { label: "구매 목적", value: "" },
+      s8:  { label: "수량", value: "" },
+      s9:  { label: "납품기한", value: "" },
+      s10: { label: "요구 사양", value: "" },
+      s11: { label: "품질 기준", value: "" },
+      s12: { label: "유지보수 범위", value: "" },
+      s13: { label: "유지보수 기간", value: "" },
+      s14: { label: "A/S 조건", value: "" },
+      s15: { label: "소모품 교체 기준", value: "" },
+      s16: { label: "평가① 가격 경쟁력", value: "30%" },
+      s17: { label: "평가② 품질·신뢰도", value: "25%" },
+      s18: { label: "평가③ 유지보수 역량", value: "25%" },
+      s19: { label: "평가④ 기술 지원", value: "20%" },
+      s20: { label: "제출기한", value: "" },
+      s21: { label: "제출방식", value: "" },
+    },
+    sections: [
+      { title: "1. 발주기관 정보",  fields: ["s1","s2","s3","s4","s5"],     icon: "org" },
+      { title: "2. 구매 개요",      fields: ["s6","s7","s8","s9"],          icon: "doc" },
+      { title: "3. 제품 요구사항",   fields: ["s10","s11"],                  icon: "gear" },
+      { title: "4. 유지보수 요건",   fields: ["s12","s13","s14","s15"],      icon: "gear" },
+      { title: "5. 평가 기준",      fields: ["s16","s17","s18","s19"],      icon: "chart" },
+      { title: "6. 제출 안내",      fields: ["s20","s21"],                  icon: "mail" },
+    ],
+  },
+  rental_maintenance: {
+    label: "렌탈+유지보수", desc: "OA기기, 복합기 등 렌탈과 유지보수 통합", icon: "rental_maintenance",
+    fields: {
+      s1:  { label: "발주기관명", value: "" },
+      s2:  { label: "담당부서", value: "" },
+      s3:  { label: "담당자", value: "" },
+      s4:  { label: "연락처", value: "" },
+      s5:  { label: "이메일", value: "" },
+      s6:  { label: "사업명", value: "" },
+      s7:  { label: "계약 목적", value: "" },
+      s8:  { label: "렌탈 형태", value: "" },
+      s9:  { label: "계약기간", value: "" },
+      s10: { label: "대상 규모", value: "" },
+      s11: { label: "요구 사양", value: "" },
+      s12: { label: "포함 서비스", value: "" },
+      s13: { label: "유지보수 SLA", value: "" },
+      s14: { label: "장애 대응 기준", value: "" },
+      s15: { label: "소모품 포함 여부", value: "" },
+      s16: { label: "반납·인수 조건", value: "" },
+      s17: { label: "평가① 총비용(TCO)", value: "30%" },
+      s18: { label: "평가② 유지보수 품질", value: "30%" },
+      s19: { label: "평가③ 신뢰도·실적", value: "25%" },
+      s20: { label: "평가④ ESG 대응", value: "15%" },
+      s21: { label: "제출기한", value: "" },
+      s22: { label: "제출방식", value: "" },
+    },
+    sections: [
+      { title: "1. 발주기관 정보",  fields: ["s1","s2","s3","s4","s5"],     icon: "org" },
+      { title: "2. 렌탈 개요",     fields: ["s6","s7","s8","s9","s10"],    icon: "doc" },
+      { title: "3. 장비 요구사항",  fields: ["s11","s12"],                  icon: "gear" },
+      { title: "4. 유지보수 요건",  fields: ["s13","s14","s15","s16"],      icon: "gear" },
+      { title: "5. 평가 기준",     fields: ["s17","s18","s19","s20"],      icon: "chart" },
+      { title: "6. 제출 안내",     fields: ["s21","s22"],                  icon: "mail" },
+    ],
+  },
+  purchase_lease: {
+    label: "구매·리스", desc: "PC, 노트북, 계측기 등 구매 또는 리스 선택", icon: "purchase_lease",
+    fields: {
+      s1:  { label: "발주기관명", value: "" },
+      s2:  { label: "담당부서", value: "" },
+      s3:  { label: "담당자", value: "" },
+      s4:  { label: "연락처", value: "" },
+      s5:  { label: "이메일", value: "" },
+      s6:  { label: "대상 장비", value: "" },
+      s7:  { label: "도입 목적", value: "" },
+      s8:  { label: "계약 형태", value: "" },
+      s9:  { label: "수량", value: "" },
+      s10: { label: "계약기간", value: "" },
+      s11: { label: "요구 사양", value: "" },
+      s12: { label: "품질 기준", value: "" },
+      s13: { label: "리스 조건", value: "" },
+      s14: { label: "중도 해지 조건", value: "" },
+      s15: { label: "잔존 가치 처리", value: "" },
+      s16: { label: "평가① 총비용(TCO)", value: "30%" },
+      s17: { label: "평가② 장비 성능", value: "25%" },
+      s18: { label: "평가③ 기술 지원", value: "25%" },
+      s19: { label: "평가④ ESG 대응", value: "20%" },
+      s20: { label: "제출기한", value: "" },
+      s21: { label: "제출방식", value: "" },
+    },
+    sections: [
+      { title: "1. 발주기관 정보",     fields: ["s1","s2","s3","s4","s5"],     icon: "org" },
+      { title: "2. 구매·리스 개요",    fields: ["s6","s7","s8","s9","s10"],    icon: "doc" },
+      { title: "3. 장비 요구사항",     fields: ["s11","s12"],                  icon: "gear" },
+      { title: "4. 리스 조건",        fields: ["s13","s14","s15"],             icon: "gear" },
+      { title: "5. 평가 기준",        fields: ["s16","s17","s18","s19"],       icon: "chart" },
+      { title: "6. 제출 안내",        fields: ["s20","s21"],                   icon: "mail" },
+    ],
+  },
 };

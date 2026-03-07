@@ -56,8 +56,39 @@ CLASSIFY_PROMPT = """사용자의 간접구매 질문을 아래 분류체계에 
 출력: {{"대분류": "...", "중분류": "..."}}"""
 
 
+# ── 분류체계 → RFP 유형 매핑 (9종) ──
+TAXONOMY_TO_RFP = {
+    "건물 관리":         {"_default": "service_contract", "비품 구매/렌탈": "purchase_maintenance"},
+    "마케팅":           "service_contract",
+    "보험 서비스":       "service",
+    "복지 서비스":       {"_default": "service", "의약품": "purchase"},
+    "비품/소모품":       {"_default": "purchase", "사무용가구": "purchase_maintenance", "전자기기": "purchase_lease"},
+    "사무 보조 서비스":   "service",
+    "시설 공사":         "construction",
+    "인쇄 서비스":       "purchase",
+    "정보통신":          {"_default": "purchase_lease", "소프트웨어": "purchase", "시스템 개발": "service_contract", "네트워크 공사": "construction"},
+    "출장 서비스":       "service",
+    "교육 서비스":       "service_contract",
+    "물류 관리":         "service_contract",
+    "차량관리":          {"_default": "rental", "차량 수리": "purchase_maintenance", "운전 용역": "service_contract"},
+    "생산 관리":         {"_default": "purchase_maintenance", "자산매각/폐기": "service", "제조 용역": "service_contract"},
+    "연구개발":          {"_default": "purchase_lease", "개발 용역": "service_contract", "규격인증": "consulting", "특허": "consulting"},
+    "전문 용역 서비스":   "consulting",
+}
+
+
+def _get_rfp_type(major: str, middle: str | None = None) -> str:
+    """분류체계에서 RFP 유형 결정"""
+    mapping = TAXONOMY_TO_RFP.get(major, "service_contract")
+    if isinstance(mapping, str):
+        return mapping
+    if middle and middle in mapping:
+        return mapping[middle]
+    return mapping.get("_default", "service_contract")
+
+
 def classify_intent(question: str, history: list[dict] | None = None) -> dict | None:
-    """사용자 질문을 분류체계(대분류/중분류)에 매칭. 매칭 불가 시 None."""
+    """사용자 질문을 분류체계(대분류/중분류)에 매칭 + RFP 유형 추천. 매칭 불가 시 None."""
     history_section = ""
     if history:
         lines = []
@@ -90,7 +121,9 @@ def classify_intent(question: str, history: list[dict] | None = None) -> dict | 
         if not major or major == "null" or major not in TAXONOMY:
             return None
 
-        return {"대분류": major, "중분류": result.get("중분류", "")}
+        middle = result.get("중분류", "")
+        rfp_type = _get_rfp_type(major, middle)
+        return {"대분류": major, "중분류": middle, "rfp_type": rfp_type}
 
     except Exception:
         return None

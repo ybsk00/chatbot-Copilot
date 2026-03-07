@@ -156,14 +156,40 @@ const IconMailBox = ({ size = 14 }) => (
   </svg>
 );
 
-// RFP 유형별 아이콘 (SVG)
+// ─── 혼합 유형 SVG 아이콘 ───
+const IconBoxGear = ({ size = 20, color = "currentColor" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M20 7l-8-4-8 4v10l8 4 8-4V7z" /><path d="M12 12v9" /><circle cx="17" cy="8" r="2" /><path d="M19 8h1M17 6V5" />
+  </svg>
+);
+
+const IconCarGear = ({ size = 20, color = "currentColor" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 16H9m10 0h3v-3.15a1 1 0 0 0-.84-.99L16 11l-2.7-3.6a1 1 0 0 0-.8-.4H5.24a2 2 0 0 0-1.8 1.1l-.8 1.63A6 6 0 0 0 2 12.42V16h2" />
+    <circle cx="6.5" cy="16.5" r="2.5" /><circle cx="16.5" cy="16.5" r="2.5" />
+    <circle cx="20" cy="5" r="2" /><path d="M22 5h1M20 3V2" />
+  </svg>
+);
+
+const IconBoxArrow = ({ size = 20, color = "currentColor" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+    <polyline points="3.27 6.96 12 12.01 20.73 6.96" /><line x1="12" y1="22.08" x2="12" y2="12" />
+    <path d="M17 2l3 3-3 3" /><path d="M14 5h6" />
+  </svg>
+);
+
+// RFP 유형별 아이콘 (SVG) — 9종
 const RFP_TYPE_ICONS = {
-  purchase:         { icon: (c) => <IconBox size={20} color={c} />,          color: "#4A6CF7", bg: "#EEF0FD" },
-  service_contract: { icon: (c) => <IconPenDoc size={20} color={c} />,      color: "#7C3AED", bg: "#F3EFFE" },
-  service:          { icon: (c) => <IconWrenchTool size={20} color={c} />,  color: "#0EA5A0", bg: "#E6FAF9" },
-  rental:           { icon: (c) => <IconCar size={20} color={c} />,         color: "#F59E0B", bg: "#FFFBEB" },
-  construction:     { icon: (c) => <IconHardHat size={20} color={c} />,     color: "#EF4444", bg: "#FEF2F2" },
-  consulting:       { icon: (c) => <IconBriefcase size={20} color={c} />,   color: "#1E3A5F", bg: "#EFF6FF" },
+  purchase:              { icon: (c) => <IconBox size={20} color={c} />,          color: "#4A6CF7", bg: "#EEF0FD" },
+  service_contract:      { icon: (c) => <IconPenDoc size={20} color={c} />,      color: "#7C3AED", bg: "#F3EFFE" },
+  service:               { icon: (c) => <IconWrenchTool size={20} color={c} />,  color: "#0EA5A0", bg: "#E6FAF9" },
+  rental:                { icon: (c) => <IconCar size={20} color={c} />,         color: "#F59E0B", bg: "#FFFBEB" },
+  construction:          { icon: (c) => <IconHardHat size={20} color={c} />,     color: "#EF4444", bg: "#FEF2F2" },
+  consulting:            { icon: (c) => <IconBriefcase size={20} color={c} />,   color: "#1E3A5F", bg: "#EFF6FF" },
+  purchase_maintenance:  { icon: (c) => <IconBoxGear size={20} color={c} />,     color: "#2563EB", bg: "#EFF6FF" },
+  rental_maintenance:    { icon: (c) => <IconCarGear size={20} color={c} />,     color: "#D97706", bg: "#FFF7ED" },
+  purchase_lease:        { icon: (c) => <IconBoxArrow size={20} color={c} />,    color: "#7C3AED", bg: "#F5F3FF" },
 };
 
 // 섹션 아이콘 (SVG)
@@ -188,10 +214,11 @@ export default function ChatPage() {
   const [isTyping, setIsTyping]         = useState(false);
   const [userInput, setUserInput]       = useState("");
   const [downloaded, setDownloaded]     = useState(false);
-  const [openSec, setOpenSec]           = useState({0:true,1:true,2:true,3:true,4:true});
+  const [openSec, setOpenSec]           = useState({0:true,1:true,2:true,3:true,4:true,5:true});
   const [rightVisible, setRightVisible] = useState(false);
   const [sessionId]                     = useState(() => crypto.randomUUID());
   const [inputFocused, setInputFocused] = useState(false);
+  const [recommendedRfp, setRecommendedRfp] = useState(null);
   const msgEndRef  = useRef(null);
   const fieldRefs  = useRef({});
   const inputRef   = useRef(null);
@@ -289,6 +316,10 @@ export default function ChatPage() {
           },
           (meta) => {
             metaData = meta;
+            // 분류 결과에서 추천 RFP 유형 캡처
+            if (meta.classification?.rfp_type) {
+              setRecommendedRfp(meta.classification.rfp_type);
+            }
             setMessages(prev => prev.map(m =>
               m.id === aiMsgId ? {
                 ...m,
@@ -366,22 +397,26 @@ export default function ChatPage() {
     }}>{children}</span>
   );
 
-  // ═══ RFP 유형 선택 카드 ═══
+  // ═══ RFP 유형 선택 카드 (9종, 3×3 그리드) ═══
   const RfpTypeSelector = () => (
-    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:12 }}>
+    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginTop:12 }}>
       {Object.entries(RFP_TEMPLATES).map(([key, tmpl]) => {
         const iconCfg = RFP_TYPE_ICONS[key];
+        if (!iconCfg) return null;
+        const isRecommended = recommendedRfp === key;
         return (
           <button
             key={key}
             onClick={() => handleRfpTypeSelect(key)}
             style={{
-              display:"flex", alignItems:"center", gap:10,
-              padding:"12px 14px", borderRadius: T.r12,
-              border:`1.5px solid ${T.border}`, background: T.card,
-              cursor:"pointer", textAlign:"left", fontFamily:"inherit",
+              display:"flex", flexDirection:"column", alignItems:"center", gap:6,
+              padding:"14px 8px 12px", borderRadius: T.r12,
+              border: isRecommended ? `2px solid ${iconCfg.color}` : `1.5px solid ${T.border}`,
+              background: isRecommended ? iconCfg.bg : T.card,
+              cursor:"pointer", textAlign:"center", fontFamily:"inherit",
               transition:"all 0.2s ease",
-              boxShadow: T.shadowXs,
+              boxShadow: isRecommended ? `0 0 0 3px ${iconCfg.bg}` : T.shadowXs,
+              position:"relative",
             }}
             onMouseEnter={e => {
               e.currentTarget.style.borderColor = iconCfg.color;
@@ -390,22 +425,28 @@ export default function ChatPage() {
               e.currentTarget.style.boxShadow = T.shadowMd;
             }}
             onMouseLeave={e => {
-              e.currentTarget.style.borderColor = T.border;
-              e.currentTarget.style.background = T.card;
+              e.currentTarget.style.borderColor = isRecommended ? iconCfg.color : T.border;
+              e.currentTarget.style.background = isRecommended ? iconCfg.bg : T.card;
               e.currentTarget.style.transform = "translateY(0)";
-              e.currentTarget.style.boxShadow = T.shadowXs;
+              e.currentTarget.style.boxShadow = isRecommended ? `0 0 0 3px ${iconCfg.bg}` : T.shadowXs;
             }}
           >
+            {isRecommended && (
+              <span style={{
+                position:"absolute", top:-8, right:-4,
+                fontSize:9, padding:"2px 8px", borderRadius:10,
+                background: iconCfg.color, color:"#fff", fontWeight:700,
+                boxShadow: T.shadowSm,
+              }}>추천</span>
+            )}
             <span style={{
-              width: 40, height: 40, borderRadius: T.r10,
-              background: iconCfg.bg,
+              width: 36, height: 36, borderRadius: T.r10,
+              background: isRecommended ? T.card : iconCfg.bg,
               display:"flex", alignItems:"center", justifyContent:"center",
               flexShrink: 0,
             }}>{iconCfg.icon(iconCfg.color)}</span>
-            <div>
-              <div style={{ fontSize:12, fontWeight:700, color: T.text }}>{tmpl.label}</div>
-              <div style={{ fontSize:10, color: T.sub, marginTop:2 }}>{tmpl.desc}</div>
-            </div>
+            <div style={{ fontSize:11, fontWeight:700, color: T.text, lineHeight:1.3 }}>{tmpl.label}</div>
+            <div style={{ fontSize:9, color: T.sub, lineHeight:1.3 }}>{tmpl.desc}</div>
           </button>
         );
       })}
@@ -751,7 +792,7 @@ export default function ChatPage() {
             <button
               onClick={() => {
                 setMessages([{ id: msgIdCounter++, role: "assistant", text: "안녕하세요! 간접구매 AI 코파일럿입니다.\n\n구매하려는 품목이나 서비스를 말씀해 주세요.\n견적 요청부터 공급업체 추천, 계약서 작성까지 함께 도와드립니다." }]);
-                setPhase("chat"); setRfpType(null); setFields({}); setRightVisible(false); setDownloaded(false);
+                setPhase("chat"); setRfpType(null); setFields({}); setRightVisible(false); setDownloaded(false); setRecommendedRfp(null);
               }}
               style={{
                 width:34, height:34, borderRadius: T.r8,

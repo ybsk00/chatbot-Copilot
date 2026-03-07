@@ -1,8 +1,11 @@
+import logging
 from fastapi import APIRouter
 from pydantic import BaseModel
 from app.db.supabase_client import get_client
 from app.constitution.gate import reload_rules
+from app.rag.embedder import embed_document
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
@@ -11,6 +14,15 @@ class ConstitutionRule(BaseModel):
     rule_type: str
     content: str
     is_active: bool = True
+
+
+def _embed_rule(content: str) -> list[float] | None:
+    """헌법 규칙 텍스트를 임베딩 (실패 시 None)"""
+    try:
+        return embed_document(content)
+    except Exception as e:
+        logger.warning(f"Constitution rule embedding failed: {e}")
+        return None
 
 
 @router.get("/constitution")
@@ -23,7 +35,12 @@ async def list_constitution():
 @router.post("/constitution")
 async def add_constitution(rule: ConstitutionRule):
     supabase = get_client()
-    result = supabase.table("constitution_rules").insert(rule.model_dump()).execute()
+    data = rule.model_dump()
+    # 자동 임베딩 생성
+    embedding = _embed_rule(rule.content)
+    if embedding:
+        data["embedding"] = embedding
+    result = supabase.table("constitution_rules").insert(data).execute()
     reload_rules()
     return {"status": "created", "data": result.data}
 
@@ -31,9 +48,14 @@ async def add_constitution(rule: ConstitutionRule):
 @router.put("/constitution/{rule_id}")
 async def update_constitution(rule_id: int, rule: ConstitutionRule):
     supabase = get_client()
+    data = rule.model_dump()
+    # 내용 변경 시 임베딩 재생성
+    embedding = _embed_rule(rule.content)
+    if embedding:
+        data["embedding"] = embedding
     result = (
         supabase.table("constitution_rules")
-        .update(rule.model_dump())
+        .update(data)
         .eq("id", rule_id)
         .execute()
     )
@@ -47,6 +69,23 @@ async def delete_constitution(rule_id: int):
     supabase.table("constitution_rules").delete().eq("id", rule_id).execute()
     reload_rules()
     return {"status": "deleted"}
+
+
+@router.post("/constitution/embed-all")
+async def embed_all_constitution():
+    """기존 헌법 규칙 전체 임베딩 (마이그레이션용)"""
+    supabase = get_client()
+    result = supabase.table("constitution_rules").select("id, content").eq("is_active", True).execute()
+    updated = 0
+    for row in (result.data or []):
+        embedding = _embed_rule(row["content"])
+        if embedding:
+            supabase.table("constitution_rules").update(
+                {"embedding": embedding}
+            ).eq("id", row["id"]).execute()
+            updated += 1
+    reload_rules()
+    return {"status": "completed", "updated": updated, "total": len(result.data or [])}
 
 
 # ── 대화이력 ──

@@ -1,4 +1,8 @@
+import logging
 from app.db.supabase_client import get_client
+from app.config import CONSTITUTION_TOP_K
+
+logger = logging.getLogger(__name__)
 
 _rules_cache: list[dict] | None = None
 
@@ -39,3 +43,45 @@ def check_constitution(message: str) -> str | None:
             return response
 
     return None
+
+
+def search_relevant_rules(query_embedding: list[float]) -> list[dict]:
+    """사용자 질문 임베딩으로 관련 헌법 규칙 벡터 검색.
+    검색된 규칙은 시스템 프롬프트에 동적 주입된다."""
+    try:
+        supabase = get_client()
+        result = supabase.rpc(
+            "match_constitution",
+            {
+                "query_embedding": query_embedding,
+                "match_count": CONSTITUTION_TOP_K,
+            },
+        ).execute()
+
+        rules = []
+        for row in (result.data or []):
+            if row["similarity"] >= 0.5:  # 최소 유사도
+                rules.append({
+                    "id": row["id"],
+                    "rule_type": row["rule_type"],
+                    "content": row["content"],
+                    "similarity": row["similarity"],
+                })
+        return rules
+    except Exception as e:
+        logger.warning(f"Constitution vector search failed: {e}")
+        # 폴백: 전체 활성 규칙 반환
+        return [
+            {"rule_type": r["rule_type"], "content": r["content"]}
+            for r in _load_rules()
+        ]
+
+
+def format_rules_for_prompt(rules: list[dict]) -> str:
+    """검색된 헌법 규칙을 시스템 프롬프트용 텍스트로 변환"""
+    if not rules:
+        return ""
+    lines = []
+    for i, r in enumerate(rules, 1):
+        lines.append(f"  {i}. [{r['rule_type']}] {r['content']}")
+    return "\n[헌법 원칙 — 반드시 준수]\n" + "\n".join(lines) + "\n"

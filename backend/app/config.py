@@ -7,7 +7,7 @@ load_dotenv()
 MODELS = {
     "refinement": "gemini-2.5-flash-lite",
     "embedding":  "gemini-embedding-001",
-    "generation": "gemini-2.5-flash",
+    "generation": "gemini-2.5-flash-lite",
 }
 EMBEDDING_DIM = 1536
 
@@ -20,10 +20,14 @@ SUPABASE_KEY    = os.getenv("SUPABASE_SERVICE_KEY")
 RAG_TOP_K       = 3
 BM25_WEIGHT     = 0.3
 MAX_CHUNK_TOKENS = 400
+VECTOR_MIN_SIMILARITY = 0.70   # 벡터 폴백 최소 유사도
+
+# 헌법 벡터 검색 파라미터
+CONSTITUTION_TOP_K = 3         # 질문당 검색할 헌법 규칙 수
 
 # Phase 감지 키워드 (Gemini 호출 대체)
 PURCHASE_KEYWORDS = ["구매", "발주", "조달", "계약", "견적", "입찰", "리스", "임대", "용역", "외주"]
-RFP_AGREE_KEYWORDS = ["작성해", "네", "좋아요", "부탁", "진행해", "시작해", "만들어"]
+RFP_AGREE_KEYWORDS = ["작성해", "작성할", "작성하", "RFP", "rfp", "네", "좋아요", "부탁", "진행해", "시작해", "만들어"]
 
 # Prefetcher 설정
 PREFETCH_CANDIDATE_COUNT = 3

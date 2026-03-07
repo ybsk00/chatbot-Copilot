@@ -1,25 +1,26 @@
 const API_URL = import.meta.env.VITE_API_URL || "https://ip-assist-backend-1058034030780.asia-northeast3.run.app";
 
 export const api = {
-  async chat(sessionId, message, category, history = [], phase = "chat", filledFields = {}) {
+  async chat(sessionId, message, category, history = [], phase = "chat", filledFields = {}, rfpType = "service_contract") {
     const res = await fetch(`${API_URL}/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json; charset=utf-8" },
       body: JSON.stringify({
         session_id: sessionId, message, category, history,
-        phase, filled_fields: filledFields,
+        phase, filled_fields: filledFields, rfp_type: rfpType,
       }),
     });
     return res.json();
   },
 
-  async streamChat(sessionId, message, category, history, phase, filledFields, onToken, onMeta, onDone, onSuggestions) {
+  async streamChat(sessionId, message, category, history, phase, filledFields, onToken, onMeta, onDone, onSuggestions, rfpType = "service_contract") {
     const res = await fetch(`${API_URL}/chat/stream`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json; charset=utf-8" },
       body: JSON.stringify({
         session_id: sessionId, message, category, history,
         phase: phase || "chat", filled_fields: filledFields || {},
+        rfp_type: rfpType,
       }),
     });
     const reader = res.body.getReader();
@@ -50,7 +51,7 @@ export const api = {
   async generateRfp(category, requirements, sessionId) {
     const res = await fetch(`${API_URL}/rfp/generate`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json; charset=utf-8" },
       body: JSON.stringify({ category, requirements, session_id: sessionId }),
     });
     return res.json();
@@ -82,7 +83,7 @@ export const api = {
   async createSupplier(data) {
     const res = await fetch(`${API_URL}/suppliers`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json; charset=utf-8" },
       body: JSON.stringify(data),
     });
     return res.json();
@@ -96,7 +97,7 @@ export const api = {
   async addConstitution(ruleType, content) {
     const res = await fetch(`${API_URL}/admin/constitution`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json; charset=utf-8" },
       body: JSON.stringify({ rule_type: ruleType, content }),
     });
     return res.json();

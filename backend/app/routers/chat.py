@@ -90,7 +90,7 @@ class ChatRequest(BaseModel):
     history: list[dict] = []
     phase: str = "chat"
     filled_fields: dict = {}
-    rfp_type: str = "service_contract"
+    rfp_type: str | None = "service_contract"
 
 
 # ──────────────────────────────────────────────

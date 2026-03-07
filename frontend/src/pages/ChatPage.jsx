@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { api } from "../api/client";
 import { T } from "../styles/tokens";
 import { RFP_TEMPLATES } from "../data/rfpTemplates";
-import BackgroundBlobs from "../components/ui/BackgroundBlobs";
+// BackgroundBlobs 제거 — 업무마켓9 임베드 시 외부 배경 불필요
 
 // ═══════════════════════════════════════════
 // SVG Icons
@@ -179,17 +179,17 @@ const IconBoxArrow = ({ size = 20, color = "currentColor" }) => (
   </svg>
 );
 
-// RFP 유형별 아이콘 (SVG) — 9종
+// RFP 유형별 아이콘 (SVG) — 9종 (소프트 파스텔 톤)
 const RFP_TYPE_ICONS = {
-  purchase:              { icon: (c) => <IconBox size={20} color={c} />,          color: "#4A6CF7", bg: "#EEF0FD" },
-  service_contract:      { icon: (c) => <IconPenDoc size={20} color={c} />,      color: "#7C3AED", bg: "#F3EFFE" },
-  service:               { icon: (c) => <IconWrenchTool size={20} color={c} />,  color: "#0EA5A0", bg: "#E6FAF9" },
-  rental:                { icon: (c) => <IconCar size={20} color={c} />,         color: "#F59E0B", bg: "#FFFBEB" },
-  construction:          { icon: (c) => <IconHardHat size={20} color={c} />,     color: "#EF4444", bg: "#FEF2F2" },
-  consulting:            { icon: (c) => <IconBriefcase size={20} color={c} />,   color: "#1E3A5F", bg: "#EFF6FF" },
-  purchase_maintenance:  { icon: (c) => <IconBoxGear size={20} color={c} />,     color: "#2563EB", bg: "#EFF6FF" },
-  rental_maintenance:    { icon: (c) => <IconCarGear size={20} color={c} />,     color: "#D97706", bg: "#FFF7ED" },
-  purchase_lease:        { icon: (c) => <IconBoxArrow size={20} color={c} />,    color: "#7C3AED", bg: "#F5F3FF" },
+  purchase:              { icon: (c) => <IconBox size={20} color={c} />,          color: "#0EA5A0", bg: "#F0FAFA" },
+  service_contract:      { icon: (c) => <IconPenDoc size={20} color={c} />,      color: "#A78BFA", bg: "#F5F3FF" },
+  service:               { icon: (c) => <IconWrenchTool size={20} color={c} />,  color: "#06B6D4", bg: "#ECFEFF" },
+  rental:                { icon: (c) => <IconCar size={20} color={c} />,         color: "#FBBF24", bg: "#FFFBEB" },
+  construction:          { icon: (c) => <IconHardHat size={20} color={c} />,     color: "#FB923C", bg: "#FFF7ED" },
+  consulting:            { icon: (c) => <IconBriefcase size={20} color={c} />,   color: "#818CF8", bg: "#EEF2FF" },
+  purchase_maintenance:  { icon: (c) => <IconBoxGear size={20} color={c} />,     color: "#14B8A6", bg: "#F0FDFA" },
+  rental_maintenance:    { icon: (c) => <IconCarGear size={20} color={c} />,     color: "#FBBF24", bg: "#FFFBEB" },
+  purchase_lease:        { icon: (c) => <IconBoxArrow size={20} color={c} />,    color: "#A78BFA", bg: "#F5F3FF" },
 };
 
 // 섹션 아이콘 (SVG)
@@ -458,19 +458,19 @@ export default function ChatPage() {
     <div className="custom-scroll" style={{ flex:1, overflowY:"auto", padding:"20px 22px" }}>
       {/* 진행률 카드 */}
       <div style={{
-        background: `linear-gradient(135deg, ${T.primaryLight} 0%, ${T.tealLight} 100%)`,
+        background: `linear-gradient(135deg, rgba(14,165,160,0.06) 0%, rgba(6,182,212,0.04) 100%)`,
         borderRadius: T.r16, padding:"16px 20px", marginBottom:16,
-        border: `1px solid ${T.primaryMid}`,
-        boxShadow: T.shadowSm,
+        border: `1px solid rgba(14,165,160,0.12)`,
+        boxShadow: '0 2px 8px rgba(14,165,160,0.06)',
       }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
           <span style={{ fontSize:12, fontWeight:700, color: T.text }}>RFP 완성도</span>
           <span style={{
             fontSize:11, fontWeight:700, padding:"4px 12px", borderRadius:20,
-            background: pct >= 80 ? T.greenLight : T.card,
+            background: pct >= 80 ? T.greenLight : 'rgba(255,255,255,0.8)',
             color: pct >= 80 ? T.greenDark : T.primary,
-            border: `1px solid ${pct >= 80 ? T.greenMid : T.primaryMid}`,
-            boxShadow: T.shadowXs,
+            border: `1px solid ${pct >= 80 ? T.greenMid : 'rgba(14,165,160,0.15)'}`,
+            boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
           }}>{filled} / {total} · {pct}%</span>
         </div>
         <div style={{ height:8, background:"rgba(255,255,255,0.7)", borderRadius:4, overflow:"hidden" }}>
@@ -495,14 +495,16 @@ export default function ChatPage() {
             <div
               onClick={() => setOpenSec(p => ({...p,[si]:!p[si]}))}
               style={{
-                background: T.card, padding:"12px 16px",
-                border: `1px solid ${T.border}`,
+                background: 'rgba(255,255,255,0.7)', padding:"12px 16px",
+                border: `1px solid rgba(14,165,160,0.08)`,
                 borderRadius: openSec[si] ? `${T.r12}px ${T.r12}px 0 0` : T.r12,
                 display:"flex", alignItems:"center", gap:10, cursor:"pointer",
                 transition:"all 0.2s ease",
+                backdropFilter: "blur(6px)",
+                WebkitBackdropFilter: "blur(6px)",
               }}
-              onMouseEnter={e => e.currentTarget.style.background = T.bgSubtle}
-              onMouseLeave={e => e.currentTarget.style.background = T.card}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(14,165,160,0.04)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.7)'}
             >
               <span style={{
                 width:24, height:24, borderRadius:"50%",
@@ -524,7 +526,7 @@ export default function ChatPage() {
             </div>
             {openSec[si] && (
               <div style={{
-                background: T.card, border:`1px solid ${T.border}`, borderTop:"none",
+                background: 'rgba(255,255,255,0.65)', border:`1px solid rgba(14,165,160,0.08)`, borderTop:"none",
                 borderRadius:`0 0 ${T.r12}px ${T.r12}px`, overflow:"hidden",
               }}>
                 {sec.fields.map((fk, fi) => {
@@ -536,11 +538,11 @@ export default function ChatPage() {
                       display:"flex", alignItems:"flex-start",
                       borderBottom: fi < sec.fields.length-1 ? `1px solid ${T.borderLight}` : "none",
                       animation: isNew ? "field-highlight 2.5s ease forwards" : "none",
-                      background: fi % 2 === 1 ? "#FAFBFD" : "transparent",
+                      background: fi % 2 === 1 ? "rgba(14,165,160,0.02)" : "transparent",
                     }}>
                       <div style={{
                         width:136, padding:"10px 14px", flexShrink:0,
-                        background:"#F8F9FB", borderRight:`1px solid ${T.borderLight}`,
+                        background:"rgba(14,165,160,0.03)", borderRight:`1px solid rgba(14,165,160,0.06)`,
                         fontSize:11, fontWeight:700, color: T.sub,
                         display:"flex", alignItems:"center", minHeight:40,
                       }}>{f.label}</div>
@@ -597,9 +599,9 @@ export default function ChatPage() {
     <div className="custom-scroll" style={{ flex:1, overflowY:"auto", padding:"20px 22px" }}>
       {/* 성공 배너 */}
       <div style={{
-        background: `linear-gradient(135deg, ${T.greenLight}, #D1FAE5)`,
+        background: `linear-gradient(135deg, rgba(16,185,129,0.08), rgba(14,165,160,0.06))`,
         borderRadius: T.r16, padding:"18px 22px", marginBottom:18,
-        border:`1.5px solid ${T.greenMid}`,
+        border:`1.5px solid rgba(16,185,129,0.15)`,
         display:"flex", alignItems:"center", gap:14,
       }}>
         <IconParty size={32} />
@@ -627,10 +629,12 @@ export default function ChatPage() {
 
       {/* RFP 문서 헤더 */}
       <div style={{
-        background: T.card, borderRadius: T.r16, padding:"22px 28px", textAlign:"center",
-        marginBottom:16, border:`2px solid ${T.teal}`,
-        boxShadow:`0 0 0 4px ${T.tealLight}`,
+        background: 'rgba(255,255,255,0.8)', borderRadius: T.r16, padding:"22px 28px", textAlign:"center",
+        marginBottom:16, border:`1.5px solid rgba(14,165,160,0.15)`,
+        boxShadow:'0 2px 12px rgba(14,165,160,0.06)',
         position:"relative", overflow:"hidden",
+        backdropFilter: "blur(8px)",
+        WebkitBackdropFilter: "blur(8px)",
       }}>
         <div style={{
           position:"absolute", top:0, left:0, right:0, height:3,
@@ -659,17 +663,17 @@ export default function ChatPage() {
       {currentSections.map((sec, si) => (
         <div key={si} style={{ marginBottom:12 }}>
           <div style={{
-            background: T.bgSubtle, padding:"10px 16px",
+            background: 'rgba(14,165,160,0.04)', padding:"10px 16px",
             display:"flex", alignItems:"center", gap:8,
             borderRadius:`${T.r10}px ${T.r10}px 0 0`,
-            border:`1px solid ${T.border}`,
+            border:`1px solid rgba(14,165,160,0.08)`,
           }}>
             <span>{SECTION_ICONS[sec.icon]}</span>
             <span style={{ fontSize:12, fontWeight:700, color: T.navy }}>{sec.title}</span>
             <Chip>완료 ✓</Chip>
           </div>
           <div style={{
-            background: T.card, border:`1px solid ${T.border}`, borderTop:"none",
+            background: 'rgba(255,255,255,0.7)', border:`1px solid rgba(14,165,160,0.08)`, borderTop:"none",
             borderRadius:`0 0 ${T.r10}px ${T.r10}px`, overflow:"hidden",
           }}>
             {sec.fields.map((fk, fi) => {
@@ -682,7 +686,7 @@ export default function ChatPage() {
                 }}>
                   <div style={{
                     width:136, padding:"10px 14px",
-                    background:"#F8F9FB", borderRight:`1px solid ${T.borderLight}`,
+                    background:"rgba(14,165,160,0.03)", borderRight:`1px solid rgba(14,165,160,0.06)`,
                     fontSize:11, fontWeight:700, color: T.sub, flexShrink:0,
                     display:"flex", alignItems:"center",
                   }}>{f.label}</div>
@@ -695,7 +699,7 @@ export default function ChatPage() {
       ))}
 
       {/* 서명 영역 */}
-      <div style={{ background: T.card, borderRadius: T.r12, padding:"22px 26px", border:`1px solid ${T.border}` }}>
+      <div style={{ background: 'rgba(255,255,255,0.7)', borderRadius: T.r12, padding:"22px 26px", border:`1px solid rgba(14,165,160,0.08)` }}>
         <div style={{ display:"flex", justifyContent:"space-around" }}>
           {[
             { label:"작성일", value: new Date().toLocaleDateString("ko-KR") },
@@ -728,7 +732,7 @@ export default function ChatPage() {
   return (
     <div style={{
       display:"flex", height:"100vh",
-      background: T.gradBg,
+      background: "transparent",
       fontFamily: T.font,
       color: T.text, overflow:"hidden",
       alignItems:"center", justifyContent:"center",
@@ -736,31 +740,33 @@ export default function ChatPage() {
       padding:"0 24px",
       position:"relative",
     }}>
-      <BackgroundBlobs />
+      {/* 외부 배경 없음 — 업무마켓9에 임베드 */}
 
-      {/* ════ LEFT: 채팅 패널 ════ */}
+      {/* ════ LEFT: 채팅 패널 (글래스모피즘) ════ */}
       <div style={{
         width: 520, minWidth: 360, maxWidth: 520,
         height: "85vh",
         display:"flex", flexDirection:"column",
-        background: T.glass,
-        backdropFilter: "blur(24px) saturate(1.3)",
-        WebkitBackdropFilter: "blur(24px) saturate(1.3)",
+        background: 'rgba(255,255,255,0.62)',
+        backdropFilter: "blur(30px) saturate(1.4)",
+        WebkitBackdropFilter: "blur(30px) saturate(1.4)",
         borderRadius: T.r24,
-        border: `1px solid ${T.glassBorder}`,
-        boxShadow: `${T.shadowXl}, ${T.shadowGlow}`,
+        border: `1px solid rgba(255,255,255,0.5)`,
+        boxShadow: `${T.shadowXl}, 0 0 0 1px rgba(14,165,160,0.04)`,
         transition:"all 0.4s ease",
         flexShrink:0,
         position:"relative",
         zIndex:1,
         overflow:"hidden",
       }}>
-        {/* ── 채팅 헤더 (서울온케어 스타일) ── */}
+        {/* ── 채팅 헤더 (글래스모피즘) ── */}
         <div style={{
           padding:"14px 20px",
-          borderBottom:`1px solid ${T.borderLight}`,
+          borderBottom:`1px solid rgba(14,165,160,0.08)`,
           display:"flex", alignItems:"center", gap:12,
-          background: "rgba(255,255,255,0.95)",
+          background: "rgba(255,255,255,0.75)",
+          backdropFilter: "blur(10px)",
+          WebkitBackdropFilter: "blur(10px)",
         }}>
           {/* 봇 아바타 */}
           <div style={{
@@ -768,7 +774,7 @@ export default function ChatPage() {
             background: T.gradPrimary,
             display:"flex", alignItems:"center", justifyContent:"center",
             color: "#fff",
-            boxShadow: T.shadowBlue,
+            boxShadow: '0 4px 12px rgba(14,165,160,0.2)',
           }}>
             <IconBot size={22} />
           </div>
@@ -786,8 +792,8 @@ export default function ChatPage() {
           <div style={{ display:"flex", alignItems:"center", gap:6 }}>
             <span style={{
               fontSize:10, padding:"3px 10px", borderRadius:20, fontWeight:600,
-              background: T.greenLight, color: T.greenDark,
-              border:`1px solid ${T.greenMid}`,
+              background: T.primaryLight, color: T.primaryDark,
+              border:`1px solid ${T.primaryMid}`,
             }}>RAG</span>
             <button
               onClick={() => {
@@ -828,10 +834,10 @@ export default function ChatPage() {
               {msg.role === "assistant" && (
                 <div style={{
                   width:34, height:34, borderRadius: T.r10, flexShrink:0,
-                  background: T.gradPrimary,
+                  background: 'linear-gradient(135deg, #0EA5A0 0%, #14B8A6 100%)',
                   display:"flex", alignItems:"center", justifyContent:"center",
                   color:"#fff",
-                  boxShadow: T.shadowSm,
+                  boxShadow: '0 3px 10px rgba(14,165,160,0.18)',
                 }}>
                   <IconBot size={17} />
                 </div>
@@ -850,10 +856,12 @@ export default function ChatPage() {
                 {/* 분류 결과 */}
                 {msg.classification && (
                   <div style={{
-                    background: T.primaryLight,
+                    background: 'rgba(14,165,160,0.05)',
                     borderLeft: `3px solid ${T.primary}`,
                     borderRadius: `2px ${T.r12}px ${T.r12}px 2px`,
                     padding:"12px 16px",
+                    backdropFilter: "blur(6px)",
+                    WebkitBackdropFilter: "blur(6px)",
                   }}>
                     <div style={{ fontSize:10, fontWeight:700, color: T.primary, marginBottom:8, display:"flex", alignItems:"center", gap:4 }}><IconSearch size={12} /> 분류 결과</div>
                     {Object.entries(msg.classification).map(([k,v]) => (
@@ -869,17 +877,19 @@ export default function ChatPage() {
                 {(msg.text || msg.isStreaming) && (
                   <div style={{
                     background: msg.role === "user"
-                      ? T.gradPrimary
-                      : msg.trigger === "complete" ? T.greenLight : T.card,
+                      ? 'linear-gradient(135deg, #0EA5A0 0%, #14B8A6 100%)'
+                      : msg.trigger === "complete" ? T.greenLight : 'rgba(255,255,255,0.85)',
                     color: msg.role === "user" ? T.inverse : T.text,
                     borderRadius: msg.role === "user"
                       ? `${T.r16}px ${T.r4}px ${T.r16}px ${T.r16}px`
                       : `${T.r4}px ${T.r16}px ${T.r16}px ${T.r16}px`,
                     padding:"12px 16px", fontSize:13, lineHeight:1.75,
-                    boxShadow: msg.role === "user" ? T.shadowBlue : T.shadowSm,
+                    boxShadow: msg.role === "user" ? '0 3px 12px rgba(14,165,160,0.15)' : '0 1px 4px rgba(0,0,0,0.04)',
                     border: msg.trigger === "complete"
                       ? `1px solid ${T.greenMid}`
-                      : msg.role === "user" ? "none" : `1px solid ${T.borderLight}`,
+                      : msg.role === "user" ? "none" : `1px solid rgba(14,165,160,0.08)`,
+                    backdropFilter: msg.role === "user" ? "none" : "blur(8px)",
+                    WebkitBackdropFilter: msg.role === "user" ? "none" : "blur(8px)",
                   }}>
                     {msg.trigger === "complete" && (
                       <div style={{ fontSize:10, fontWeight:700, color: T.greenDark, marginBottom:6, display:"flex", alignItems:"center", gap:4 }}>
@@ -911,7 +921,7 @@ export default function ChatPage() {
                     {msg.sources.slice(0,3).map((s,i) => (
                       <span key={i} style={{
                         fontSize:9, padding:"3px 8px",
-                        background: T.bgSubtle, border:`1px solid ${T.border}`,
+                        background: 'rgba(14,165,160,0.04)', border:`1px solid rgba(14,165,160,0.1)`,
                         borderRadius: T.r6, color: T.sub,
                         display:"flex", alignItems:"center", gap:3,
                       }}>
@@ -929,19 +939,21 @@ export default function ChatPage() {
             <div style={{ display:"flex", gap:10, animation:"message-in 0.3s ease-out" }}>
               <div style={{
                 width:34, height:34, borderRadius: T.r10,
-                background: T.gradPrimary,
+                background: 'linear-gradient(135deg, #0EA5A0 0%, #14B8A6 100%)',
                 display:"flex", alignItems:"center", justifyContent:"center",
-                color:"#fff", boxShadow: T.shadowSm,
+                color:"#fff", boxShadow: '0 3px 10px rgba(14,165,160,0.18)',
               }}>
                 <IconBot size={17} />
               </div>
               <div style={{
-                background: T.card,
+                background: 'rgba(255,255,255,0.85)',
                 borderRadius:`${T.r4}px ${T.r16}px ${T.r16}px ${T.r16}px`,
                 padding:"14px 18px",
-                border:`1px solid ${T.borderLight}`,
+                border:`1px solid rgba(14,165,160,0.08)`,
                 display:"flex", gap:6, alignItems:"center",
-                boxShadow: T.shadowSm,
+                boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+                backdropFilter: "blur(8px)",
+                WebkitBackdropFilter: "blur(8px)",
               }}>
                 {[0,1,2].map(i => (
                   <span key={i} style={{
@@ -956,10 +968,12 @@ export default function ChatPage() {
           <div ref={msgEndRef} />
         </div>
 
-        {/* ── 입력창 ── */}
+        {/* ── 입력창 (글래스) ── */}
         <div style={{
-          background: "rgba(255,255,255,0.95)",
-          borderTop:`1px solid ${T.borderLight}`,
+          background: "rgba(255,255,255,0.75)",
+          backdropFilter: "blur(10px)",
+          WebkitBackdropFilter: "blur(10px)",
+          borderTop:`1px solid rgba(14,165,160,0.08)`,
         }}>
           <div style={{ padding:"12px 16px 10px", display:"flex", gap:10, alignItems:"center" }}>
             <input
@@ -980,7 +994,7 @@ export default function ChatPage() {
                 borderRadius: T.r14, padding:"0 16px",
                 color: T.text, fontSize:14, outline:"none", fontFamily:"inherit",
                 transition:"all 0.2s ease",
-                boxShadow: inputFocused ? `0 0 0 3px rgba(74,108,247,0.10)` : "none",
+                boxShadow: inputFocused ? `0 0 0 3px rgba(14,165,160,0.10)` : "none",
               }}
             />
             <button
@@ -1020,20 +1034,22 @@ export default function ChatPage() {
         <div style={{
           width:440, maxWidth:440, height:"85vh",
           display:"flex", flexDirection:"column",
-          background: T.glass,
-          backdropFilter: "blur(24px) saturate(1.3)",
-          WebkitBackdropFilter: "blur(24px) saturate(1.3)",
+          background: 'rgba(255,255,255,0.62)',
+          backdropFilter: "blur(30px) saturate(1.4)",
+          WebkitBackdropFilter: "blur(30px) saturate(1.4)",
           borderRadius: T.r24,
-          border: `1px solid ${T.glassBorder}`,
-          boxShadow: `${T.shadowXl}, ${T.shadowGlow}`,
+          border: `1px solid rgba(255,255,255,0.5)`,
+          boxShadow: `${T.shadowXl}, 0 0 0 1px rgba(14,165,160,0.04)`,
           animation:"panel-slide-in 0.45s cubic-bezier(0.16, 1, 0.3, 1)",
           flexShrink:0, overflow:"hidden",
           position:"relative", zIndex:1,
         }}>
-          {/* RFP 헤더 */}
+          {/* RFP 헤더 (글래스) */}
           <div style={{
-            background: "rgba(255,255,255,0.95)",
-            borderBottom:`1px solid ${T.borderLight}`,
+            background: "rgba(255,255,255,0.75)",
+            backdropFilter: "blur(10px)",
+            WebkitBackdropFilter: "blur(10px)",
+            borderBottom:`1px solid rgba(14,165,160,0.08)`,
             padding:"14px 20px",
             display:"flex", alignItems:"center", gap:12, flexShrink:0,
           }}>

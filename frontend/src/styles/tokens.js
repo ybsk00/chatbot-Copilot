@@ -1,15 +1,15 @@
 // ═══════════════════════════════════════════
-// IP Assist — Design Tokens
+// IP Assist — Design Tokens (업무마켓9 Brand)
 // ═══════════════════════════════════════════
 
 export const T = {
-  // ── Brand Primary (Indigo Blue) ──
-  primary:      '#4A6CF7',
-  primaryDark:  '#3B52CC',
-  primaryLight: '#EEF0FD',
-  primaryMid:   '#C7CBFB',
+  // ── Brand Primary (업무마켓9 Teal) ──
+  primary:      '#0EA5A0',
+  primaryDark:  '#0D8F8B',
+  primaryLight: '#E6FAF9',
+  primaryMid:   '#99E6E3',
 
-  // ── Brand Secondary (업무마켓9 Teal) ──
+  // ── Brand Accent (Cyan) ──
   teal:         '#0EA5A0',
   tealDark:     '#0D8F8B',
   tealLight:    '#E6FAF9',
@@ -30,44 +30,44 @@ export const T = {
   redLight:     '#FEF2F2',
   redMid:       '#FECACA',
 
-  // ── Navy ──
+  // ── Navy (문서 헤더용) ──
   navy:         '#1E3A5F',
   navyDeep:     '#1E3A8A',
 
-  // ── Neutrals ──
-  bg:           '#F8F9FC',
-  bgSubtle:     '#F1F3F9',
+  // ── Neutrals (민트 톤) ──
+  bg:           '#F5FAFA',
+  bgSubtle:     '#EFF7F7',
   card:         '#FFFFFF',
-  border:       '#E5E7EB',
-  borderLight:  '#F3F4F6',
+  border:       '#DCE8E7',
+  borderLight:  '#EBF3F3',
 
   // ── Text ──
-  text:         '#111827',
-  sub:          '#6B7280',
-  muted:        '#9CA3AF',
+  text:         '#1E293B',
+  sub:          '#64748B',
+  muted:        '#94A3B8',
   inverse:      '#FFFFFF',
 
-  // ── Shadows (5-level depth) ──
-  shadowXs:     '0 1px 2px rgba(0,0,0,0.05)',
-  shadowSm:     '0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)',
-  shadowMd:     '0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -1px rgba(0,0,0,0.04)',
-  shadowLg:     '0 10px 25px -3px rgba(0,0,0,0.08), 0 4px 10px -2px rgba(0,0,0,0.04)',
-  shadowXl:     '0 20px 40px -5px rgba(0,0,0,0.10)',
-  shadowGlow:   '0 0 30px rgba(74,108,247,0.12)',
-  shadowBlue:   '0 4px 14px rgba(74,108,247,0.25)',
-  shadowTeal:   '0 4px 14px rgba(14,165,160,0.20)',
+  // ── Shadows (틸 톤) ──
+  shadowXs:     '0 1px 2px rgba(0,0,0,0.04)',
+  shadowSm:     '0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.03)',
+  shadowMd:     '0 4px 8px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03)',
+  shadowLg:     '0 10px 25px -3px rgba(0,0,0,0.06), 0 4px 10px -2px rgba(0,0,0,0.03)',
+  shadowXl:     '0 20px 50px -8px rgba(0,0,0,0.08)',
+  shadowGlow:   '0 0 40px rgba(14,165,160,0.08)',
+  shadowBlue:   '0 4px 14px rgba(14,165,160,0.18)',
+  shadowTeal:   '0 4px 14px rgba(14,165,160,0.18)',
 
-  // ── Glass ──
-  glass:        'rgba(255,255,255,0.82)',
-  glassBorder:  'rgba(255,255,255,0.50)',
-  glassShadow:  '0 8px 32px rgba(0,0,0,0.08)',
+  // ── Glass (강화된 글래스모피즘) ──
+  glass:        'rgba(255,255,255,0.68)',
+  glassBorder:  'rgba(255,255,255,0.40)',
+  glassShadow:  '0 8px 32px rgba(0,0,0,0.06)',
 
   // ── Gradients ──
-  gradPrimary:  'linear-gradient(135deg, #4A6CF7 0%, #7C3AED 100%)',
+  gradPrimary:  'linear-gradient(135deg, #0EA5A0 0%, #06B6D4 100%)',
   gradTeal:     'linear-gradient(135deg, #0EA5A0 0%, #06B6D4 100%)',
-  gradBg:       'linear-gradient(160deg, #F0F4FF 0%, #F8F9FC 30%, #F0FDF9 70%, #F8F9FC 100%)',
-  gradChat:     'linear-gradient(180deg, #F5F7FF 0%, #F8F9FC 100%)',
-  gradNavy:     'linear-gradient(135deg, #1E3A8A 0%, #1D4ED8 100%)',
+  gradBg:       'linear-gradient(160deg, #F2FAFA 0%, #F8FAFC 30%, #F3EFFA 60%, #F8FAFC 100%)',
+  gradChat:     'linear-gradient(180deg, #F0F9F9 0%, #F7FAFC 50%, #F3F0FA 100%)',
+  gradNavy:     'linear-gradient(135deg, #0D8F8B 0%, #0EA5A0 100%)',
 
   // ── Font ──
   font: "'Pretendard Variable','Pretendard','Apple SD Gothic Neo','Noto Sans KR',sans-serif",

@@ -146,17 +146,19 @@ async def chat_stream(req: ChatRequest):
 
     taxonomy_major = classification["대분류"] if classification else None
 
+    query_emb = None
     if cached:
         chunks = cached
     else:
-        chunks = await loop.run_in_executor(
+        chunks, query_emb = await loop.run_in_executor(
             _executor, lambda: hybrid_search(req.message, category=req.category, taxonomy_major=taxonomy_major)
         )
 
-    # 4.5. 헌법 규칙 벡터 검색 (쿼리 임베딩 재사용)
+    # 4.5. 헌법 규칙 벡터 검색 (임베딩 재사용 — 추가 API 호출 없음)
     constitution_text = ""
     try:
-        query_emb = await loop.run_in_executor(_executor, lambda: embed_query(req.message))
+        if query_emb is None:
+            query_emb = await loop.run_in_executor(_executor, lambda: embed_query(req.message))
         const_rules = await loop.run_in_executor(_executor, lambda: search_relevant_rules(query_emb))
         constitution_text = format_rules_for_prompt(const_rules)
     except Exception as e:
@@ -269,16 +271,15 @@ def _extract_phase(req: ChatRequest) -> dict:
 
 
 def _search_and_answer(req: ChatRequest, taxonomy_major: str | None = None) -> tuple:
-    """RAG 검색 + 답변 생성 (헌법 규칙 동적 주입)"""
-    chunks = hybrid_search(req.message, category=req.category, taxonomy_major=taxonomy_major)
+    """RAG 검색 + 답변 생성 (헌법 규칙 동적 주입, 임베딩 재사용)"""
+    chunks, query_emb = hybrid_search(req.message, category=req.category, taxonomy_major=taxonomy_major)
     filled_keys = ", ".join(req.filled_fields.keys()) if req.filled_fields else ""
     schema = RFP_SCHEMAS.get(req.rfp_type, RFP_SCHEMAS["service_contract"])
     rfp_sections = schema["sections"] if req.phase == "filling" else ""
 
-    # 헌법 규칙 벡터 검색
+    # 헌법 규칙 벡터 검색 (임베딩 재사용)
     constitution_text = ""
     try:
-        query_emb = embed_query(req.message)
         const_rules = search_relevant_rules(query_emb)
         constitution_text = format_rules_for_prompt(const_rules)
     except Exception as e:

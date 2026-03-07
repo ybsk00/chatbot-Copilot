@@ -47,7 +47,7 @@ class RfpRequest(BaseModel):
 @router.post("/generate")
 async def generate_rfp(req: RfpRequest):
     # RFP 관련 문서 검색
-    chunks = hybrid_search(f"{req.category} RFP 제안요청서", category=None, top_k=8)
+    chunks, _ = hybrid_search(f"{req.category} RFP 제안요청서", category=None, top_k=8)
 
     context = "\n\n---\n\n".join(
         f"[{c['doc_name']}]\n{c['content']}" for c in chunks

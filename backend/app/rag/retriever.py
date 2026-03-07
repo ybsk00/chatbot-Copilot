@@ -224,8 +224,9 @@ def bm25_keyword_search(query: str, category: str | None = None, top_k: int = RA
 
 # ── 하이브리드 검색 (FAQ 우선 → BM25 우선 → 벡터 폴백) ──
 
-def hybrid_search(query: str, category: str | None = None, taxonomy_major: str | None = None, top_k: int = RAG_TOP_K, min_similarity: float = VECTOR_MIN_SIMILARITY) -> list[dict]:
-    """FAQ 우선 → BM25 키워드 검색 → 벡터 폴백 (대분류 필터 지원)"""
+def hybrid_search(query: str, category: str | None = None, taxonomy_major: str | None = None, top_k: int = RAG_TOP_K, min_similarity: float = VECTOR_MIN_SIMILARITY) -> tuple[list[dict], list[float]]:
+    """FAQ 우선 → BM25 키워드 검색 → 벡터 폴백 (대분류 필터 지원)
+    Returns: (chunks, query_embedding) — 임베딩 재사용을 위해 함께 반환"""
     # 임베딩 1회만 생성
     query_embedding = embed_query(query)
 
@@ -233,15 +234,15 @@ def hybrid_search(query: str, category: str | None = None, taxonomy_major: str |
     faq_results = faq_search(query_embedding, taxonomy_major, category, top_k, min_similarity)
     if faq_results:
         logger.info(f"FAQ hit: {len(faq_results)}개 (sim={faq_results[0]['similarity']:.3f})")
-        return _format_faq_as_chunks(faq_results)
+        return _format_faq_as_chunks(faq_results), query_embedding
 
     # 2. BM25 키워드 검색 우선 실행
     bm25_results = bm25_keyword_search(query, category, top_k)
     if bm25_results:
         logger.info(f"BM25 hit: {len(bm25_results)}개")
-        return bm25_results
+        return bm25_results, query_embedding
 
     # 3. BM25 결과 없으면 벡터 유사도 검색 (0.7 이상)
     logger.info("BM25 no results → vector fallback")
     chunks = vector_search_with_embedding(query_embedding, category, top_k, min_similarity)
-    return chunks[:top_k]
+    return chunks[:top_k], query_embedding

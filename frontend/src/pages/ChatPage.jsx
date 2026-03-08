@@ -3,7 +3,6 @@ import { api } from "../api/client";
 import { T } from "../styles/tokens";
 import { RFP_TEMPLATES } from "../data/rfpTemplates";
 import { downloadRfpPdf } from "../utils/rfpExport";
-import wm9Data from "../data/wm9_suppliers.json";
 // BackgroundBlobs 제거 — 업무마켓9 임베드 시 외부 배경 불필요
 
 // ═══════════════════════════════════════════
@@ -806,19 +805,6 @@ export default function ChatPage() {
     purchase_lease: "구매·리스",
   };
 
-  // RFP 유형 → 업무마켓9 카테고리 매핑
-  const RFP_TO_WM9_CATEGORY = {
-    purchase: ["사무환경"],
-    service_contract: ["IT개발", "마케팅", "전문서비스"],
-    service: ["전문서비스", "사무환경"],
-    rental: ["사무환경"],
-    construction: ["전문서비스"],
-    consulting: ["전문서비스", "마케팅"],
-    purchase_maintenance: ["사무환경", "IT개발"],
-    rental_maintenance: ["사무환경"],
-    purchase_lease: ["IT개발", "사무환경"],
-  };
-
   // RFP 완료 시 DB에서 공급업체 로드
   useEffect(() => {
     if (phase === "complete" && sent && rfpType) {
@@ -832,35 +818,17 @@ export default function ChatPage() {
   }, [phase, sent, rfpType]);
 
   const getMatchedSuppliers = () => {
-    // 1) DB 업체 → 통합 포맷으로 변환 (source: "db")
-    const dbItems = dbSuppliers.map(s => ({
-      name: s.name,
-      categories: [s.category],
-      services: [],
-      tags: s.tags || [],
-      satisfaction: (s.score || 0) / 20,
-      total_reviews: 0,
-      matchRate: s.match_rate || 80,
-      source: "db",
-    }));
-
-    // 2) 업무마켓9 업체 → 통합 포맷 (source: "wm9")
-    const wm9Cats = RFP_TO_WM9_CATEGORY[rfpType] || [];
-    const wm9Items = (wm9Data.suppliers || [])
-      .filter(s => s.categories.some(c => wm9Cats.includes(c)))
+    return dbSuppliers
       .map(s => ({
-        ...s,
-        tags: s.services?.slice(0, 3) || [],
-        matchRate: Math.min(Math.round(60 + Math.min(s.total_reviews, 30)), 95),
-        source: "wm9",
-      }));
-
-    // 3) 합치고 매칭률 내림차순 정렬, 최대 8개
-    const merged = [...dbItems, ...wm9Items]
+        name: s.name,
+        categories: [s.category],
+        tags: s.tags || [],
+        satisfaction: (s.score || 0) / 20,
+        total_reviews: 0,
+        matchRate: s.match_rate || 80,
+      }))
       .sort((a, b) => b.matchRate - a.matchRate)
       .slice(0, 8);
-
-    return merged;
   };
 
   const PanelSuppliers = () => {
@@ -874,14 +842,13 @@ export default function ChatPage() {
         border:`1.5px solid rgba(14,165,160,0.12)`,
       }}>
         <div style={{ fontSize:14, fontWeight:800, color: T.primary }}>추천 공급업체</div>
-        <div style={{ fontSize:11, color: T.sub, marginTop:4 }}>업무마켓9 등록 업체 중 RFP 요건 매칭 결과입니다.</div>
+        <div style={{ fontSize:11, color: T.sub, marginTop:4 }}>RFP 요건 기반 공급업체 매칭 결과입니다.</div>
       </div>
 
       {/* 업체 카드 */}
       {suppliers.map((s, i) => {
         const satScore = Math.round((s.satisfaction || 0) * 20);
         const statusLabel = i < 3 ? "추천" : "검토";
-        const isDb = s.source === "db";
         return (
         <div key={s.name + i} style={{
           background: 'rgba(255,255,255,0.75)',
@@ -911,10 +878,10 @@ export default function ChatPage() {
             <div style={{ display:"flex", gap:4, alignItems:"center" }}>
               <span style={{
                 fontSize:9, fontWeight:600, padding:"2px 6px", borderRadius:8,
-                background: isDb ? "rgba(14,165,160,0.08)" : "rgba(251,191,36,0.08)",
-                color: isDb ? T.primary : "#d97706",
-                border: `1px solid ${isDb ? "rgba(14,165,160,0.15)" : "rgba(251,191,36,0.2)"}`,
-              }}>{isDb ? "IP Assist" : "업무마켓9"}</span>
+                background: "rgba(14,165,160,0.08)",
+                color: T.primary,
+                border: "1px solid rgba(14,165,160,0.15)",
+              }}>IP Assist</span>
               <span style={{
                 fontSize:11, fontWeight:700, padding:"4px 10px", borderRadius:20,
                 background: statusLabel === "추천" ? "rgba(16,185,129,0.1)" : "rgba(251,191,36,0.1)",
@@ -943,14 +910,14 @@ export default function ChatPage() {
 
           {/* 태그 */}
           <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
-            {(isDb ? s.tags : s.services || []).slice(0, 3).map(tag => (
+            {(s.tags || []).slice(0, 3).map(tag => (
               <span key={tag} style={{
                 fontSize:9, padding:"2px 8px", borderRadius:10,
                 background: T.bgSubtle, color: T.sub, border:`1px solid ${T.border}`,
                 maxWidth: 140, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
               }}>{tag}</span>
             ))}
-            {(isDb ? s.tags : s.services || []).length > 3 && (
+            {(s.tags || []).length > 3 && (
               <span style={{ fontSize:9, padding:"2px 8px", borderRadius:10, color: T.muted }}>
                 +{(isDb ? s.tags : s.services || []).length - 3}개
               </span>

@@ -227,30 +227,30 @@ class OrchestratorAgent(AgentBase):
                 self.retrieval.execute(ctx, self._critical_pool),
             )
 
-        # ── PHASE 3: 헌법 규칙주입 (Retrieval 실행 시만) ──
-        if ctx.query_embedding:
-            await self.constitution.inject_rules(ctx, self._critical_pool)
-
-        # ── PHASE 4: 답변 생성 ──
-        await self.generation.execute(ctx, self._critical_pool)
-
-        # ── PHASE 5: 사후검증 ──
-        await self.constitution.post_check(ctx, self._background_pool)
-        if ctx.post_check_violation:
-            ctx.answer += f"\n\n[안내] {ctx.post_check_violation}"
-
-        # ── 완성 여부 (프로그래밍적 판단 — LLM 의존 제거) ──
+        # ── PHASE 3: 완성 여부 판단 (Generation 이전 — complete 프롬프트 전환용) ──
         trigger = None
         if ctx.phase == "filling":
             schema = RFP_SCHEMAS.get(ctx.rfp_type, RFP_SCHEMAS["service_contract"])
             required_keys = set(k.strip() for k in schema["required"].split(","))
-            # 기존 입력 필드 + 새로 추출된 필드 합산
             all_filled = set(k for k, v in ctx.filled_fields.items() if v)
             new_fields = ctx.rfp_fields.get("rfp_fields", {})
             all_filled.update(k for k, v in new_fields.items() if v)
             if required_keys.issubset(all_filled):
                 trigger = "complete"
+                ctx.phase = "complete"  # Generation이 complete 프롬프트 사용
                 logger.info(f"[Orchestrator] RFP complete! required={required_keys}, filled={all_filled}")
+
+        # ── PHASE 4: 헌법 규칙주입 (Retrieval 실행 시만) ──
+        if ctx.query_embedding:
+            await self.constitution.inject_rules(ctx, self._critical_pool)
+
+        # ── PHASE 5: 답변 생성 ──
+        await self.generation.execute(ctx, self._critical_pool)
+
+        # ── PHASE 6: 사후검증 ──
+        await self.constitution.post_check(ctx, self._background_pool)
+        if ctx.post_check_violation:
+            ctx.answer += f"\n\n[안내] {ctx.post_check_violation}"
 
         # ── 타이밍 로그 ──
         total_ms = (time.time() - total_start) * 1000

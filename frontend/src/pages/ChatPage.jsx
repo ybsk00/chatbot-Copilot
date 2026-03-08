@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { api } from "../api/client";
 import { T } from "../styles/tokens";
 import { RFP_TEMPLATES } from "../data/rfpTemplates";
+import { downloadRfpPdf } from "../utils/rfpExport";
+import wm9Data from "../data/wm9_suppliers.json";
 // BackgroundBlobs 제거 — 업무마켓9 임베드 시 외부 배경 불필요
 
 // ═══════════════════════════════════════════
@@ -214,23 +216,27 @@ export default function ChatPage() {
   const [isTyping, setIsTyping]         = useState(false);
   const [userInput, setUserInput]       = useState("");
   const [downloaded, setDownloaded]     = useState(false);
+  const [sent, setSent]                 = useState(false);
   const [openSec, setOpenSec]           = useState({0:true,1:true,2:true,3:true,4:true,5:true});
   const [rightVisible, setRightVisible] = useState(false);
   const [sessionId]                     = useState(() => crypto.randomUUID());
   const [inputFocused, setInputFocused] = useState(false);
   const [recommendedRfp, setRecommendedRfp] = useState(null);
   const msgEndRef  = useRef(null);
+  const chatScrollRef = useRef(null);
   const fieldRefs  = useRef({});
   const inputRef   = useRef(null);
 
   const currentTemplate = rfpType ? RFP_TEMPLATES[rfpType] : null;
   const currentSections = currentTemplate?.sections || [];
-  const filled = Object.values(fields).filter(f => f.value.trim()).length;
+  const filled = Object.values(fields).filter(f => (f.value || "").trim()).length;
   const total  = Object.keys(fields).length;
   const pct    = total > 0 ? Math.round(filled / total * 100) : 0;
 
   useEffect(() => {
-    msgEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }
   }, [messages, isTyping]);
 
   const applyFills = (fills) => {
@@ -240,19 +246,27 @@ export default function ChatPage() {
     setFields(prev => {
       const next = { ...prev };
       Object.entries(fills).forEach(([k,v]) => {
-        if (next[k]) next[k] = { ...next[k], value: v };
+        if (next[k] && v != null) {
+          let val = String(v).trim();
+          // 평가 기준 필드: 숫자만 입력 시 자동 % 추가
+          if (next[k].label && next[k].label.startsWith("평가") && val) {
+            const numOnly = val.replace(/[%％\s]/g, "");
+            if (/^\d+(\.\d+)?$/.test(numOnly)) {
+              val = numOnly + "%";
+            }
+          }
+          next[k] = { ...next[k], value: val };
+        }
       });
       return next;
     });
-    const firstKey = Object.keys(fills)[0];
-    setTimeout(() => fieldRefs.current[firstKey]?.scrollIntoView({ behavior:"smooth", block:"center" }), 300);
     setTimeout(() => setJustFilled(new Set()), 2500);
   };
 
   const getFilledFields = () => {
     const result = {};
     Object.entries(fields).forEach(([k, v]) => {
-      if (v.value.trim()) result[k] = v.value;
+      if ((v.value || "").trim()) result[k] = v.value;
     });
     return result;
   };
@@ -572,7 +586,10 @@ export default function ChatPage() {
 
       {/* 하단 버튼 */}
       <div style={{ display:"flex", gap:8, marginTop:12 }}>
-        <button style={{
+        <button onClick={() => {
+          const tmpl = RFP_TEMPLATES[rfpType];
+          if (tmpl) downloadRfpPdf(fields, tmpl.sections, tmpl.label, fields.s1?.value);
+        }} style={{
           flex:1, padding:"12px", borderRadius: T.r10,
           border:`1px solid ${T.border}`, background: T.card,
           color: T.sub, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
@@ -584,12 +601,21 @@ export default function ChatPage() {
         >
           <IconDownload size={14} /> 초안 다운로드
         </button>
-        <button disabled style={{
-          flex:1, padding:"12px", borderRadius: T.r10,
-          border:"none", background: T.borderLight,
-          color: T.muted, fontSize:12, fontWeight:700, fontFamily:"inherit", cursor:"not-allowed",
-          display:"flex", alignItems:"center", justifyContent:"center", gap:5,
-        }}><IconSendMail size={13} /> RFP 발송</button>
+        <button
+          disabled={pct < 100}
+          onClick={() => { if (pct >= 100) { setPhase("complete"); } }}
+          style={{
+            flex:1, padding:"12px", borderRadius: T.r10,
+            border:"none",
+            background: pct >= 100 ? T.gradPrimary : T.borderLight,
+            color: pct >= 100 ? "#fff" : T.muted,
+            fontSize:12, fontWeight:700, fontFamily:"inherit",
+            cursor: pct >= 100 ? "pointer" : "not-allowed",
+            display:"flex", alignItems:"center", justifyContent:"center", gap:5,
+            transition:"all 0.3s",
+            boxShadow: pct >= 100 ? T.shadowBlue : "none",
+          }}
+        ><IconSendMail size={13} /> {pct >= 100 ? "RFP 완료 / 발송" : "RFP 발송"}</button>
       </div>
     </div>
   );
@@ -610,7 +636,11 @@ export default function ChatPage() {
           <div style={{ fontSize:11, color:"#16a34a", marginTop:3 }}>모든 항목이 입력되었습니다. 다운로드 후 공급업체에 발송하세요.</div>
         </div>
         <button
-          onClick={() => setDownloaded(true)}
+          onClick={() => {
+            const tmpl = RFP_TEMPLATES[rfpType];
+            if (tmpl) downloadRfpPdf(fields, tmpl.sections, tmpl.label, fields.s1?.value);
+            setDownloaded(true);
+          }}
           style={{
             marginLeft:"auto", padding:"10px 22px", borderRadius: T.r10,
             border:"none",
@@ -722,9 +752,225 @@ export default function ChatPage() {
           }}>RAG 기반 생성 · 구매전략·표준프로세스 문서 근거</span>
         </div>
       </div>
+
+      {/* 발송 버튼 */}
+      <div style={{ marginTop:16, display:"flex", gap:8 }}>
+        <button onClick={() => {
+          const tmpl = RFP_TEMPLATES[rfpType];
+          if (tmpl) downloadRfpPdf(fields, tmpl.sections, tmpl.label, fields.s1?.value);
+          setDownloaded(true);
+        }} style={{
+          flex:1, padding:"14px", borderRadius: T.r10,
+          border:`1px solid ${T.border}`, background: T.card,
+          color: T.sub, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
+          display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+          transition:"all 0.2s",
+        }}
+          onMouseEnter={e => { e.currentTarget.style.background = T.bgSubtle; e.currentTarget.style.borderColor = T.primary; }}
+          onMouseLeave={e => { e.currentTarget.style.background = T.card; e.currentTarget.style.borderColor = T.border; }}
+        >
+          <IconDownload size={14} /> PDF 다운로드
+        </button>
+        <button onClick={() => setSent(true)} style={{
+          flex:1, padding:"14px", borderRadius: T.r10,
+          border:"none",
+          background: sent ? T.greenDark : T.gradPrimary,
+          color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
+          display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+          transition:"all 0.3s",
+          boxShadow: sent ? "none" : T.shadowBlue,
+        }}
+          onMouseEnter={e => { if(!sent) e.currentTarget.style.transform = "scale(1.02)"; }}
+          onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
+        >
+          {sent ? <><IconCheck /> 발송 완료</> : <><IconSendMail size={13} /> RFP 발송</>}
+        </button>
+      </div>
       <div style={{ height:20 }} />
     </div>
   );
+
+  // ══ 오른쪽 패널: 추천 업체 (DB + 업무마켓9 통합) ══
+  const [dbSuppliers, setDbSuppliers] = useState([]);
+
+  // RFP 유형 → DB 카테고리 매핑
+  const RFP_TO_DB_CATEGORY = {
+    purchase: "일반 구매",
+    service_contract: "일반 용역",
+    service: "서비스",
+    rental: "렌탈·리스",
+    construction: "공사",
+    consulting: "컨설팅",
+    purchase_maintenance: "구매+유지보수",
+    rental_maintenance: "렌탈+유지보수",
+    purchase_lease: "구매·리스",
+  };
+
+  // RFP 유형 → 업무마켓9 카테고리 매핑
+  const RFP_TO_WM9_CATEGORY = {
+    purchase: ["사무환경"],
+    service_contract: ["IT개발", "마케팅", "전문서비스"],
+    service: ["전문서비스", "사무환경"],
+    rental: ["사무환경"],
+    construction: ["전문서비스"],
+    consulting: ["전문서비스", "마케팅"],
+    purchase_maintenance: ["사무환경", "IT개발"],
+    rental_maintenance: ["사무환경"],
+    purchase_lease: ["IT개발", "사무환경"],
+  };
+
+  // RFP 완료 시 DB에서 공급업체 로드
+  useEffect(() => {
+    if (phase === "complete" && sent && rfpType) {
+      const dbCat = RFP_TO_DB_CATEGORY[rfpType];
+      if (dbCat) {
+        api.getSuppliers(dbCat).then(res => {
+          setDbSuppliers(res.suppliers || []);
+        }).catch(() => setDbSuppliers([]));
+      }
+    }
+  }, [phase, sent, rfpType]);
+
+  const getMatchedSuppliers = () => {
+    // 1) DB 업체 → 통합 포맷으로 변환 (source: "db")
+    const dbItems = dbSuppliers.map(s => ({
+      name: s.name,
+      categories: [s.category],
+      services: [],
+      tags: s.tags || [],
+      satisfaction: (s.score || 0) / 20,
+      total_reviews: 0,
+      matchRate: s.match_rate || 80,
+      source: "db",
+    }));
+
+    // 2) 업무마켓9 업체 → 통합 포맷 (source: "wm9")
+    const wm9Cats = RFP_TO_WM9_CATEGORY[rfpType] || [];
+    const wm9Items = (wm9Data.suppliers || [])
+      .filter(s => s.categories.some(c => wm9Cats.includes(c)))
+      .map(s => ({
+        ...s,
+        tags: s.services?.slice(0, 3) || [],
+        matchRate: Math.min(Math.round(60 + Math.min(s.total_reviews, 30)), 95),
+        source: "wm9",
+      }));
+
+    // 3) 합치고 매칭률 내림차순 정렬, 최대 8개
+    const merged = [...dbItems, ...wm9Items]
+      .sort((a, b) => b.matchRate - a.matchRate)
+      .slice(0, 8);
+
+    return merged;
+  };
+
+  const PanelSuppliers = () => {
+    const suppliers = getMatchedSuppliers();
+    return (
+    <div className="custom-scroll" style={{ flex:1, overflowY:"auto", padding:"20px 22px" }}>
+      {/* 헤더 */}
+      <div style={{
+        background: `linear-gradient(135deg, rgba(14,165,160,0.08), rgba(6,182,212,0.06))`,
+        borderRadius: T.r16, padding:"18px 22px", marginBottom:18,
+        border:`1.5px solid rgba(14,165,160,0.12)`,
+      }}>
+        <div style={{ fontSize:14, fontWeight:800, color: T.primary }}>추천 공급업체</div>
+        <div style={{ fontSize:11, color: T.sub, marginTop:4 }}>업무마켓9 등록 업체 중 RFP 요건 매칭 결과입니다.</div>
+      </div>
+
+      {/* 업체 카드 */}
+      {suppliers.map((s, i) => {
+        const satScore = Math.round((s.satisfaction || 0) * 20);
+        const statusLabel = i < 3 ? "추천" : "검토";
+        const isDb = s.source === "db";
+        return (
+        <div key={s.name + i} style={{
+          background: 'rgba(255,255,255,0.75)',
+          backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
+          borderRadius: T.r12, padding:"16px 20px", marginBottom:10,
+          border:`1px solid rgba(14,165,160,0.08)`,
+          transition:"all 0.2s",
+          cursor:"pointer",
+        }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = T.primary; e.currentTarget.style.boxShadow = "0 4px 16px rgba(14,165,160,0.12)"; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(14,165,160,0.08)"; e.currentTarget.style.boxShadow = "none"; }}
+        >
+          {/* 상단: 업체명 + 매칭률 */}
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+              <div style={{
+                width:36, height:36, borderRadius:10,
+                background: i < 3 ? T.gradPrimary : `linear-gradient(135deg, ${T.bgSubtle}, ${T.bg})`,
+                display:"flex", alignItems:"center", justifyContent:"center",
+                color: i < 3 ? "#fff" : T.sub, fontSize:14, fontWeight:800,
+              }}>{i + 1}</div>
+              <div>
+                <div style={{ fontSize:13, fontWeight:700, color: T.text }}>{s.name}</div>
+                <div style={{ fontSize:10, color: T.muted }}>{s.categories.join(", ")}</div>
+              </div>
+            </div>
+            <div style={{ display:"flex", gap:4, alignItems:"center" }}>
+              <span style={{
+                fontSize:9, fontWeight:600, padding:"2px 6px", borderRadius:8,
+                background: isDb ? "rgba(14,165,160,0.08)" : "rgba(251,191,36,0.08)",
+                color: isDb ? T.primary : "#d97706",
+                border: `1px solid ${isDb ? "rgba(14,165,160,0.15)" : "rgba(251,191,36,0.2)"}`,
+              }}>{isDb ? "IP Assist" : "업무마켓9"}</span>
+              <span style={{
+                fontSize:11, fontWeight:700, padding:"4px 10px", borderRadius:20,
+                background: statusLabel === "추천" ? "rgba(16,185,129,0.1)" : "rgba(251,191,36,0.1)",
+                color: statusLabel === "추천" ? "#059669" : "#d97706",
+              }}>{statusLabel}</span>
+            </div>
+          </div>
+
+          {/* 매칭률 + 만족도 바 */}
+          <div style={{ display:"flex", gap:16, marginBottom:8 }}>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:9, color: T.muted, marginBottom:3 }}>매칭률</div>
+              <div style={{ height:6, borderRadius:3, background: T.bgSubtle, overflow:"hidden" }}>
+                <div style={{ width:`${s.matchRate}%`, height:"100%", borderRadius:3, background: T.gradPrimary, transition:"width 1s ease" }} />
+              </div>
+              <div style={{ fontSize:10, fontWeight:700, color: T.primary, marginTop:2 }}>{s.matchRate}%</div>
+            </div>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:9, color: T.muted, marginBottom:3 }}>만족도</div>
+              <div style={{ height:6, borderRadius:3, background: T.bgSubtle, overflow:"hidden" }}>
+                <div style={{ width:`${satScore}%`, height:"100%", borderRadius:3, background: "linear-gradient(90deg, #f59e0b, #eab308)", transition:"width 1s ease" }} />
+              </div>
+              <div style={{ fontSize:10, fontWeight:700, color: "#d97706", marginTop:2 }}>{s.satisfaction}점 ({s.total_reviews}건)</div>
+            </div>
+          </div>
+
+          {/* 태그 */}
+          <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+            {(isDb ? s.tags : s.services || []).slice(0, 3).map(tag => (
+              <span key={tag} style={{
+                fontSize:9, padding:"2px 8px", borderRadius:10,
+                background: T.bgSubtle, color: T.sub, border:`1px solid ${T.border}`,
+                maxWidth: 140, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+              }}>{tag}</span>
+            ))}
+            {(isDb ? s.tags : s.services || []).length > 3 && (
+              <span style={{ fontSize:9, padding:"2px 8px", borderRadius:10, color: T.muted }}>
+                +{(isDb ? s.tags : s.services || []).length - 3}개
+              </span>
+            )}
+          </div>
+        </div>
+        );
+      })}
+
+      {/* 안내 */}
+      <div style={{
+        textAlign:"center", padding:"16px", marginTop:8,
+        fontSize:10, color: T.muted,
+        background: T.bgSubtle, borderRadius: T.r10,
+      }}>
+        업무마켓9(workmarket9.com) 등록 업체 기준 · 매칭률은 카테고리 유사도 + 리뷰 기반
+      </div>
+    </div>
+    );
+  };
 
   // ══════════════════════════════════════════════
   // 메인 렌더
@@ -747,12 +993,12 @@ export default function ChatPage() {
         width: 520, minWidth: 360, maxWidth: 520,
         height: "85vh",
         display:"flex", flexDirection:"column",
-        background: 'rgba(255,255,255,0.62)',
+        background: 'rgba(255,255,255,0.72)',
         backdropFilter: "blur(30px) saturate(1.4)",
         WebkitBackdropFilter: "blur(30px) saturate(1.4)",
         borderRadius: T.r24,
-        border: `1px solid rgba(255,255,255,0.5)`,
-        boxShadow: `${T.shadowXl}, 0 0 0 1px rgba(14,165,160,0.04)`,
+        border: `1px solid rgba(14,165,160,0.12)`,
+        boxShadow: '0 4px 24px rgba(14,165,160,0.08), 0 1px 3px rgba(0,0,0,0.06)',
         transition:"all 0.4s ease",
         flexShrink:0,
         position:"relative",
@@ -817,7 +1063,7 @@ export default function ChatPage() {
         </div>
 
         {/* ── 메시지 목록 ── */}
-        <div className="custom-scroll" style={{
+        <div ref={chatScrollRef} className="custom-scroll" style={{
           flex:1, overflowY:"auto", padding:"20px 16px",
           display:"flex", flexDirection:"column", gap:16,
           background: T.gradChat,
@@ -1034,12 +1280,12 @@ export default function ChatPage() {
         <div style={{
           width:440, maxWidth:440, height:"85vh",
           display:"flex", flexDirection:"column",
-          background: 'rgba(255,255,255,0.62)',
+          background: 'rgba(255,255,255,0.72)',
           backdropFilter: "blur(30px) saturate(1.4)",
           WebkitBackdropFilter: "blur(30px) saturate(1.4)",
           borderRadius: T.r24,
-          border: `1px solid rgba(255,255,255,0.5)`,
-          boxShadow: `${T.shadowXl}, 0 0 0 1px rgba(14,165,160,0.04)`,
+          border: `1px solid rgba(14,165,160,0.12)`,
+          boxShadow: '0 4px 24px rgba(14,165,160,0.08), 0 1px 3px rgba(0,0,0,0.06)',
           animation:"panel-slide-in 0.45s cubic-bezier(0.16, 1, 0.3, 1)",
           flexShrink:0, overflow:"hidden",
           position:"relative", zIndex:1,
@@ -1075,13 +1321,14 @@ export default function ChatPage() {
             </div>
             <span style={{
               fontSize:10, padding:"4px 10px", borderRadius:20, fontWeight:600,
-              background: phase === "complete" ? T.greenLight : T.primaryLight,
-              color: phase === "complete" ? T.greenDark : T.primary,
-              border: `1px solid ${phase === "complete" ? T.greenMid : T.primaryMid}`,
-            }}>{phase === "complete" ? "✓ 완료" : "작성 중"}</span>
+              background: sent ? "rgba(14,165,160,0.08)" : phase === "complete" ? T.greenLight : T.primaryLight,
+              color: sent ? T.primary : phase === "complete" ? T.greenDark : T.primary,
+              border: `1px solid ${sent ? T.primaryMid : phase === "complete" ? T.greenMid : T.primaryMid}`,
+            }}>{sent ? "추천 업체" : phase === "complete" ? "✓ 완료" : "작성 중"}</span>
           </div>
-          {phase === "filling" && <PanelFilling />}
-          {phase === "complete" && <PanelComplete />}
+          {phase === "filling" && PanelFilling()}
+          {phase === "complete" && !sent && PanelComplete()}
+          {phase === "complete" && sent && PanelSuppliers()}
         </div>
       )}
     </div>

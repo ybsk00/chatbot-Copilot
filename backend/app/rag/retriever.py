@@ -1,9 +1,13 @@
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from difflib import SequenceMatcher
 from rank_bm25 import BM25Okapi
 from app.rag.embedder import embed_query
 from app.db.supabase_client import get_client
-from app.config import RAG_TOP_K, BM25_WEIGHT, VECTOR_MIN_SIMILARITY
+from app.config import (
+    RAG_TOP_K, BM25_WEIGHT, VECTOR_MIN_SIMILARITY,
+    RRF_K, RRF_BOOST_FAQ, RRF_BOOST_BM25, RRF_BOOST_VECTOR, RRF_TOP_K,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -225,27 +229,113 @@ def bm25_keyword_search(query: str, category: str | None = None, top_k: int = RA
         return []
 
 
-# ── 하이브리드 검색 (FAQ 우선 → BM25 우선 → 벡터 폴백) ──
+# ── RRF 리랭킹 통합 ──
+
+def _rrf_fuse(
+    faq_chunks: list[dict],
+    bm25_chunks: list[dict],
+    vector_chunks: list[dict],
+    top_k: int = RRF_TOP_K,
+) -> list[dict]:
+    """Reciprocal Rank Fusion: 3개 소스의 결과를 RRF 점수로 통합
+    score = Σ(boost / (k + rank))  — rank는 1-based"""
+    rrf_scores: dict[int, float] = {}
+    chunk_map: dict[int, dict] = {}
+    source_map: dict[int, list[str]] = {}
+
+    sources = [
+        (faq_chunks, RRF_BOOST_FAQ, "faq"),
+        (bm25_chunks, RRF_BOOST_BM25, "bm25"),
+        (vector_chunks, RRF_BOOST_VECTOR, "vector"),
+    ]
+
+    for chunks, boost, source_name in sources:
+        for rank, chunk in enumerate(chunks, start=1):
+            cid = chunk["id"]
+            rrf_scores[cid] = rrf_scores.get(cid, 0.0) + boost / (RRF_K + rank)
+            if cid not in chunk_map:
+                chunk_map[cid] = chunk
+            # 더 높은 similarity 유지
+            if chunk.get("similarity", 0) > chunk_map[cid].get("similarity", 0):
+                chunk_map[cid]["similarity"] = chunk["similarity"]
+            source_map.setdefault(cid, []).append(source_name)
+
+    # RRF 점수 내림차순 정렬
+    sorted_ids = sorted(rrf_scores, key=lambda x: rrf_scores[x], reverse=True)
+
+    results = []
+    for cid in sorted_ids[:top_k]:
+        chunk = chunk_map[cid]
+        chunk["rrf_score"] = rrf_scores[cid]
+        chunk["rrf_sources"] = source_map[cid]
+        results.append(chunk)
+
+    return results
+
+
+# ── 하이브리드 검색 (병렬 FAQ + BM25 + Vector → RRF 통합) ──
 
 def hybrid_search(query: str, category: str | None = None, taxonomy_major: str | None = None, top_k: int = RAG_TOP_K, min_similarity: float = VECTOR_MIN_SIMILARITY) -> tuple[list[dict], list[float]]:
-    """FAQ 우선 → BM25 키워드 검색 → 벡터 폴백 (대분류 필터 지원)
-    Returns: (chunks, query_embedding) — 임베딩 재사용을 위해 함께 반환"""
+    """병렬 검색 + RRF 리랭킹
+    FAQ/BM25/Vector를 동시 실행 → RRF로 통합 점수 계산 → 상위 K개 반환
+    Returns: (chunks, query_embedding)"""
+    import time
+    t0 = time.time()
+
     # 임베딩 1회만 생성
     query_embedding = embed_query(query)
+    t_embed = time.time()
 
-    # 1. FAQ 먼저 검색 (대분류 필터 적용)
-    faq_results = faq_search(query_embedding, taxonomy_major, category, top_k, min_similarity)
-    if faq_results:
-        logger.info(f"FAQ hit: {len(faq_results)}개 (sim={faq_results[0]['similarity']:.3f})")
-        return _format_faq_as_chunks(faq_results), query_embedding
+    # 병렬 검색 실행
+    faq_chunks = []
+    bm25_chunks = []
+    vector_chunks = []
 
-    # 2. BM25 키워드 검색 우선 실행
-    bm25_results = bm25_keyword_search(query, category, top_k)
-    if bm25_results:
-        logger.info(f"BM25 hit: {len(bm25_results)}개")
-        return bm25_results, query_embedding
+    def _do_faq():
+        results = faq_search(query_embedding, taxonomy_major, category, top_k=5, min_similarity=0.55)
+        return _format_faq_as_chunks(results) if results else []
 
-    # 3. BM25 결과 없으면 벡터 유사도 검색 (0.7 이상)
-    logger.info("BM25 no results → vector fallback")
-    chunks = vector_search_with_embedding(query_embedding, category, top_k, min_similarity)
-    return chunks[:top_k], query_embedding
+    def _do_bm25():
+        return bm25_keyword_search(query, category, top_k=10)
+
+    def _do_vector():
+        return vector_search_with_embedding(query_embedding, category, top_k=10, min_similarity=min_similarity)
+
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        futures = {
+            executor.submit(_do_faq): "faq",
+            executor.submit(_do_bm25): "bm25",
+            executor.submit(_do_vector): "vector",
+        }
+        for future in as_completed(futures):
+            source = futures[future]
+            try:
+                result = future.result()
+                if source == "faq":
+                    faq_chunks = result
+                elif source == "bm25":
+                    bm25_chunks = result
+                else:
+                    vector_chunks = result
+            except Exception as e:
+                logger.warning(f"RRF {source} search failed: {e}")
+
+    t_search = time.time()
+
+    # RRF 통합
+    fused = _rrf_fuse(faq_chunks, bm25_chunks, vector_chunks, top_k=RRF_TOP_K)
+
+    t_fuse = time.time()
+    logger.info(
+        f"RRF search: faq={len(faq_chunks)} bm25={len(bm25_chunks)} vec={len(vector_chunks)} "
+        f"→ fused={len(fused)} | embed={int((t_embed-t0)*1000)}ms "
+        f"search={int((t_search-t_embed)*1000)}ms fuse={int((t_fuse-t_search)*1000)}ms "
+        f"total={int((t_fuse-t0)*1000)}ms"
+    )
+
+    # RRF 결과가 없으면 빈 배열 반환
+    if not fused:
+        logger.info("RRF: no results from any source")
+        return [], query_embedding
+
+    return fused[:top_k], query_embedding

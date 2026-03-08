@@ -5,6 +5,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from app.agents.base import AgentContext
 from app.agents.orchestrator import OrchestratorAgent
+from app.db.supabase_client import get_client
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -72,4 +73,24 @@ async def chat(req: ChatRequest):
     )
 
     orchestrator = _get_orchestrator()
-    return await orchestrator.execute_sync(ctx)
+    result = await orchestrator.execute_sync(ctx)
+
+    # RFP 완료 시 rfp_requests 테이블에 저장
+    if result.get("phase_trigger") == "complete" and req.filled_fields:
+        try:
+            supabase = get_client()
+            supabase.table("rfp_requests").insert({
+                "session_id": req.session_id,
+                "rfp_type": req.rfp_type or "service_contract",
+                "title": req.filled_fields.get("s6", ""),
+                "org_name": req.filled_fields.get("s1", ""),
+                "department": req.filled_fields.get("s2", ""),
+                "requester": req.filled_fields.get("s3", ""),
+                "fields": req.filled_fields,
+                "status": "submitted",
+            }).execute()
+            logger.info(f"[RFP] Saved rfp_request for session {req.session_id}")
+        except Exception as e:
+            logger.error(f"[RFP] Failed to save rfp_request: {e}")
+
+    return result

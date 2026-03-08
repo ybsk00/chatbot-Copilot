@@ -31,7 +31,18 @@ class RfpAgent(AgentBase):
 
         try:
             schema = RFP_SCHEMAS.get(ctx.rfp_type, RFP_SCHEMAS["service_contract"])
-            filled_keys = ", ".join(ctx.filled_fields.keys()) if ctx.filled_fields else "없음"
+            # 라벨+값 포맷으로 전달 (LLM이 어떤 필드가 채워졌는지 정확히 파악)
+            if ctx.filled_fields:
+                field_labels = {}
+                for pair in schema["fields"].split(", "):
+                    parts = pair.split(":")
+                    if len(parts) == 2:
+                        field_labels[parts[0].strip()] = parts[1].strip()
+                filled_keys = ", ".join(
+                    f"{k}({field_labels.get(k, k)})" for k in ctx.filled_fields.keys()
+                )
+            else:
+                filled_keys = "없음"
 
             history_text = ""
             for msg in (ctx.history or [])[-4:]:

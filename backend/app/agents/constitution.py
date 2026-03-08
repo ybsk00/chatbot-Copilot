@@ -52,8 +52,15 @@ class ConstitutionAgent(AgentBase):
 
     async def post_check(self, ctx: AgentContext, executor: ThreadPoolExecutor) -> AgentResult:
         """3단계: 사후검증 — 생성된 답변이 청크에 근거하는지 확인.
-        비차단: 스트리밍 완료 후 실행, done 이벤트 전에 경고 추가."""
+        비차단: 스트리밍 완료 후 실행, done 이벤트 전에 경고 추가.
+        filling/complete phase에서는 문서 기반 검증이 불필요하므로 스킵."""
         start = time.time()
+
+        # RFP 작성 단계에서는 사용자 정보 수집/확인이므로 문서 근거 검증 불필요
+        if ctx.phase in ("filling", "complete"):
+            ctx.timings["constitution_postcheck_ms"] = 0
+            return self._timed_result(start)
+
         try:
             validation = await self.run_in_thread(
                 executor,

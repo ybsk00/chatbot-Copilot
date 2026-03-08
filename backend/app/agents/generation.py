@@ -7,6 +7,21 @@ from app.rag.generator import generate_answer, generate_answer_stream
 from app.constants.rfp_schemas import RFP_SCHEMAS
 
 
+def _build_filled_keys(filled_fields: dict, rfp_type: str) -> str:
+    """filled_fields의 키(s1,s2...)를 한국어 라벨+값으로 변환."""
+    if not filled_fields:
+        return ""
+    schema = RFP_SCHEMAS.get(rfp_type, RFP_SCHEMAS["service_contract"])
+    field_labels = {}
+    for pair in schema["fields"].split(", "):
+        parts = pair.split(":")
+        if len(parts) == 2:
+            field_labels[parts[0].strip()] = parts[1].strip()
+    return ", ".join(
+        f"{field_labels.get(k, k)}: {v}" for k, v in filled_fields.items()
+    )
+
+
 class GenerationAgent(AgentBase):
     """답변 생성 에이전트.
 
@@ -22,7 +37,7 @@ class GenerationAgent(AgentBase):
         start = time.time()
         try:
             loop = asyncio.get_event_loop()
-            filled_keys = ", ".join(ctx.filled_fields.keys()) if ctx.filled_fields else ""
+            filled_keys = _build_filled_keys(ctx.filled_fields, ctx.rfp_type)
             schema = RFP_SCHEMAS.get(ctx.rfp_type, RFP_SCHEMAS["service_contract"])
             rfp_sections = schema["sections"] if ctx.phase == "filling" else ""
 
@@ -53,7 +68,7 @@ class GenerationAgent(AgentBase):
         """동기 생성 (filling phase용)."""
         start = time.time()
         try:
-            filled_keys = ", ".join(ctx.filled_fields.keys()) if ctx.filled_fields else ""
+            filled_keys = _build_filled_keys(ctx.filled_fields, ctx.rfp_type)
             schema = RFP_SCHEMAS.get(ctx.rfp_type, RFP_SCHEMAS["service_contract"])
             rfp_sections = schema["sections"] if ctx.phase == "filling" else ""
 
@@ -63,6 +78,7 @@ class GenerationAgent(AgentBase):
                     ctx.message, ctx.chunks, ctx.history,
                     ctx.phase, filled_keys, rfp_sections,
                     constitution_text=ctx.constitution_text,
+                    filling_intent=ctx.filling_intent,
                 )
             )
             ctx.answer = answer

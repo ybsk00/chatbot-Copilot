@@ -14,6 +14,7 @@ from app.agents.generation import GenerationAgent
 from app.agents.suggestion import SuggestionAgent
 from app.agents.rfp import RfpAgent
 from app.config import RFP_AGREE_KEYWORDS
+from app.constants.rfp_schemas import RFP_SCHEMAS
 
 logger = logging.getLogger(__name__)
 
@@ -183,8 +184,10 @@ class OrchestratorAgent(AgentBase):
         )
 
     async def execute_sync(self, ctx: AgentContext) -> dict:
-        """동기 실행 (filling phase용)."""
-        # 사전검사
+        """동기 실행 (filling phase용) — 의도 기반 에이전트 라우팅."""
+        total_start = time.time()
+
+        # ── GATE 1: 헌법 사전검사 ──
         await self.constitution.pre_check(ctx, self._critical_pool)
         if ctx.violation:
             return {
@@ -192,28 +195,73 @@ class OrchestratorAgent(AgentBase):
                 "phase_trigger": None, "rfp_fields": {}, "classification": None,
             }
 
-        # 병렬: Classification + RFP 추출 + Retrieval
-        await asyncio.gather(
-            self.classification.execute(ctx, self._critical_pool),
-            self.rfp.extract_fields(ctx, self._critical_pool),
-            self.retrieval.execute(ctx, self._critical_pool),
-        )
+        # ── PHASE 1: 의도 감지 (선행, ~0-300ms) ──
+        await self.classification.detect_filling_intent(ctx, self._critical_pool)
 
-        # 헌법 규칙주입
-        await self.constitution.inject_rules(ctx, self._critical_pool)
+        # ── PHASE 2: 의도별 에이전트 라우팅 ──
+        if ctx.filling_intent == "field_input":
+            # 필드 입력 → RFP만 크리티컬, Retrieval 스킵
+            await asyncio.gather(
+                self.rfp.extract_fields(ctx, self._critical_pool),
+                self.classification.execute(ctx, self._background_pool),
+            )
+        elif ctx.filling_intent == "question":
+            # 일반 질문 → Retrieval + RFP 병렬 (질문에 필드 포함 가능)
+            await asyncio.gather(
+                self.retrieval.execute(ctx, self._critical_pool),
+                self.rfp.extract_fields(ctx, self._critical_pool),
+                self.classification.execute(ctx, self._background_pool),
+            )
+        elif ctx.filling_intent == "rfp_question":
+            # RFP 개념 질문 → Retrieval 크리티컬, RFP 백그라운드
+            await asyncio.gather(
+                self.retrieval.execute(ctx, self._critical_pool),
+                self.rfp.extract_fields(ctx, self._background_pool),
+                self.classification.execute(ctx, self._background_pool),
+            )
+        else:
+            # 폴백 → 전부 실행
+            await asyncio.gather(
+                self.classification.execute(ctx, self._critical_pool),
+                self.rfp.extract_fields(ctx, self._critical_pool),
+                self.retrieval.execute(ctx, self._critical_pool),
+            )
 
-        # 답변 생성
+        # ── PHASE 3: 헌법 규칙주입 (Retrieval 실행 시만) ──
+        if ctx.query_embedding:
+            await self.constitution.inject_rules(ctx, self._critical_pool)
+
+        # ── PHASE 4: 답변 생성 ──
         await self.generation.execute(ctx, self._critical_pool)
 
-        # 사후검증
+        # ── PHASE 5: 사후검증 ──
         await self.constitution.post_check(ctx, self._background_pool)
         if ctx.post_check_violation:
             ctx.answer += f"\n\n[안내] {ctx.post_check_violation}"
 
-        # 완성 여부
+        # ── 완성 여부 (프로그래밍적 판단 — LLM 의존 제거) ──
         trigger = None
-        if ctx.rfp_fields.get("is_complete") and ctx.phase == "filling":
-            trigger = "complete"
+        if ctx.phase == "filling":
+            schema = RFP_SCHEMAS.get(ctx.rfp_type, RFP_SCHEMAS["service_contract"])
+            required_keys = set(k.strip() for k in schema["required"].split(","))
+            # 기존 입력 필드 + 새로 추출된 필드 합산
+            all_filled = set(k for k, v in ctx.filled_fields.items() if v)
+            new_fields = ctx.rfp_fields.get("rfp_fields", {})
+            all_filled.update(k for k, v in new_fields.items() if v)
+            if required_keys.issubset(all_filled):
+                trigger = "complete"
+                logger.info(f"[Orchestrator] RFP complete! required={required_keys}, filled={all_filled}")
+
+        # ── 타이밍 로그 ──
+        total_ms = (time.time() - total_start) * 1000
+        logger.info(
+            f"[Orchestrator:filling] Intent: {ctx.filling_intent} | "
+            f"IntentDetect: {ctx.timings.get('filling_intent_ms', 0):.0f}ms | "
+            f"RFP: {ctx.timings.get('rfp_extract_ms', 0):.0f}ms | "
+            f"Retrieval: {ctx.timings.get('retrieval_ms', 0):.0f}ms | "
+            f"Generation: {ctx.timings.get('generation_ms', 0):.0f}ms | "
+            f"Total: {total_ms:.0f}ms"
+        )
 
         return {
             "answer": ctx.answer,

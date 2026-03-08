@@ -127,6 +127,85 @@ async def list_users():
     return {"users": result.data}
 
 
+# ── RFP 신청 관리 ──
+class RfpStatusUpdate(BaseModel):
+    status: str
+
+
+@router.get("/rfp-requests")
+async def list_rfp_requests(status: str | None = None, limit: int = 50):
+    supabase = get_client()
+    query = supabase.table("rfp_requests").select("*")
+    if status:
+        query = query.eq("status", status)
+    result = query.order("created_at", desc=True).limit(limit).execute()
+    return {"rfp_requests": result.data}
+
+
+@router.put("/rfp-requests/{request_id}")
+async def update_rfp_status(request_id: int, body: RfpStatusUpdate):
+    supabase = get_client()
+    result = (
+        supabase.table("rfp_requests")
+        .update({"status": body.status})
+        .eq("id", request_id)
+        .execute()
+    )
+    return {"status": "updated", "data": result.data}
+
+
+@router.delete("/rfp-requests/{request_id}")
+async def delete_rfp_request(request_id: int):
+    supabase = get_client()
+    supabase.table("rfp_requests").delete().eq("id", request_id).execute()
+    return {"status": "deleted"}
+
+
+# ── RFP 양식 관리 ──
+class RfpTemplateCreate(BaseModel):
+    type_key: str
+    name: str
+    description: str = ""
+    fields: dict = {}
+    sections: list = []
+    is_active: bool = True
+
+
+@router.get("/rfp-templates")
+async def list_rfp_templates():
+    supabase = get_client()
+    result = supabase.table("rfp_templates").select("*").order("id").execute()
+    return {"templates": result.data}
+
+
+@router.post("/rfp-templates")
+async def create_rfp_template(tmpl: RfpTemplateCreate):
+    supabase = get_client()
+    result = supabase.table("rfp_templates").insert(tmpl.model_dump()).execute()
+    return {"status": "created", "data": result.data}
+
+
+@router.put("/rfp-templates/{template_id}")
+async def update_rfp_template(template_id: int, tmpl: RfpTemplateCreate):
+    supabase = get_client()
+    data = tmpl.model_dump()
+    data["updated_at"] = "now()"
+    result = (
+        supabase.table("rfp_templates")
+        .update(data)
+        .eq("id", template_id)
+        .execute()
+    )
+    return {"status": "updated", "data": result.data}
+
+
+@router.delete("/rfp-templates/{template_id}")
+async def delete_rfp_template(template_id: int):
+    supabase = get_client()
+    supabase.table("rfp_templates").delete().eq("id", template_id).execute()
+    return {"status": "deleted"}
+
+
 # ── 대시보드 ──
 @router.get("/dashboard")
 async def dashboard():

@@ -40,9 +40,9 @@ class RetrievalAgent(AgentBase):
                 )
                 ctx.chunks, ctx.query_embedding = result
 
-            # RAG 점수 계산
+            # RAG 점수 계산 (RRF 결과는 이미 정렬됨 → max similarity 사용)
             if ctx.chunks:
-                ctx.rag_score = sum(c.get("similarity", 0) for c in ctx.chunks) / len(ctx.chunks)
+                ctx.rag_score = max(c.get("similarity", 0) for c in ctx.chunks)
                 ctx.sources = list({c["doc_name"] for c in ctx.chunks})
             else:
                 ctx.rag_score = 0.0

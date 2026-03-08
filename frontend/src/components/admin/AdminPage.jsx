@@ -6,12 +6,18 @@ import ConvHistory from './ConvHistory'
 import Suppliers from './Suppliers'
 import Taxonomy from './Taxonomy'
 import UserManagement from './UserManagement'
+import RfpRequests from './RfpRequests'
+import SupplierRecommend from './SupplierRecommend'
+import RfpTemplates from './RfpTemplates'
 
 const TABS = [
   { key: 'dashboard', label: '대시보드' },
   { key: 'knowledge', label: '지식베이스' },
   { key: 'constitution', label: '헌법 관리' },
   { key: 'conversations', label: '대화 이력' },
+  { key: 'rfp-requests', label: 'RFP 신청' },
+  { key: 'rfp-templates', label: 'RFP 양식' },
+  { key: 'supplier-recommend', label: '공급업체 추천' },
   { key: 'suppliers', label: '공급업체' },
   { key: 'taxonomy', label: '분류체계' },
   { key: 'users', label: '사용자 관리' },
@@ -26,6 +32,9 @@ function AdminPage() {
       case 'knowledge': return <KnowledgeBase />
       case 'constitution': return <Constitution />
       case 'conversations': return <ConvHistory />
+      case 'rfp-requests': return <RfpRequests />
+      case 'rfp-templates': return <RfpTemplates />
+      case 'supplier-recommend': return <SupplierRecommend />
       case 'suppliers': return <Suppliers />
       case 'taxonomy': return <Taxonomy />
       case 'users': return <UserManagement />

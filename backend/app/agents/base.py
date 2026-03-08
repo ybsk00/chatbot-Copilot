@@ -34,6 +34,7 @@ class AgentContext:
     rfp_type: str = "service_contract"
 
     # ── 중간값 (에이전트가 설정) ──
+    filling_intent: str | None = None  # "field_input" | "question" | "rfp_question"
     query_embedding: list[float] | None = None
     taxonomy_major: str | None = None
     taxonomy_middle: str | None = None

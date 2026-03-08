@@ -75,8 +75,9 @@ export const api = {
     return res.json();
   },
 
-  async getSuppliers() {
-    const res = await fetch(`${API_URL}/suppliers`);
+  async getSuppliers(category) {
+    const params = category ? `?category=${encodeURIComponent(category)}` : "";
+    const res = await fetch(`${API_URL}/suppliers${params}`);
     return res.json();
   },
 
@@ -120,6 +121,65 @@ export const api = {
 
   async getDashboard() {
     const res = await fetch(`${API_URL}/admin/dashboard`);
+    return res.json();
+  },
+
+  // ── RFP 신청 관리 ──
+  async getRfpRequests(status) {
+    const params = status ? `?status=${status}` : "";
+    const res = await fetch(`${API_URL}/admin/rfp-requests${params}`);
+    return res.json();
+  },
+  async updateRfpStatus(id, status) {
+    const res = await fetch(`${API_URL}/admin/rfp-requests/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify({ status }),
+    });
+    return res.json();
+  },
+  async deleteRfpRequest(id) {
+    const res = await fetch(`${API_URL}/admin/rfp-requests/${id}`, { method: "DELETE" });
+    return res.json();
+  },
+
+  // ── RFP 양식 관리 ──
+  async getRfpTemplates() {
+    const res = await fetch(`${API_URL}/admin/rfp-templates`);
+    return res.json();
+  },
+  async createRfpTemplate(data) {
+    const res = await fetch(`${API_URL}/admin/rfp-templates`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  },
+  async updateRfpTemplate(id, data) {
+    const res = await fetch(`${API_URL}/admin/rfp-templates/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  },
+  async deleteRfpTemplate(id) {
+    const res = await fetch(`${API_URL}/admin/rfp-templates/${id}`, { method: "DELETE" });
+    return res.json();
+  },
+
+  // ── 공급업체 CRUD (기존 확장) ──
+  async updateSupplier(id, data) {
+    const res = await fetch(`${API_URL}/suppliers/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  },
+  async deleteSupplier(id) {
+    const res = await fetch(`${API_URL}/suppliers/${id}`, { method: "DELETE" });
     return res.json();
   },
 };

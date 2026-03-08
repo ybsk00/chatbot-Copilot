@@ -20,8 +20,15 @@ SUPABASE_KEY    = os.getenv("SUPABASE_SERVICE_KEY")
 RAG_TOP_K       = 3
 BM25_WEIGHT     = 0.3
 MAX_CHUNK_TOKENS = 400
-VECTOR_MIN_SIMILARITY = 0.70   # 벡터 폴백 최소 유사도
+VECTOR_MIN_SIMILARITY = 0.75   # 벡터 최소 유사도 (0.70→0.75 상향)
 CONFIDENCE_THRESHOLD  = 0.65   # 신뢰도 거부 임계값 (이하 시 답변 생성 안 함)
+
+# RRF 리랭킹 설정
+RRF_K            = 60          # RRF 스무딩 상수
+RRF_BOOST_FAQ    = 1.5         # FAQ 소스 부스트 (최우선)
+RRF_BOOST_BM25   = 1.2         # BM25 소스 부스트
+RRF_BOOST_VECTOR = 1.0         # Vector 소스 부스트 (기본)
+RRF_TOP_K        = 5           # 최종 리랭킹 결과 수
 
 # 헌법 벡터 검색 파라미터
 CONSTITUTION_TOP_K = 3         # 질문당 검색할 헌법 규칙 수

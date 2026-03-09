@@ -1,12 +1,20 @@
 import logging
+import os
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# 시작 시 환경변수 확인 로그
+logger.info("=== IP Assist Backend Starting ===")
+logger.info(f"GOOGLE_API_KEY: {'set' if os.getenv('GOOGLE_API_KEY') else 'MISSING'}")
+logger.info(f"SUPABASE_URL: {'set' if os.getenv('SUPABASE_URL') else 'MISSING'}")
+logger.info(f"SUPABASE_SERVICE_KEY: {'set' if os.getenv('SUPABASE_SERVICE_KEY') else 'MISSING'}")
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from app.routers import chat, rfp, knowledge, suppliers, admin
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="IP Assist API",

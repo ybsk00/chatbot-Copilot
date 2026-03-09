@@ -208,7 +208,7 @@ export default function ChatPage() {
   const [phase, setPhase]               = useState("chat");
   const [rfpType, setRfpType]           = useState(null);
   const [messages, setMessages]         = useState([
-    { id: msgIdCounter++, role: "assistant", text: "안녕하세요! 간접구매 AI 코파일럿입니다.\n\n구매하려는 품목이나 서비스를 말씀해 주세요.\n견적 요청부터 공급업체 추천, 계약서 작성까지 함께 도와드립니다." }
+    { id: msgIdCounter++, role: "assistant", text: "안녕하세요! 간접구매 상담도우미입니다.\n\n구매하려는 품목이나 서비스를 말씀해 주세요.\n견적 요청부터 공급업체 추천, 계약서 작성까지 함께 도와드립니다." }
   ]);
   const [fields, setFields]             = useState({});
   const [justFilled, setJustFilled]     = useState(new Set());
@@ -881,7 +881,7 @@ export default function ChatPage() {
                 background: "rgba(14,165,160,0.08)",
                 color: T.primary,
                 border: "1px solid rgba(14,165,160,0.15)",
-              }}>IP Assist</span>
+              }}>업무마켓9</span>
               <span style={{
                 fontSize:11, fontWeight:700, padding:"4px 10px", borderRadius:20,
                 background: statusLabel === "추천" ? "rgba(16,185,129,0.1)" : "rgba(251,191,36,0.1)",
@@ -993,7 +993,7 @@ export default function ChatPage() {
           </div>
           <div style={{ flex:1 }}>
             <div style={{ fontSize:15, fontWeight:800, letterSpacing:"-0.3px", color: T.text }}>
-              IP Assist
+              업무마켓9 도우미
             </div>
             <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:3 }}>
               <StatusDot />
@@ -1010,7 +1010,7 @@ export default function ChatPage() {
             }}>RAG</span>
             <button
               onClick={() => {
-                setMessages([{ id: msgIdCounter++, role: "assistant", text: "안녕하세요! 간접구매 AI 코파일럿입니다.\n\n구매하려는 품목이나 서비스를 말씀해 주세요.\n견적 요청부터 공급업체 추천, 계약서 작성까지 함께 도와드립니다." }]);
+                setMessages([{ id: msgIdCounter++, role: "assistant", text: "안녕하세요! 간접구매 상담도우미입니다.\n\n구매하려는 품목이나 서비스를 말씀해 주세요.\n견적 요청부터 공급업체 추천, 계약서 작성까지 함께 도와드립니다." }]);
                 setPhase("chat"); setRfpType(null); setFields({}); setRightVisible(false); setDownloaded(false); setRecommendedRfp(null);
               }}
               style={{
@@ -1059,7 +1059,7 @@ export default function ChatPage() {
                 {/* 봇 이름 + 시간 */}
                 {msg.role === "assistant" && (
                   <div style={{ display:"flex", alignItems:"center", gap:6, paddingLeft:2 }}>
-                    <span style={{ fontSize:11, fontWeight:600, color: T.sub }}>IP Assist</span>
+                    <span style={{ fontSize:11, fontWeight:600, color: T.sub }}>업무마켓9</span>
                     <span style={{ fontSize:10, color: T.muted }}>
                       {new Date().toLocaleTimeString("ko-KR", { hour:"2-digit", minute:"2-digit" })}
                     </span>
@@ -1292,6 +1292,20 @@ export default function ChatPage() {
               color: sent ? T.primary : phase === "complete" ? T.greenDark : T.primary,
               border: `1px solid ${sent ? T.primaryMid : phase === "complete" ? T.greenMid : T.primaryMid}`,
             }}>{sent ? "추천 업체" : phase === "complete" ? "✓ 완료" : "작성 중"}</span>
+            <button
+              onClick={() => setRightVisible(false)}
+              style={{
+                width:28, height:28, borderRadius:8, border:"none",
+                background:"rgba(100,116,139,0.08)", cursor:"pointer",
+                display:"flex", alignItems:"center", justifyContent:"center",
+                color: T.muted, fontSize:16, lineHeight:1,
+                marginLeft:4, flexShrink:0,
+                transition:"all 0.15s",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(239,68,68,0.1)"; e.currentTarget.style.color = "#ef4444"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "rgba(100,116,139,0.08)"; e.currentTarget.style.color = T.muted; }}
+              title="패널 닫기"
+            >✕</button>
           </div>
           {phase === "filling" && PanelFilling()}
           {phase === "complete" && !sent && PanelComplete()}

@@ -5,6 +5,7 @@ function Taxonomy() {
   const [taxonomy, setTaxonomy] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('')
+  const [searchFocused, setSearchFocused] = useState(false)
 
   useEffect(() => {
     loadTaxonomy()
@@ -37,60 +38,231 @@ function Taxonomy() {
   })
 
   if (loading) {
-    return <div className="flex items-center justify-center h-64 text-gray-400">로딩 중...</div>
+    return (
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: 256,
+          color: '#94A3B8',
+          fontSize: 15,
+        }}
+      >
+        로딩 중...
+      </div>
+    )
   }
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-800 mb-6">분류체계</h1>
+      {/* Page Header */}
+      <div style={{ marginBottom: 28 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 700, color: '#1E293B', margin: 0 }}>
+          분류체계
+        </h1>
+        <p style={{ fontSize: 14, color: '#64748B', marginTop: 6, marginBottom: 0 }}>
+          간접구매 분류체계를 조회합니다.
+        </p>
+      </div>
 
-      {/* 검색 */}
-      <div className="mb-6">
+      {/* Search */}
+      <div style={{ marginBottom: 24, position: 'relative', maxWidth: 400 }}>
+        <svg
+          style={{
+            position: 'absolute',
+            left: 13,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            width: 16,
+            height: 16,
+            color: '#94A3B8',
+            pointerEvents: 'none',
+          }}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+          />
+        </svg>
         <input
           type="text"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          className="w-full max-w-md px-4 py-2 border border-gray-300 rounded-lg text-sm"
+          onFocus={() => setSearchFocused(true)}
+          onBlur={() => setSearchFocused(false)}
           placeholder="분류 검색..."
+          style={{
+            width: '100%',
+            padding: '10px 14px 10px 40px',
+            borderRadius: 12,
+            border: searchFocused ? '1px solid #0D9488' : '1px solid #E2E8F0',
+            background: '#F8FAFC',
+            fontSize: 14,
+            color: '#1E293B',
+            outline: 'none',
+            boxSizing: 'border-box',
+            transition: 'border-color 0.2s',
+          }}
         />
       </div>
 
-      {/* 통계 */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <p className="text-sm text-gray-500">대분류</p>
-          <p className="text-2xl font-bold text-blue-600">{Object.keys(grouped).length}</p>
+      {/* Stats Cards */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: 16,
+          marginBottom: 24,
+        }}
+      >
+        <div
+          style={{
+            background: '#fff',
+            borderRadius: 18,
+            border: '1px solid #F0F2F5',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.02)',
+            padding: '20px 24px',
+          }}
+        >
+          <p style={{ fontSize: 13, color: '#64748B', margin: 0, marginBottom: 6 }}>
+            대분류
+          </p>
+          <p style={{ fontSize: 26, fontWeight: 700, color: '#0D9488', margin: 0 }}>
+            {Object.keys(grouped).length}
+          </p>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <p className="text-sm text-gray-500">전체 항목</p>
-          <p className="text-2xl font-bold text-green-600">{filtered.length}</p>
+        <div
+          style={{
+            background: '#fff',
+            borderRadius: 18,
+            border: '1px solid #F0F2F5',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.02)',
+            padding: '20px 24px',
+          }}
+        >
+          <p style={{ fontSize: 13, color: '#64748B', margin: 0, marginBottom: 6 }}>
+            전체 항목
+          </p>
+          <p style={{ fontSize: 26, fontWeight: 700, color: '#059669', margin: 0 }}>
+            {filtered.length}
+          </p>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <p className="text-sm text-gray-500">원본 전체</p>
-          <p className="text-2xl font-bold text-gray-600">{taxonomy.length}</p>
+        <div
+          style={{
+            background: '#fff',
+            borderRadius: 18,
+            border: '1px solid #F0F2F5',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.02)',
+            padding: '20px 24px',
+          }}
+        >
+          <p style={{ fontSize: 13, color: '#64748B', margin: 0, marginBottom: 6 }}>
+            원본 전체
+          </p>
+          <p style={{ fontSize: 26, fontWeight: 700, color: '#64748B', margin: 0 }}>
+            {taxonomy.length}
+          </p>
         </div>
       </div>
 
-      {/* 분류 트리 */}
-      <div className="space-y-4">
+      {/* Taxonomy Tree */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {Object.entries(grouped).map(([major, items]) => (
-          <div key={major} className="bg-white rounded-xl border border-gray-200">
-            <div className="px-6 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-gray-700">{major}</h3>
-              <span className="text-xs text-gray-400">{items.length}개 항목</span>
+          <div
+            key={major}
+            style={{
+              background: '#fff',
+              borderRadius: 18,
+              border: '1px solid #F0F2F5',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.02)',
+              overflow: 'hidden',
+            }}
+          >
+            {/* Group Header */}
+            <div
+              style={{
+                background: '#FAFBFC',
+                padding: '14px 24px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                borderBottom: '1px solid #F0F2F5',
+              }}
+            >
+              <h3
+                style={{
+                  fontSize: 14,
+                  fontWeight: 650,
+                  color: '#1E293B',
+                  margin: 0,
+                }}
+              >
+                {major}
+              </h3>
+              <span style={{ fontSize: 12, color: '#94A3B8', fontWeight: 500 }}>
+                {items.length}개 항목
+              </span>
             </div>
-            <div className="divide-y divide-gray-50">
-              {items.map((item) => (
-                <div key={item.id} className="px-6 py-2 flex items-center gap-4 text-sm">
-                  <span className="text-gray-600 w-40">{item.middle || '-'}</span>
-                  <span className="text-gray-500 w-40">{item.minor || '-'}</span>
+
+            {/* Tree Items */}
+            <div>
+              {items.map((item, idx) => (
+                <div
+                  key={item.id}
+                  style={{
+                    padding: '12px 24px 12px 40px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 16,
+                    borderBottom:
+                      idx < items.length - 1 ? '1px solid #F8FAFC' : 'none',
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 13,
+                      color: '#1E293B',
+                      width: 160,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {item.middle || '-'}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 13,
+                      color: '#64748B',
+                      width: 160,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {item.minor || '-'}
+                  </span>
                   {item.stage && (
-                    <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded">
+                    <span
+                      style={{
+                        background: '#F0FDFA',
+                        color: '#0D9488',
+                        borderRadius: 6,
+                        fontSize: 11,
+                        fontWeight: 600,
+                        padding: '3px 10px',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
                       {item.stage}
                     </span>
                   )}
                   {item.stage_desc && (
-                    <span className="text-xs text-gray-400">{item.stage_desc}</span>
+                    <span style={{ fontSize: 12, color: '#94A3B8' }}>
+                      {item.stage_desc}
+                    </span>
                   )}
                 </div>
               ))}
@@ -99,8 +271,20 @@ function Taxonomy() {
         ))}
       </div>
 
+      {/* Empty State */}
       {taxonomy.length === 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400">
+        <div
+          style={{
+            background: '#fff',
+            borderRadius: 18,
+            border: '1px solid #F0F2F5',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.02)',
+            padding: 40,
+            textAlign: 'center',
+            color: '#94A3B8',
+            fontSize: 14,
+          }}
+        >
           분류체계 데이터가 없습니다.
         </div>
       )}

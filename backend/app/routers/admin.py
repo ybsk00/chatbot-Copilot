@@ -1,4 +1,6 @@
+import hashlib
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from fastapi import APIRouter
 from pydantic import BaseModel
 from app.db.supabase_client import get_client
@@ -7,6 +9,47 @@ from app.rag.embedder import embed_document
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+# ── 로그인 ──
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+def _hash_pw(pw: str) -> str:
+    return hashlib.sha256(pw.encode()).hexdigest()
+
+
+@router.post("/login")
+async def login(req: LoginRequest):
+    supabase = get_client()
+    result = (
+        supabase.table("admin_users")
+        .select("*")
+        .eq("email", req.email)
+        .eq("is_active", True)
+        .execute()
+    )
+    if not result.data:
+        return {"ok": False, "error": "계정을 찾을 수 없습니다."}
+    user = result.data[0]
+    if user.get("password_hash") != _hash_pw(req.password):
+        return {"ok": False, "error": "비밀번호가 일치하지 않습니다."}
+    # last_login 갱신
+    supabase.table("admin_users").update(
+        {"last_login": "now()"}
+    ).eq("id", user["id"]).execute()
+    return {
+        "ok": True,
+        "user": {
+            "id": user["id"],
+            "name": user["name"],
+            "email": user["email"],
+            "role": user["role"],
+            "department": user.get("department"),
+        },
+    }
 
 
 # ── 헌법 관리 ──
@@ -28,7 +71,9 @@ def _embed_rule(content: str) -> list[float] | None:
 @router.get("/constitution")
 async def list_constitution():
     supabase = get_client()
-    result = supabase.table("constitution_rules").select("*").order("id").execute()
+    result = supabase.table("constitution_rules").select(
+        "id, rule_type, content, is_active, created_at"
+    ).order("id").execute()
     return {"rules": result.data}
 
 
@@ -92,7 +137,9 @@ async def embed_all_constitution():
 @router.get("/conversations")
 async def list_conversations(status: str | None = None, limit: int = 50):
     supabase = get_client()
-    query = supabase.table("conversations").select("*")
+    query = supabase.table("conversations").select(
+        "id, session_id, user_name, department, category, rag_score, status, created_at, updated_at"
+    )
     if status:
         query = query.eq("status", status)
     result = query.order("updated_at", desc=True).limit(limit).execute()
@@ -120,11 +167,88 @@ async def list_taxonomy():
 
 
 # ── 사용자 관리 ──
+class UserCreate(BaseModel):
+    name: str
+    email: str
+    password: str
+    role: str = "viewer"
+    department: str = ""
+
+
+class UserUpdate(BaseModel):
+    name: str | None = None
+    email: str | None = None
+    password: str | None = None
+    role: str | None = None
+    department: str | None = None
+    is_active: bool | None = None
+
+
 @router.get("/users")
 async def list_users():
     supabase = get_client()
-    result = supabase.table("admin_users").select("*").order("id").execute()
+    result = supabase.table("admin_users").select(
+        "id, name, email, role, department, is_active, last_login, created_at"
+    ).order("id").execute()
     return {"users": result.data}
+
+
+@router.post("/users")
+async def create_user(user: UserCreate):
+    supabase = get_client()
+    # 이메일 중복 확인
+    existing = (
+        supabase.table("admin_users")
+        .select("id")
+        .eq("email", user.email)
+        .execute()
+    )
+    if existing.data:
+        return {"status": "error", "error": "이미 등록된 이메일입니다."}
+    data = {
+        "name": user.name,
+        "email": user.email,
+        "password_hash": _hash_pw(user.password),
+        "role": user.role,
+        "department": user.department,
+        "is_active": True,
+    }
+    result = supabase.table("admin_users").insert(data).execute()
+    return {"status": "created", "data": result.data}
+
+
+@router.put("/users/{user_id}")
+async def update_user(user_id: int, user: UserUpdate):
+    supabase = get_client()
+    data = {}
+    if user.name is not None:
+        data["name"] = user.name
+    if user.email is not None:
+        data["email"] = user.email
+    if user.password is not None:
+        data["password_hash"] = _hash_pw(user.password)
+    if user.role is not None:
+        data["role"] = user.role
+    if user.department is not None:
+        data["department"] = user.department
+    if user.is_active is not None:
+        data["is_active"] = user.is_active
+    if not data:
+        return {"status": "no_change"}
+    result = (
+        supabase.table("admin_users")
+        .update(data)
+        .eq("id", user_id)
+        .execute()
+    )
+    return {"status": "updated", "data": result.data}
+
+
+@router.delete("/users/{user_id}")
+async def delete_user(user_id: int):
+    supabase = get_client()
+    supabase.table("admin_users").delete().eq("id", user_id).execute()
+    return {"status": "deleted"}
 
 
 # ── RFP 신청 관리 ──
@@ -135,7 +259,9 @@ class RfpStatusUpdate(BaseModel):
 @router.get("/rfp-requests")
 async def list_rfp_requests(status: str | None = None, limit: int = 50):
     supabase = get_client()
-    query = supabase.table("rfp_requests").select("*")
+    query = supabase.table("rfp_requests").select(
+        "id, session_id, user_name, department, category, template_type, status, created_at, updated_at"
+    )
     if status:
         query = query.eq("status", status)
     result = query.order("created_at", desc=True).limit(limit).execute()
@@ -211,14 +337,18 @@ async def delete_rfp_template(template_id: int):
 async def dashboard():
     supabase = get_client()
 
-    chunks = supabase.table("knowledge_chunks").select("id", count="exact").execute()
-    convs = supabase.table("conversations").select("id", count="exact").execute()
-    suppliers = supabase.table("suppliers").select("id", count="exact").execute()
-    rules = supabase.table("constitution_rules").select("id", count="exact").execute()
+    def count_table(table_name):
+        return supabase.table(table_name).select("id", count="exact", head=True).execute()
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        f_chunks = pool.submit(count_table, "knowledge_chunks")
+        f_convs = pool.submit(count_table, "conversations")
+        f_suppliers = pool.submit(count_table, "suppliers")
+        f_rules = pool.submit(count_table, "constitution_rules")
 
     return {
-        "knowledge_chunks": chunks.count or 0,
-        "conversations": convs.count or 0,
-        "suppliers": suppliers.count or 0,
-        "constitution_rules": rules.count or 0,
+        "knowledge_chunks": f_chunks.result().count or 0,
+        "conversations": f_convs.result().count or 0,
+        "suppliers": f_suppliers.result().count or 0,
+        "constitution_rules": f_rules.result().count or 0,
     }

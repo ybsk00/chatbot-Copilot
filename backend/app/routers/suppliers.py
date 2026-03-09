@@ -1,4 +1,6 @@
-from fastapi import APIRouter
+import csv
+import io
+from fastapi import APIRouter, UploadFile, File
 from pydantic import BaseModel
 from app.db.supabase_client import get_client
 
@@ -54,3 +56,43 @@ async def delete_supplier(supplier_id: int):
     supabase = get_client()
     supabase.table("suppliers").delete().eq("id", supplier_id).execute()
     return {"status": "deleted"}
+
+
+@router.post("/upload-csv")
+async def upload_csv(file: UploadFile = File(...)):
+    """CSV 업로드로 공급업체 일괄 등록
+    CSV 헤더: 업체명,카테고리,평점,매칭률,태그,상태
+    """
+    content = await file.read()
+    text = content.decode("utf-8-sig")
+    reader = csv.DictReader(io.StringIO(text))
+
+    supabase = get_client()
+    created = 0
+    errors = []
+
+    for i, row in enumerate(reader, start=2):
+        try:
+            name = row.get("업체명", "").strip()
+            category = row.get("카테고리", "").strip()
+            if not name or not category:
+                errors.append(f"{i}행: 업체명/카테고리 누락")
+                continue
+
+            tags_str = row.get("태그", "")
+            tags = [t.strip() for t in tags_str.split(",") if t.strip()] if tags_str else []
+
+            data = {
+                "name": name,
+                "category": category,
+                "score": int(row.get("평점", 0) or 0),
+                "match_rate": int(row.get("매칭률", 0) or 0),
+                "tags": tags,
+                "status": row.get("상태", "active").strip() or "active",
+            }
+            supabase.table("suppliers").insert(data).execute()
+            created += 1
+        except Exception as e:
+            errors.append(f"{i}행: {str(e)}")
+
+    return {"status": "completed", "created": created, "errors": errors}

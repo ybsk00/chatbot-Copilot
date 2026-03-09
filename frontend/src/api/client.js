@@ -67,6 +67,11 @@ export const api = {
     return res.json();
   },
 
+  async getKnowledgeOverview() {
+    const res = await fetch(`${API_URL}/knowledge/overview`);
+    return res.json();
+  },
+
   async uploadKnowledge(formData) {
     const res = await fetch(`${API_URL}/knowledge/upload`, {
       method: "POST",
@@ -100,6 +105,29 @@ export const api = {
       method: "POST",
       headers: { "Content-Type": "application/json; charset=utf-8" },
       body: JSON.stringify({ rule_type: ruleType, content }),
+    });
+    return res.json();
+  },
+
+  async updateConstitution(id, ruleType, content, isActive = true) {
+    const res = await fetch(`${API_URL}/admin/constitution/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify({ rule_type: ruleType, content, is_active: isActive }),
+    });
+    return res.json();
+  },
+
+  async deleteConstitution(id) {
+    const res = await fetch(`${API_URL}/admin/constitution/${id}`, { method: "DELETE" });
+    return res.json();
+  },
+
+  async login(email, password) {
+    const res = await fetch(`${API_URL}/admin/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify({ email, password }),
     });
     return res.json();
   },
@@ -180,6 +208,36 @@ export const api = {
   },
   async deleteSupplier(id) {
     const res = await fetch(`${API_URL}/suppliers/${id}`, { method: "DELETE" });
+    return res.json();
+  },
+
+  async uploadSuppliersCsv(formData) {
+    const res = await fetch(`${API_URL}/suppliers/upload-csv`, {
+      method: "POST",
+      body: formData,
+    });
+    return res.json();
+  },
+
+  // ── 사용자 관리 CRUD ──
+  async createUser(data) {
+    const res = await fetch(`${API_URL}/admin/users`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  },
+  async updateUser(id, data) {
+    const res = await fetch(`${API_URL}/admin/users/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  },
+  async deleteUser(id) {
+    const res = await fetch(`${API_URL}/admin/users/${id}`, { method: "DELETE" });
     return res.json();
   },
 };

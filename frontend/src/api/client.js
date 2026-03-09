@@ -86,6 +86,13 @@ export const api = {
     return res.json();
   },
 
+  async searchSuppliers(category, keywords) {
+    const params = new URLSearchParams({ category });
+    if (keywords) params.set("keywords", keywords);
+    const res = await fetch(`${API_URL}/suppliers/search?${params}`);
+    return res.json();
+  },
+
   async createSupplier(data) {
     const res = await fetch(`${API_URL}/suppliers`, {
       method: "POST",

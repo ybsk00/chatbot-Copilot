@@ -17,15 +17,54 @@ class SupplierCreate(BaseModel):
 
 
 @router.get("")
-async def list_suppliers(category: str | None = None, status: str = "active"):
+async def list_suppliers(category: str | None = None, sub_category: str | None = None, status: str = "active"):
     supabase = get_client()
     query = supabase.table("suppliers").select("*")
     if category:
         query = query.eq("category", category)
+    if sub_category:
+        query = query.eq("sub_category", sub_category)
     if status:
         query = query.eq("status", status)
     result = query.order("score", desc=True).execute()
     return {"suppliers": result.data}
+
+
+@router.get("/search")
+async def search_suppliers(category: str, keywords: str = ""):
+    """키워드 기반 공급업체 검색 — tags/sub_category 매칭"""
+    supabase = get_client()
+    result = (
+        supabase.table("suppliers")
+        .select("*")
+        .eq("category", category)
+        .eq("status", "active")
+        .order("score", desc=True)
+        .execute()
+    )
+    suppliers = result.data or []
+
+    if not keywords.strip():
+        return {"suppliers": suppliers}
+
+    kws = [k.strip() for k in keywords.split(",") if k.strip()]
+
+    def relevance(s):
+        score = 0
+        sub = (s.get("sub_category") or "").lower()
+        tags_str = " ".join(s.get("tags") or []).lower()
+        for kw in kws:
+            kw_lower = kw.lower()
+            if kw_lower in sub:
+                score += 3
+            if kw_lower in tags_str:
+                score += 2
+            if kw_lower in s.get("name", "").lower():
+                score += 1
+        return score
+
+    ranked = sorted(suppliers, key=lambda s: (-relevance(s), -s.get("score", 0)))
+    return {"suppliers": ranked}
 
 
 @router.post("")

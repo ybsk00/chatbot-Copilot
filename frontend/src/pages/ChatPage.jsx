@@ -805,14 +805,26 @@ export default function ChatPage() {
     purchase_lease: "구매·리스",
   };
 
-  // RFP 완료 시 DB에서 공급업체 로드
+  // RFP 완료 시 키워드 기반 공급업체 검색
   useEffect(() => {
     if (phase === "complete" && sent && rfpType) {
       const dbCat = RFP_TO_DB_CATEGORY[rfpType];
       if (dbCat) {
-        api.getSuppliers(dbCat).then(res => {
+        // filledFields에서 서비스명/품목명/사업명 등 키워드 추출
+        const keywordFields = ["s6", "s7", "s10", "s11"];
+        const keywords = keywordFields
+          .map(k => (filledFields[k] || "").trim())
+          .filter(Boolean)
+          .join(",");
+
+        api.searchSuppliers(dbCat, keywords).then(res => {
           setDbSuppliers(res.suppliers || []);
-        }).catch(() => setDbSuppliers([]));
+        }).catch(() => {
+          // 폴백: 키워드 없이 카테고리만
+          api.getSuppliers(dbCat).then(res => {
+            setDbSuppliers(res.suppliers || []);
+          }).catch(() => setDbSuppliers([]));
+        });
       }
     }
   }, [phase, sent, rfpType]);

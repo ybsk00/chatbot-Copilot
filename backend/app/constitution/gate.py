@@ -42,6 +42,14 @@ def check_constitution(message: str) -> str | None:
         if keyword in message:
             return response
 
+    # 법적 판단 요청 → 전문가 상담 권고
+    legal_keywords = ["법적으로", "법적 판단", "법률적", "법적 유효", "소송", "법적 효력", "법적 책임"]
+    if any(kw in message for kw in legal_keywords):
+        return (
+            "법적 판단은 AI가 제공할 수 없는 영역입니다. "
+            "정확한 법률 검토를 위해 법무팀 또는 전문 법률 자문을 받으시기 바랍니다."
+        )
+
     return None
 
 

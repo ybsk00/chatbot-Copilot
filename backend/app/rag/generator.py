@@ -176,6 +176,7 @@ def generate_answer(
         config=types.GenerateContentConfig(
             system_instruction=system_prompt,
             max_output_tokens=500,
+            temperature=0.3,
             thinking_config=types.ThinkingConfig(thinking_budget=0),
         ),
     )
@@ -225,6 +226,7 @@ def generate_answer_stream(
         config=types.GenerateContentConfig(
             system_instruction=system_prompt,
             max_output_tokens=500,
+            temperature=0.3,
             thinking_config=types.ThinkingConfig(thinking_budget=0),
         ),
     )

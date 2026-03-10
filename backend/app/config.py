@@ -46,4 +46,4 @@ PREFETCH_CACHE_TTL = 300  # 초
 SMTP_HOST = "smtp.gmail.com"
 SMTP_PORT = 587
 SMTP_EMAIL = os.getenv("SMTP_EMAIL", "rfp.castingn@gmail.com")
-SMTP_APP_PASSWORD = os.getenv("SMTP_APP_PASSWORD", "aaem qbwv wybz qgkrb")
+SMTP_APP_PASSWORD = os.getenv("SMTP_APP_PASSWORD", "aaemqbwvwybzqgkrb")

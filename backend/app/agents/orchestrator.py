@@ -77,6 +77,45 @@ class OrchestratorAgent(AgentBase):
     ]
     _RFP_QUESTION_MARKERS = ["뭐", "무엇", "어떻게", "왜", "?", "인가요", "인지", "알려"]
 
+    # 자유발화 (인사/감사/잡담) → RAG 스킵
+    _GREETING_PATTERNS = [
+        "안녕", "하이", "헬로", "hello", "hi ", "hey",
+        "감사", "고마워", "고맙", "ㄱㅅ", "ㄱㅁ", "땡큐", "thank",
+        "반갑", "처음 뵙", "오랜만",
+        "수고", "잘 부탁", "잘부탁",
+        "ㅎㅇ", "ㅎㅎ", "ㅋㅋ", "ㄴㄴ",
+        "네네", "아하", "오케이", "ok", "ㅇㅋ", "ㅇㅇ",
+    ]
+    _GREETING_EXACT = {
+        "네", "아니요", "아니", "응", "ㅇ", "ㄴ", "넵", "넹",
+        "예", "아뇨", "됐어", "괜찮아", "됐습니다",
+    }
+    _GREETING_RESPONSES = {
+        "greeting": "안녕하세요! 간접구매 상담도우미입니다. 궁금하신 점을 질문해 주세요.",
+        "thanks": "감사합니다! 추가로 궁금하신 점이 있으시면 말씀해 주세요.",
+        "default": "네, 무엇을 도와드릴까요?",
+    }
+
+    def _detect_freeform(self, message: str) -> str | None:
+        """자유발화 감지 → RAG 스킵용 응답 반환 (0ms). None이면 일반 처리."""
+        msg = message.strip()
+        # 긴 메시지는 자유발화가 아님
+        if len(msg) > 20:
+            return None
+        msg_lower = msg.lower()
+        # 정확 매칭
+        if msg in self._GREETING_EXACT:
+            return self._GREETING_RESPONSES["default"]
+        # 패턴 매칭
+        for p in self._GREETING_PATTERNS:
+            if p in msg_lower:
+                if any(g in msg_lower for g in ("감사", "고마", "땡큐", "thank")):
+                    return self._GREETING_RESPONSES["thanks"]
+                if any(g in msg_lower for g in ("안녕", "하이", "헬로", "hello", "hi", "반갑")):
+                    return self._GREETING_RESPONSES["greeting"]
+                return self._GREETING_RESPONSES["default"]
+        return None
+
     def _detect_phase_trigger(self, message: str, phase: str) -> str | None:
         """키워드 기반 phase 전환 감지 (0ms)."""
         msg = message.strip()
@@ -131,6 +170,19 @@ class OrchestratorAgent(AgentBase):
                 "content": "제안요청서(RFP) 작성을 진행하겠습니다. 아래에서 RFP 유형을 선택해 주십시오."
             })
             yield self._sse("done", {})
+            return
+
+        # ── GATE 3: 자유발화 감지 (~0ms, RAG 스킵) ──
+        freeform_reply = self._detect_freeform(ctx.message)
+        if freeform_reply:
+            yield self._sse("meta", {
+                "sources": [], "rag_score": 0,
+                "phase_trigger": None, "classification": None,
+            })
+            yield self._sse("token", {"content": freeform_reply})
+            yield self._sse("suggestions", {"items": ["RFP 작성하기"]})
+            yield self._sse("done", {})
+            logger.info(f"[Orchestrator] Freeform detected: '{ctx.message}' → skip RAG")
             return
 
         # ── PHASE 1: Classification + Retrieval 병렬 (~1000ms) ──

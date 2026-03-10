@@ -69,11 +69,29 @@ class OrchestratorAgent(AgentBase):
             return f"{prefix} {ctx.message}"
         return ctx.message
 
+    # RFP 직접 요청 패턴 (질문 형태 제외)
+    _RFP_DIRECT_PATTERNS = [
+        "rfp 작성", "rfp 생성", "rfp 만들", "rfp 시작", "rfp 진행",
+        "rfp작성", "rfp생성", "rfp만들", "rfp시작", "rfp진행",
+        "제안요청서 작성", "제안요청서 생성", "제안요청서 만들",
+    ]
+    _RFP_QUESTION_MARKERS = ["뭐", "무엇", "어떻게", "왜", "?", "인가요", "인지", "알려"]
+
     def _detect_phase_trigger(self, message: str, phase: str) -> str | None:
         """키워드 기반 phase 전환 감지 (0ms)."""
         msg = message.strip()
         if phase in ("chat", "asked"):
+            # 1. 기존 동의 키워드
             if any(kw in msg for kw in RFP_AGREE_KEYWORDS):
+                return "rfp_agreed"
+            # 2. RFP 직접 요청 ("rfp 작성해줘", "rfp 할게" 등)
+            msg_lower = msg.lower()
+            if any(p in msg_lower for p in self._RFP_DIRECT_PATTERNS):
+                # 질문 형태면 제외 ("rfp 작성 어떻게 하나요?")
+                if not any(q in msg for q in self._RFP_QUESTION_MARKERS):
+                    return "rfp_agreed"
+            # 3. "rfp" 단독 입력 (3글자 이하)
+            if msg_lower.replace(" ", "") in ("rfp", "rfp!"):
                 return "rfp_agreed"
         return None
 

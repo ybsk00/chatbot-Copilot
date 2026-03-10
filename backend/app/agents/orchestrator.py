@@ -1,6 +1,7 @@
 """Orchestrator Agent — 전체 에이전트 조율 + SSE 이벤트 생성"""
 import asyncio
 import json
+import re
 import time
 import logging
 from concurrent.futures import ThreadPoolExecutor
@@ -13,10 +14,41 @@ from app.agents.constitution import ConstitutionAgent
 from app.agents.generation import GenerationAgent
 from app.agents.suggestion import SuggestionAgent
 from app.agents.rfp import RfpAgent
-from app.config import RFP_AGREE_KEYWORDS
+from app.config import RFP_AGREE_KEYWORDS, CONFIDENCE_THRESHOLD
 from app.constants.rfp_schemas import RFP_SCHEMAS
+from app.rag.classifier import TAXONOMY
 
 logger = logging.getLogger(__name__)
+
+
+# ── 분류체계 → 키워드 맵 (사후 필터링용, 서버 시작 시 1회 빌드) ──
+_TAXONOMY_KEYWORDS: dict[str, set[str]] = {}
+
+
+def _build_taxonomy_keywords():
+    """TAXONOMY에서 대분류별 관련 키워드 세트 생성."""
+    # 여러 대분류에 등장하는 범용 키워드 제외
+    _GENERIC_KEYWORDS = {
+        "구매", "렌탈", "리스", "서비스", "용역", "관리", "대행",
+        "수리", "유지보수", "컨설팅", "제작",
+    }
+    for major, middles in TAXONOMY.items():
+        kws = {major}
+        for m in middles:
+            # 중분류 기본명 (괄호 앞)
+            base = m.split("(")[0].strip()
+            kws.add(base)
+            # 괄호 안 소분류 키워드 (3글자 이상만, 범용 키워드 제외)
+            if "(" in m and ")" in m:
+                hints = m[m.index("(") + 1:m.rindex(")")]
+                for kw in re.split(r"[/·,]", hints):
+                    kw = kw.strip()
+                    if len(kw) >= 3 and kw not in _GENERIC_KEYWORDS:
+                        kws.add(kw)
+        _TAXONOMY_KEYWORDS[major] = kws
+
+
+_build_taxonomy_keywords()
 
 
 class OrchestratorAgent(AgentBase):
@@ -68,6 +100,49 @@ class OrchestratorAgent(AgentBase):
         if prefix:
             return f"{prefix} {ctx.message}"
         return ctx.message
+
+    def _filter_chunks_by_classification(self, ctx: AgentContext):
+        """분류 결과를 기반으로 관련 없는 청크 제거 (사후 필터링).
+
+        Classification + Retrieval 병렬 실행 후, 분류 대분류에 맞지 않는
+        청크를 제거하여 다른 카테고리의 결과가 답변에 혼입되는 것을 방지.
+        """
+        if not ctx.classification or not ctx.chunks:
+            return
+
+        major = ctx.classification.get("대분류")
+        if not major or major not in _TAXONOMY_KEYWORDS:
+            return
+
+        keywords = _TAXONOMY_KEYWORDS[major]
+
+        matched = []
+        removed = []
+        for c in ctx.chunks:
+            text = f"{c.get('category', '')} {c.get('doc_name', '')}"
+            if any(kw in text for kw in keywords):
+                matched.append(c)
+            else:
+                removed.append(c.get("doc_name", "?"))
+
+        if not matched:
+            # 필터링 후 결과 없으면 원본 유지 (안전장치)
+            logger.info(f"[Orchestrator] Category filter: no match for '{major}', keeping all")
+            return
+
+        if removed:
+            logger.info(
+                f"[Orchestrator] Category filter: kept {len(matched)}/{len(ctx.chunks)} "
+                f"for '{major}', removed: {removed}"
+            )
+
+        ctx.chunks = matched
+        ctx.rag_score = max(c.get("similarity", 0) for c in ctx.chunks)
+        ctx.sources = list({c["doc_name"] for c in ctx.chunks})
+
+        # 필터링 후 신뢰도 재평가
+        if ctx.rag_score < CONFIDENCE_THRESHOLD:
+            ctx.confidence_rejected = True
 
     # RFP 직접 요청 패턴 (질문 형태 제외)
     _RFP_DIRECT_PATTERNS = [
@@ -202,6 +277,9 @@ class OrchestratorAgent(AgentBase):
         )
         await asyncio.gather(classification_task, retrieval_task)
 
+        # ── 사후 필터링: 분류 결과로 관련 없는 청크 제거 ──
+        self._filter_chunks_by_classification(ctx)
+
         # CTA 의도 추출
         if ctx.classification and ctx.classification.get("cta"):
             ctx.cta_intent = ctx.classification["cta"]
@@ -332,6 +410,9 @@ class OrchestratorAgent(AgentBase):
                 self.rfp.extract_fields(ctx, self._critical_pool),
                 self.retrieval.execute(ctx, self._critical_pool),
             )
+
+        # ── 사후 필터링: 분류 결과로 관련 없는 청크 제거 ──
+        self._filter_chunks_by_classification(ctx)
 
         # ── PHASE 3: 새 필드 머지 + 완성 여부 판단 ──
         trigger = None

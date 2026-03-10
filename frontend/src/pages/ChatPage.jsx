@@ -221,6 +221,7 @@ export default function ChatPage() {
   const [sessionId]                     = useState(() => crypto.randomUUID());
   const [inputFocused, setInputFocused] = useState(false);
   const [recommendedRfp, setRecommendedRfp] = useState(null);
+  const [lastClassification, setLastClassification] = useState(null);
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [emailTo, setEmailTo]           = useState("");
   const [emailSending, setEmailSending] = useState(false);
@@ -323,8 +324,11 @@ export default function ChatPage() {
     const history = messages.map(m => ({ role: m.role, content: m.text }));
 
     try {
+      // 이전 분류 결과의 중분류를 category로 전달 (검색 정확도 향상)
+      const prevCategory = lastClassification?.중분류 || null;
+
       if (phase === "filling") {
-        const data = await api.chat(sessionId, text, null, history, phase, getFilledFields(), rfpType);
+        const data = await api.chat(sessionId, text, prevCategory, history, phase, getFilledFields(), rfpType);
         if (data.rfp_fields && Object.keys(data.rfp_fields).length > 0) {
           applyFills(data.rfp_fields);
         }
@@ -343,7 +347,7 @@ export default function ChatPage() {
         setMessages(prev => [...prev, { id: aiMsgId, role: "assistant", text: "", isStreaming: true }]);
 
         await api.streamChat(
-          sessionId, text, null, history, phase, getFilledFields(),
+          sessionId, text, prevCategory, history, phase, getFilledFields(),
           (token) => {
             setMessages(prev => prev.map(m =>
               m.id === aiMsgId ? { ...m, text: m.text + token } : m
@@ -351,9 +355,12 @@ export default function ChatPage() {
           },
           (meta) => {
             metaData = meta;
-            // 분류 결과에서 추천 RFP 유형 캡처
-            if (meta.classification?.rfp_type) {
-              setRecommendedRfp(meta.classification.rfp_type);
+            // 분류 결과 저장 (다음 요청의 카테고리 필터용)
+            if (meta.classification) {
+              setLastClassification(meta.classification);
+              if (meta.classification.rfp_type) {
+                setRecommendedRfp(meta.classification.rfp_type);
+              }
             }
             setMessages(prev => prev.map(m =>
               m.id === aiMsgId ? {
@@ -1220,7 +1227,7 @@ export default function ChatPage() {
             <button
               onClick={() => {
                 setMessages([{ id: msgIdCounter++, role: "assistant", text: "안녕하세요! 간접구매 상담도우미입니다.\n\n구매하려는 품목이나 서비스를 말씀해 주세요.\n견적 요청부터 공급업체 추천, 계약서 작성까지 함께 도와드립니다." }]);
-                setPhase("chat"); setRfpType(null); setFields({}); setRightVisible(false); setDownloaded(false); setRecommendedRfp(null); setSent(false); setEmailSent(false); setRfpRequestId(null); setRfpHistory([]); setShowEmailModal(false); setEmailTo("");
+                setPhase("chat"); setRfpType(null); setFields({}); setRightVisible(false); setDownloaded(false); setRecommendedRfp(null); setLastClassification(null); setSent(false); setEmailSent(false); setRfpRequestId(null); setRfpHistory([]); setShowEmailModal(false); setEmailTo("");
               }}
               style={{
                 width:34, height:34, borderRadius: T.r8,

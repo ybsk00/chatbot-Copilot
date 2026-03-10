@@ -445,27 +445,25 @@ export default function ChatPage() {
         return (
           <button
             key={key}
-            onClick={() => handleRfpTypeSelect(key)}
+            onClick={(e) => { e.stopPropagation(); handleRfpTypeSelect(key); }}
             style={{
               display:"flex", flexDirection:"column", alignItems:"center", gap:6,
               padding:"14px 8px 12px", borderRadius: T.r12,
               border: isRecommended ? `2px solid ${iconCfg.color}` : `1.5px solid ${T.border}`,
               background: isRecommended ? iconCfg.bg : T.card,
               cursor:"pointer", textAlign:"center", fontFamily:"inherit",
-              transition:"all 0.2s ease",
+              transition:"border-color 0.15s, background 0.15s, box-shadow 0.15s",
               boxShadow: isRecommended ? `0 0 0 3px ${iconCfg.bg}` : T.shadowXs,
               position:"relative",
             }}
             onMouseEnter={e => {
               e.currentTarget.style.borderColor = iconCfg.color;
               e.currentTarget.style.background = iconCfg.bg;
-              e.currentTarget.style.transform = "translateY(-2px)";
               e.currentTarget.style.boxShadow = T.shadowMd;
             }}
             onMouseLeave={e => {
               e.currentTarget.style.borderColor = isRecommended ? iconCfg.color : T.border;
               e.currentTarget.style.background = isRecommended ? iconCfg.bg : T.card;
-              e.currentTarget.style.transform = "translateY(0)";
               e.currentTarget.style.boxShadow = isRecommended ? `0 0 0 3px ${iconCfg.bg}` : T.shadowXs;
             }}
           >

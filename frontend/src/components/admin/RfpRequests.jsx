@@ -9,6 +9,7 @@ const STATUS_MAP = {
   reviewing: { label: '검토중', bg: '#FFFBEB', color: '#D97706' },
   approved:  { label: '승인', bg: '#ECFDF5', color: '#059669' },
   rejected:  { label: '반려', bg: '#FEF2F2', color: '#DC2626' },
+  sent:      { label: '발송완료', bg: '#F0FDFA', color: '#0D9488' },
 }
 
 const RFP_TYPE_LABELS = {
@@ -105,6 +106,7 @@ function DetailModal({ req, onClose, onStatusChange, onDelete }) {
               <option value="reviewing">검토중</option>
               <option value="approved">승인</option>
               <option value="rejected">반려</option>
+              <option value="sent">발송완료</option>
             </select>
           </div>
 

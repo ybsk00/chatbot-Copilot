@@ -40,3 +40,9 @@ RFP_AGREE_KEYWORDS = ["작성해", "작성할", "작성하", "네", "좋아요",
 # Prefetcher 설정
 PREFETCH_CANDIDATE_COUNT = 3
 PREFETCH_CACHE_TTL = 300  # 초
+
+# SMTP (Gmail)
+SMTP_HOST = "smtp.gmail.com"
+SMTP_PORT = 587
+SMTP_EMAIL = os.getenv("SMTP_EMAIL", "rfp.castingn@gmail.com")
+SMTP_APP_PASSWORD = os.getenv("SMTP_APP_PASSWORD", "aaem qbwv wybz qgkrb")

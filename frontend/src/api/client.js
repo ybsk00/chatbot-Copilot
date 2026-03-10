@@ -247,4 +247,20 @@ export const api = {
     const res = await fetch(`${API_URL}/admin/users/${id}`, { method: "DELETE" });
     return res.json();
   },
+
+  // ── RFP 이메일 발송 ──
+  async sendRfpEmail(requestId, toEmail) {
+    const res = await fetch(`${API_URL}/admin/rfp-requests/${requestId}/send-email`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify({ to_email: toEmail }),
+    });
+    return res.json();
+  },
+
+  // ── 세션별 RFP 신청 내역 조회 ──
+  async getSessionRfpRequests(sessionId) {
+    const res = await fetch(`${API_URL}/admin/rfp-requests/session/${sessionId}`);
+    return res.json();
+  },
 };

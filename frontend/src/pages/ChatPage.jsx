@@ -221,6 +221,13 @@ export default function ChatPage() {
   const [sessionId]                     = useState(() => crypto.randomUUID());
   const [inputFocused, setInputFocused] = useState(false);
   const [recommendedRfp, setRecommendedRfp] = useState(null);
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [emailTo, setEmailTo]           = useState("");
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailSent, setEmailSent]       = useState(false);
+  const [rfpRequestId, setRfpRequestId] = useState(null);
+  const [rfpHistory, setRfpHistory]     = useState([]);
+  const [showHistory, setShowHistory]   = useState(false);
   const msgEndRef  = useRef(null);
   const chatScrollRef = useRef(null);
   const fieldRefs  = useRef({});
@@ -237,6 +244,21 @@ export default function ChatPage() {
       chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
     }
   }, [messages, isTyping]);
+
+  // RFP 완료 시 신청 내역 조회
+  useEffect(() => {
+    if (phase === "complete") {
+      setTimeout(() => {
+        api.getSessionRfpRequests(sessionId).then(res => {
+          const reqs = res.rfp_requests || [];
+          setRfpHistory(reqs);
+          if (reqs.length > 0) {
+            setRfpRequestId(reqs[0].id);
+          }
+        }).catch(() => {});
+      }, 1500);
+    }
+  }, [phase]);
 
   const applyFills = (fills) => {
     if (!fills || !Object.keys(fills).length) return;
@@ -770,21 +792,58 @@ export default function ChatPage() {
         >
           <IconDownload size={14} /> PDF 다운로드
         </button>
-        <button onClick={() => setSent(true)} style={{
+        <button onClick={() => {
+          if (!rfpRequestId) {
+            alert("RFP 저장 중입니다. 잠시 후 다시 시도해주세요.");
+            return;
+          }
+          setShowEmailModal(true);
+        }} style={{
           flex:1, padding:"14px", borderRadius: T.r10,
           border:"none",
-          background: sent ? T.greenDark : T.gradPrimary,
+          background: emailSent ? T.greenDark : T.gradPrimary,
           color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
           display:"flex", alignItems:"center", justifyContent:"center", gap:6,
           transition:"all 0.3s",
-          boxShadow: sent ? "none" : T.shadowBlue,
+          boxShadow: emailSent ? "none" : T.shadowBlue,
         }}
-          onMouseEnter={e => { if(!sent) e.currentTarget.style.transform = "scale(1.02)"; }}
+          onMouseEnter={e => { if(!emailSent) e.currentTarget.style.transform = "scale(1.02)"; }}
           onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
         >
-          {sent ? <><IconCheck /> 발송 완료</> : <><IconSendMail size={13} /> RFP 발송</>}
+          {emailSent ? <><IconCheck /> 발송 완료</> : <><IconSendMail size={13} /> RFP 발송</>}
         </button>
       </div>
+
+      {/* RFP 신청 내역 */}
+      {rfpHistory.length > 0 && (
+        <div style={{ marginTop:16, background:T.bg, borderRadius:12, padding:16, border:`1px solid ${T.border}` }}>
+          <div style={{ fontSize:13, fontWeight:600, color:T.text, marginBottom:10, display:"flex", alignItems:"center", gap:6 }}>
+            <IconDoc size={13} /> 신청 내역
+          </div>
+          {rfpHistory.map(req => (
+            <div key={req.id} style={{
+              display:"flex", justifyContent:"space-between", alignItems:"center",
+              padding:"8px 0", borderBottom:`1px solid ${T.border}`,
+              fontSize:12,
+            }}>
+              <div>
+                <span style={{ fontWeight:600, color:T.text }}>{req.title || req.org_name || "RFP"}</span>
+                <span style={{ color:T.sub, marginLeft:8 }}>
+                  {new Date(req.created_at).toLocaleDateString("ko-KR")}
+                </span>
+              </div>
+              <span style={{
+                fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:6,
+                background: req.status === "sent" ? "#ECFDF5" : req.status === "submitted" ? "#EFF6FF" : "#F1F5F9",
+                color: req.status === "sent" ? "#059669" : req.status === "submitted" ? "#2563EB" : "#64748B",
+              }}>
+                {req.status === "sent" ? "발송완료" : req.status === "submitted" ? "신청" : req.status === "reviewing" ? "검토중" : req.status === "approved" ? "승인" : req.status === "rejected" ? "반려" : req.status}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div style={{ height:20 }} />
     </div>
   );
@@ -807,13 +866,13 @@ export default function ChatPage() {
 
   // RFP 완료 시 키워드 기반 공급업체 검색
   useEffect(() => {
-    if (phase === "complete" && sent && rfpType) {
+    if (phase === "complete" && emailSent && rfpType) {
       const dbCat = RFP_TO_DB_CATEGORY[rfpType];
       if (dbCat) {
-        // filledFields에서 서비스명/품목명/사업명 등 키워드 추출
+        // fields에서 서비스명/품목명/사업명 등 키워드 추출
         const keywordFields = ["s6", "s7", "s10", "s11"];
         const keywords = keywordFields
-          .map(k => (filledFields[k] || "").trim())
+          .map(k => (fields[k]?.value || "").trim())
           .filter(Boolean)
           .join(",");
 
@@ -827,7 +886,7 @@ export default function ChatPage() {
         });
       }
     }
-  }, [phase, sent, rfpType]);
+  }, [phase, emailSent, rfpType]);
 
   const getMatchedSuppliers = () => {
     return dbSuppliers
@@ -951,6 +1010,144 @@ export default function ChatPage() {
     );
   };
 
+  // ══ 이메일 발송 모달 ══
+  const EmailModal = () => {
+    if (!showEmailModal) return null;
+    return (
+      <div style={{
+        position:"fixed", inset:0, zIndex:9999,
+        display:"flex", alignItems:"center", justifyContent:"center",
+        background:"rgba(0,0,0,0.4)", backdropFilter:"blur(4px)",
+      }} onClick={() => !emailSending && setShowEmailModal(false)}>
+        <div style={{
+          background:"#fff", borderRadius:20, width:440, padding:0,
+          boxShadow:"0 20px 60px rgba(0,0,0,0.15)",
+          overflow:"hidden",
+        }} onClick={e => e.stopPropagation()}>
+          {/* Header */}
+          <div style={{
+            padding:"24px 28px 16px",
+            borderBottom:"1px solid #F0F2F5",
+          }}>
+            <div style={{ fontSize:18, fontWeight:700, color:"#1E293B" }}>
+              RFP 이메일 발송
+            </div>
+            <div style={{ fontSize:13, color:"#94A3B8", marginTop:4 }}>
+              제안요청서를 이메일로 발송합니다
+            </div>
+          </div>
+
+          {/* Body */}
+          <div style={{ padding:"20px 28px" }}>
+            {/* RFP Summary */}
+            <div style={{
+              background:"#F8FFFE", borderRadius:12, padding:16, marginBottom:20,
+              border:"1px solid #E0F7F6",
+            }}>
+              <div style={{ fontSize:12, color:"#0D9488", fontWeight:600, marginBottom:8 }}>발송 문서</div>
+              <div style={{ fontSize:14, fontWeight:600, color:"#1E293B" }}>
+                {fields.s6?.value || fields.s1?.value || "제안요청서"}
+              </div>
+              <div style={{ fontSize:12, color:"#64748B", marginTop:4 }}>
+                {currentTemplate?.label} · {fields.s1?.value || ""}
+              </div>
+            </div>
+
+            {/* Email Input */}
+            <div style={{ marginBottom:8 }}>
+              <label style={{ fontSize:13, fontWeight:600, color:"#374151", display:"block", marginBottom:8 }}>
+                수신자 이메일
+              </label>
+              <input
+                type="email"
+                value={emailTo}
+                onChange={e => setEmailTo(e.target.value)}
+                placeholder="example@company.com"
+                style={{
+                  width:"100%", padding:"12px 16px", borderRadius:12,
+                  border:"1px solid #E2E8F0", fontSize:14, outline:"none",
+                  fontFamily:"inherit", boxSizing:"border-box",
+                  transition:"border-color 0.15s",
+                }}
+                onFocus={e => e.target.style.borderColor = "#0D9488"}
+                onBlur={e => e.target.style.borderColor = "#E2E8F0"}
+                disabled={emailSending}
+                autoFocus
+              />
+            </div>
+            <div style={{ fontSize:11, color:"#94A3B8", marginBottom:20 }}>
+              수신자에게 RFP 요약 정보와 상세 보기 링크가 포함된 이메일이 발송됩니다
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div style={{
+            padding:"16px 28px", borderTop:"1px solid #F0F2F5",
+            display:"flex", gap:10, justifyContent:"flex-end",
+          }}>
+            <button
+              onClick={() => { setShowEmailModal(false); setEmailTo(""); }}
+              disabled={emailSending}
+              style={{
+                padding:"10px 20px", borderRadius:10, border:"1px solid #E2E8F0",
+                background:"#fff", fontSize:13, fontWeight:600, color:"#64748B",
+                cursor:"pointer", fontFamily:"inherit",
+              }}
+            >
+              취소
+            </button>
+            <button
+              onClick={async () => {
+                if (!emailTo || !emailTo.includes("@")) {
+                  alert("올바른 이메일 주소를 입력해주세요.");
+                  return;
+                }
+                setEmailSending(true);
+                try {
+                  const res = await api.sendRfpEmail(rfpRequestId, emailTo);
+                  if (res.status === "sent") {
+                    setEmailSent(true);
+                    setSent(true);
+                    setShowEmailModal(false);
+                    setEmailTo("");
+                  } else {
+                    alert("발송 실패: " + (res.detail || "알 수 없는 오류"));
+                  }
+                } catch (err) {
+                  alert("발송 중 오류가 발생했습니다.");
+                }
+                setEmailSending(false);
+              }}
+              disabled={emailSending || !emailTo}
+              style={{
+                padding:"10px 24px", borderRadius:10, border:"none",
+                background: emailSending ? "#94A3B8" : "#0D9488",
+                fontSize:13, fontWeight:700, color:"#fff",
+                cursor: emailSending ? "wait" : "pointer", fontFamily:"inherit",
+                display:"flex", alignItems:"center", gap:6,
+                transition:"all 0.2s",
+              }}
+            >
+              {emailSending ? (
+                <>
+                  <span style={{
+                    width:14, height:14, border:"2px solid rgba(255,255,255,0.3)",
+                    borderTopColor:"#fff", borderRadius:"50%",
+                    animation:"spin 0.8s linear infinite", display:"inline-block",
+                  }} />
+                  발송 중...
+                </>
+              ) : (
+                <>발송</>
+              )}
+            </button>
+          </div>
+        </div>
+        <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+      </div>
+    );
+  };
+
   // ══════════════════════════════════════════════
   // 메인 렌더
   // ══════════════════════════════════════════════
@@ -1023,7 +1220,7 @@ export default function ChatPage() {
             <button
               onClick={() => {
                 setMessages([{ id: msgIdCounter++, role: "assistant", text: "안녕하세요! 간접구매 상담도우미입니다.\n\n구매하려는 품목이나 서비스를 말씀해 주세요.\n견적 요청부터 공급업체 추천, 계약서 작성까지 함께 도와드립니다." }]);
-                setPhase("chat"); setRfpType(null); setFields({}); setRightVisible(false); setDownloaded(false); setRecommendedRfp(null);
+                setPhase("chat"); setRfpType(null); setFields({}); setRightVisible(false); setDownloaded(false); setRecommendedRfp(null); setSent(false); setEmailSent(false); setRfpRequestId(null); setRfpHistory([]); setShowEmailModal(false); setEmailTo("");
               }}
               style={{
                 width:34, height:34, borderRadius: T.r8,
@@ -1324,6 +1521,9 @@ export default function ChatPage() {
           {phase === "complete" && sent && PanelSuppliers()}
         </div>
       )}
+
+      {/* 이메일 발송 모달 */}
+      <EmailModal />
     </div>
   );
 }

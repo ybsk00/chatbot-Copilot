@@ -1,11 +1,12 @@
 import hashlib
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app.db.supabase_client import get_client
 from app.constitution.gate import reload_rules
 from app.rag.embedder import embed_document
+from app.services.email_service import send_rfp_email
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -285,6 +286,61 @@ async def delete_rfp_request(request_id: int):
     supabase = get_client()
     supabase.table("rfp_requests").delete().eq("id", request_id).execute()
     return {"status": "deleted"}
+
+
+# ── RFP 이메일 발송 ──
+class RfpSendEmail(BaseModel):
+    to_email: str
+
+
+@router.post("/rfp-requests/{request_id}/send-email")
+async def send_rfp_email_endpoint(request_id: int, body: RfpSendEmail):
+    """RFP를 이메일로 발송하고 상태를 'sent'로 업데이트"""
+    supabase = get_client()
+    result = (
+        supabase.table("rfp_requests")
+        .select("*")
+        .eq("id", request_id)
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="RFP를 찾을 수 없습니다.")
+
+    rfp = result.data[0]
+    rfp_data = {
+        "rfp_type": rfp.get("rfp_type") or rfp.get("template_type") or "",
+        "title": rfp.get("title") or "",
+        "org_name": rfp.get("org_name") or "",
+        "department": rfp.get("department") or "",
+        "requester": rfp.get("requester") or "",
+        "fields": rfp.get("fields") or {},
+        "created_at": rfp.get("created_at") or "",
+    }
+
+    email_result = await send_rfp_email(body.to_email, rfp_data, request_id)
+
+    if email_result["ok"]:
+        supabase.table("rfp_requests").update(
+            {"status": "sent"}
+        ).eq("id", request_id).execute()
+        return {"status": "sent", "message": email_result["message"]}
+
+    raise HTTPException(status_code=500, detail=email_result["message"])
+
+
+# ── 세션별 RFP 조회 (챗봇 사용자용) ──
+@router.get("/rfp-requests/session/{session_id}")
+async def get_session_rfp_requests(session_id: str):
+    """특정 세션의 RFP 신청 이력을 반환"""
+    supabase = get_client()
+    result = (
+        supabase.table("rfp_requests")
+        .select("*")
+        .eq("session_id", session_id)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return {"rfp_requests": result.data}
 
 
 # ── RFP 양식 관리 ──

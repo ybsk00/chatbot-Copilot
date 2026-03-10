@@ -260,6 +260,14 @@ def _rrf_fuse(
                 chunk_map[cid]["similarity"] = chunk["similarity"]
             source_map.setdefault(cid, []).append(source_name)
 
+    # 벡터 유사도 보너스: sim ≥ 0.72인 벡터 결과에 추가 점수 (구조화 청크 우선)
+    for chunk in vector_chunks:
+        sim = chunk.get("similarity", 0)
+        if sim >= 0.72:
+            cid = chunk["id"]
+            bonus = (sim - 0.70) * 0.15  # sim=0.75 → +0.0075 보너스
+            rrf_scores[cid] = rrf_scores.get(cid, 0.0) + bonus
+
     # RRF 점수 내림차순 정렬
     sorted_ids = sorted(rrf_scores, key=lambda x: rrf_scores[x], reverse=True)
 

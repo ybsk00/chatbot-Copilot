@@ -144,6 +144,11 @@ export const api = {
     return res.json();
   },
 
+  async getConversationDetail(sessionId) {
+    const res = await fetch(`${API_URL}/admin/conversations/${encodeURIComponent(sessionId)}`);
+    return res.json();
+  },
+
   async getTaxonomy() {
     const res = await fetch(`${API_URL}/admin/taxonomy`);
     return res.json();

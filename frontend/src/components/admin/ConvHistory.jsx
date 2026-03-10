@@ -17,8 +17,22 @@ function formatDate(y, m, d) {
 
 /* ── 대화 상세 모달 ── */
 function DetailModal({ conv, onClose }) {
+  const [messages, setMessages] = useState([])
+  const [loadingDetail, setLoadingDetail] = useState(true)
+
+  useEffect(() => {
+    if (!conv) return
+    setLoadingDetail(true)
+    api.getConversationDetail(conv.session_id)
+      .then(data => {
+        const c = data.conversation
+        setMessages(c?.messages || [])
+      })
+      .catch(() => setMessages([]))
+      .finally(() => setLoadingDetail(false))
+  }, [conv?.session_id])
+
   if (!conv) return null
-  const messages = conv.messages || []
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 1000,
@@ -55,7 +69,9 @@ function DetailModal({ conv, onClose }) {
         </div>
         {/* 메시지 */}
         <div style={{ padding: 20, overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {messages.length === 0 ? (
+          {loadingDetail ? (
+            <div style={{ padding: 40, textAlign: 'center', color: '#94A3B8', fontSize: 14 }}>불러오는 중...</div>
+          ) : messages.length === 0 ? (
             <div style={{ padding: 40, textAlign: 'center', color: '#94A3B8', fontSize: 14 }}>메시지가 없습니다.</div>
           ) : messages.map((msg, i) => (
             <div key={i} style={{

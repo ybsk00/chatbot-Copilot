@@ -215,7 +215,7 @@ def bm25_keyword_search(query: str, category: str | None = None, top_k: int = RA
 
         for i, chunk in enumerate(candidates):
             chunk["bm25_score"] = float(scores[i])
-            chunk["similarity"] = float(scores[i])  # 호환성
+            chunk["similarity"] = 0  # BM25 점수는 0-1 범위가 아니므로 similarity에 사용하지 않음
 
         # BM25 점수 > 0인 결과만 필터 + 정렬
         candidates = [c for c in candidates if c["bm25_score"] > 0]

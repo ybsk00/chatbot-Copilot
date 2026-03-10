@@ -9,18 +9,26 @@ from app.config import CONFIDENCE_THRESHOLD
 
 
 def _extract_topic_keywords(text: str) -> str:
-    """텍스트에서 주제 키워드를 추출 (조사/어미 제거)."""
+    """텍스트에서 주제 키워드를 추출 (조사/어미/의도 표현 제거)."""
     import re
-    # 불필요한 접미사 제거
+    # 불필요한 접미사 제거 (의도 표현 + 조사 + 어미)
     stopwords = [
+        # 정보 요청 표현
         "에 대해서", "에 대해", "에 대한", "에 관해", "을 알려주세요",
         "를 알려주세요", "이 궁금합니다", "가 궁금합니다", "알아보려고 합니다",
         "알아보려고요", "알려주세요", "궁금합니다", "있나요", "있습니까",
         "어떻게 되나요", "무엇인가요", "뭔가요",
+        # 구매/렌탈 의도 표현
+        "하려고 합니다", "하려고요", "하고 싶습니다", "하고 싶어요",
+        "을 검토", "를 검토", "을 도입", "를 도입",
+        # 일반 어미
+        "합니다", "입니다", "습니다", "됩니다",
     ]
+    # 조사 패턴 제거 (을/를/이/가/은/는/에/에서/으로/로)
     cleaned = text.strip()
     for sw in stopwords:
         cleaned = cleaned.replace(sw, " ")
+    cleaned = re.sub(r'([가-힣])(을|를|이|가|은|는|에서|에|으로|로|과|와|의)\b', r'\1', cleaned)
     # 2글자 이상 단어만 추출
     words = [w for w in re.split(r'\s+', cleaned.strip()) if len(w) >= 2]
     return " ".join(words[:5])
@@ -49,7 +57,8 @@ def _enrich_short_query(message: str, history: list[dict]) -> str:
         needs_context = True
     # 조건 2: 대명사/지시어/모호한 참조 포함
     vague_patterns = ["그건", "이건", "그거", "이거", "차이", "비교", "어떤가요",
-                      "얼마", "어떻게", "가능한가요", "되나요", "있나요", "뭐가"]
+                      "얼마", "어떻게", "가능한가요", "되나요", "있나요", "뭐가",
+                      "안내", "알려", "설명", "자세히", "더 알고", "부탁"]
     if any(p in msg for p in vague_patterns):
         needs_context = True
 
@@ -127,7 +136,7 @@ class RetrievalAgent(AgentBase):
                 )
                 ctx.chunks, ctx.query_embedding = result
 
-            # RAG 점수 계산 (RRF 결과는 이미 정렬됨 → max similarity 사용)
+            # RAG 점수 계산 (벡터/FAQ 유사도 기반, BM25 점수는 0-1이 아니므로 제외)
             if ctx.chunks:
                 ctx.rag_score = max(c.get("similarity", 0) for c in ctx.chunks)
                 ctx.sources = list({c["doc_name"] for c in ctx.chunks})
@@ -135,9 +144,12 @@ class RetrievalAgent(AgentBase):
                 ctx.rag_score = 0.0
                 ctx.sources = []
 
-            # 신뢰도 기반 거부
-            if ctx.rag_score < CONFIDENCE_THRESHOLD and not ctx.chunks:
+            # 신뢰도 기반 거부: 청크가 있어도 유사도가 낮으면 거부
+            if ctx.rag_score < CONFIDENCE_THRESHOLD:
                 ctx.confidence_rejected = True
+                self.logger.info(
+                    f"[Retrieval] Confidence rejected: rag_score={ctx.rag_score:.4f} < {CONFIDENCE_THRESHOLD}"
+                )
 
             ctx.timings["retrieval_ms"] = (time.time() - start) * 1000
             return self._timed_result(start)

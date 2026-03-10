@@ -163,46 +163,90 @@ def chunk_purchase_request(ws, category, sub_cat, doc_name):
 
 
 def chunk_price_impact(ws, category, sub_cat, doc_name):
-    """단가영향 요소 요약 시트 → 영향도별 청크"""
+    """단가영향 요소 요약 시트 → 항목별 상세 청크
+
+    열 구조: No. | 분류 | 항목명 | 단가 영향 요인 상세 | 조건별 단가 변동 범위 | 소싱 협상 포인트 | 비고
+    """
     chunks = []
-    items_by_impact = {"상": [], "중": [], "하": []}
+    current_section = ""  # 단가영향 상/중/하 섹션
+    items = []
 
     for row_idx in range(1, ws.max_row + 1):
         row = [_clean(ws.cell(row_idx, c).value) for c in range(1, ws.max_column + 1)]
         first = row[0] if row else ""
 
+        # 섹션 헤더 감지 (▶ 단가영향 상 — TCO 핵심 결정 요소)
+        full_row = " ".join(r for r in row if r)
+        if "단가영향" in full_row and ("상" in full_row or "중" in full_row or "하" in full_row) and "항목" not in full_row:
+            # 이전 섹션 저장
+            if current_section and items:
+                _save_price_impact_chunk(chunks, current_section, items, category, sub_cat, doc_name)
+                items = []
+            if "상" in full_row and ("10%" in full_row or "핵심" in full_row or "TCO" in full_row):
+                current_section = "단가영향 상 (10% 이상, TCO 핵심)"
+            elif "중" in full_row:
+                current_section = "단가영향 중 (5~10%)"
+            elif "하" in full_row:
+                current_section = "단가영향 하 (5% 미만)"
+            continue
+
+        # 데이터 행: No.가 숫자인 행
         if not first or not first.isdigit():
             continue
 
-        # 단가영향 요소: No, 항목, 영향도, 설명, 협상포인트, ...
-        item_name = row[1] if len(row) > 1 else ""
-        impact = row[2] if len(row) > 2 else ""
-        desc = row[3] if len(row) > 3 else ""
-        negotiation = row[4] if len(row) > 4 else ""
+        classification = row[1] if len(row) > 1 else ""  # 분류 (공통/제품/필터/정산)
+        item_name = row[2] if len(row) > 2 else ""        # 항목명
+        detail = row[3] if len(row) > 3 else ""            # 단가 영향 요인 상세
+        price_range = row[4] if len(row) > 4 else ""       # 조건별 단가 변동 범위
+        negotiation = row[5] if len(row) > 5 else ""       # 소싱 협상 포인트
+        note = row[6] if len(row) > 6 else ""              # 비고
 
         if not item_name:
             continue
 
-        # 영향도 분류
-        impact_level = "중"
-        if "상" in impact:
-            impact_level = "상"
-        elif "하" in impact:
-            impact_level = "하"
+        items.append({
+            "classification": classification,
+            "item_name": item_name,
+            "detail": detail,
+            "price_range": price_range,
+            "negotiation": negotiation,
+            "note": note,
+        })
 
-        entry = f"- {item_name}: {desc}"
-        if negotiation:
-            entry += f" (협상포인트: {negotiation})"
+    # 마지막 섹션
+    if current_section and items:
+        _save_price_impact_chunk(chunks, current_section, items, category, sub_cat, doc_name)
 
-        items_by_impact[impact_level].append(entry)
+    # 섹션 헤더가 없는 경우 전체를 하나로
+    if not chunks and items:
+        _save_price_impact_chunk(chunks, "단가영향 요소", items, category, sub_cat, doc_name)
 
-    for level, items in items_by_impact.items():
-        if not items:
-            continue
+    return chunks
 
-        level_label = {"상": "높음 (단가 직접 영향)", "중": "보통", "하": "낮음"}[level]
-        question = f"{sub_cat} 구매 시 단가에 영향을 미치는 핵심 요소는? (영향도: {level_label})"
-        content = f"Q: {question}\n\n단가 영향도 [{level_label}] 항목:\n" + "\n".join(items)
+
+def _save_price_impact_chunk(chunks, section, items, category, sub_cat, doc_name):
+    """단가영향 항목 2~3개씩 묶어서 청크 생성"""
+    group_size = 2
+    for i in range(0, len(items), group_size):
+        group = items[i:i + group_size]
+        item_names = ", ".join(it["item_name"] for it in group)
+
+        question = f"{sub_cat} 단가 영향 요소: {item_names}의 단가 변동과 협상 전략은?"
+
+        body_parts = []
+        for it in group:
+            lines = [f"[{it['classification']} - {it['item_name']}] ({section})"]
+            if it["detail"]:
+                lines.append(f"영향 요인: {it['detail']}")
+            if it["price_range"]:
+                lines.append(f"단가 변동 범위: {it['price_range']}")
+            if it["negotiation"]:
+                lines.append(f"소싱 협상 포인트: {it['negotiation']}")
+            if it["note"]:
+                lines.append(f"비고: {it['note']}")
+            body_parts.append("\n".join(lines))
+
+        content = f"Q: {question}\n\n" + "\n\n".join(body_parts)
 
         chunks.append({
             "category": category,
@@ -212,12 +256,10 @@ def chunk_price_impact(ws, category, sub_cat, doc_name):
             "content": content,
             "metadata": {
                 "type": "price_impact",
-                "impact_level": level,
-                "item_count": len(items),
+                "section": section,
+                "items": [it["item_name"] for it in group],
             },
         })
-
-    return chunks
 
 
 def chunk_market_price(ws, category, sub_cat, doc_name):
@@ -358,37 +400,116 @@ def _save_strategy_chunk(chunks, section, items, category, sub_cat, doc_name):
 
 
 def chunk_guide_checklist(ws, category, sub_cat, doc_name):
-    """작성 가이드 / 법정의무 체크리스트 / 기준표 시트 → 청크"""
+    """작성 가이드 / 법정의무 체크리스트 / 기준표 시트 → 섹션별 청크
+
+    섹션 구분 기준:
+    - 빈 행 뒤에 나오는 텍스트 행 = 새 섹션 헤더
+    - 첫 번째 열에만 값이 있고 나머지가 비어있는 행 = 섹션 헤더
+    - 시트 타이틀 행(1~3행)은 스킵
+    """
     chunks = []
-    all_rows = []
+    sections = []  # [(section_title, [rows...])]
+    sheet_title = ""  # 시트 상단 타이틀 (폴백용)
+    current_title = ""
+    current_rows = []
+    prev_blank = False
 
     for row_idx in range(1, ws.max_row + 1):
-        row = [_clean(ws.cell(row_idx, c).value) for c in range(1, ws.max_column + 1)]
-        if any(row):
-            all_rows.append(" | ".join(v for v in row if v))
+        raw = [ws.cell(row_idx, c).value for c in range(1, ws.max_column + 1)]
+        cleaned = [_clean(v) for v in raw]
+        non_empty = [v for v in cleaned if v]
 
-    # 10행씩 묶어서 청크
-    group_size = 10
-    for i in range(0, len(all_rows), group_size):
-        group = all_rows[i:i + group_size]
-        content_text = "\n".join(group)
-        if len(content_text) < 30:
+        # 빈 행
+        if not non_empty:
+            prev_blank = True
             continue
 
-        question = f"{sub_cat} 구매 가이드 및 체크리스트"
-        content = f"Q: {question}\n\n{content_text}"
+        # 시트 타이틀 (첫 3행 중 1열만 채워진 행) → 폴백 타이틀로 저장
+        if row_idx <= 3 and len(non_empty) == 1:
+            if not sheet_title:
+                sheet_title = non_empty[0].strip()[:60]
+            prev_blank = True
+            continue
 
-        chunks.append({
-            "category": category,
-            "sub_cat": sub_cat,
-            "doc_name": doc_name,
-            "chunk_index": len(chunks),
-            "content": content,
-            "metadata": {
-                "type": "guide_checklist",
-                "sheet_name": ws.title,
-            },
-        })
+        # 섹션 헤더 판별: (빈 행 뒤 + 1열만 값 있음) 또는 (빈 행 뒤 + No./구분 등 컬럼 헤더)
+        is_header = False
+        first_val = cleaned[0]
+
+        # 조건 1: 빈 행 뒤에 나온 행 중, 1~2열만 채워진 경우 → 섹션 헤더
+        if prev_blank and len(non_empty) <= 2 and not first_val.isdigit():
+            is_header = True
+        # 조건 2: "No." 또는 "구분" 등 테이블 컬럼 헤더 → 섹션 데이터 헤더 (스킵)
+        if first_val in ("No.", "구분", "No"):
+            prev_blank = False
+            continue
+
+        if is_header:
+            # 이전 섹션 저장 (타이틀 없는 초기 데이터는 시트 타이틀 사용)
+            if current_rows:
+                title = current_title or sheet_title or f"{sub_cat} 가이드"
+                sections.append((title, current_rows))
+            current_title = " ".join(non_empty)
+            current_rows = []
+            prev_blank = False
+            continue
+
+        # 데이터 행
+        row_text = " | ".join(v for v in cleaned if v)
+        if row_text:
+            current_rows.append(row_text)
+        prev_blank = False
+
+    # 마지막 섹션
+    if current_rows:
+        title = current_title or sheet_title or f"{sub_cat} 가이드"
+        sections.append((title, current_rows))
+
+    # 섹션이 없으면 전체를 하나로
+    if not sections and current_rows:
+        sections = [(f"{sub_cat} 가이드", current_rows)]
+
+    # 섹션별 청크 생성 (너무 큰 섹션은 분할)
+    max_rows_per_chunk = 12
+    for title, rows in sections:
+        if len(rows) <= max_rows_per_chunk:
+            # 한 청크로
+            question = f"{sub_cat} {title}"
+            content = f"Q: {question}\n\n" + "\n".join(f"- {r}" for r in rows)
+            if len(content) < 30:
+                continue
+            chunks.append({
+                "category": category,
+                "sub_cat": sub_cat,
+                "doc_name": doc_name,
+                "chunk_index": len(chunks),
+                "content": content,
+                "metadata": {
+                    "type": "guide_checklist",
+                    "section": title,
+                    "sheet_name": ws.title,
+                },
+            })
+        else:
+            # 큰 섹션은 분할
+            for i in range(0, len(rows), max_rows_per_chunk):
+                group = rows[i:i + max_rows_per_chunk]
+                part = f" (Part {i // max_rows_per_chunk + 1})" if len(rows) > max_rows_per_chunk else ""
+                question = f"{sub_cat} {title}{part}"
+                content = f"Q: {question}\n\n" + "\n".join(f"- {r}" for r in group)
+                if len(content) < 30:
+                    continue
+                chunks.append({
+                    "category": category,
+                    "sub_cat": sub_cat,
+                    "doc_name": doc_name,
+                    "chunk_index": len(chunks),
+                    "content": content,
+                    "metadata": {
+                        "type": "guide_checklist",
+                        "section": title,
+                        "sheet_name": ws.title,
+                    },
+                })
 
     return chunks
 
@@ -448,7 +569,7 @@ def process_excel(filepath, dry_run=False):
     """단일 Excel 파일 처리"""
     filename = os.path.basename(filepath)
     if filename not in FILE_CATEGORY_MAP:
-        print(f"  ⚠ 매핑 없음: {filename}")
+        print(f"  [!] 매핑 없음: {filename}")
         return {"file": filename, "saved": 0, "total": 0}
 
     category, sub_cat = FILE_CATEGORY_MAP[filename]
@@ -474,7 +595,7 @@ def process_excel(filepath, dry_run=False):
         elif "단가영향요소" in sheet_name.replace(" ", ""):
             all_chunks.extend(chunk_price_impact(ws, category, sub_cat, filename))
         else:
-            print(f"    ℹ 미처리 시트: {sheet_name}")
+            print(f"    [i] 미처리 시트: {sheet_name}")
 
     # chunk_index 재정렬
     for idx, chunk in enumerate(all_chunks):
@@ -505,12 +626,17 @@ def process_excel(filepath, dry_run=False):
             saved += 1
             time.sleep(0.15)  # API rate limit
         except Exception as e:
-            print(f"    ✗ 청크 {chunk['chunk_index']} 저장 실패: {e}")
+            print(f"    [X] 청크 {chunk['chunk_index']} 저장 실패: {e}")
 
     return {"file": filename, "saved": saved, "total": len(all_chunks)}
 
 
 def main():
+    # Windows cp949 인코딩 문제 방지
+    if sys.platform == "win32":
+        import io
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
+
     parser = argparse.ArgumentParser(description="신규DB Excel → knowledge_chunks 청킹")
     parser.add_argument("--dry-run", action="store_true", help="DB 저장 없이 청크 미리보기")
     parser.add_argument("--file", default=None, help="특정 파일만 처리")
@@ -518,30 +644,30 @@ def main():
 
     excel_dir = os.path.normpath(EXCEL_DIR)
     if not os.path.isdir(excel_dir):
-        print(f"✗ 디렉토리 없음: {excel_dir}")
+        print(f"[X] 디렉토리 없음: {excel_dir}")
         sys.exit(1)
 
-    files = sorted(f for f in os.listdir(excel_dir) if f.endswith(".xlsx"))
+    files = sorted(f for f in os.listdir(excel_dir) if f.endswith(".xlsx") and not f.startswith("~$"))
     if args.file:
         files = [f for f in files if args.file in f]
 
-    print(f"\n📊 신규DB Excel 청킹 시작 ({len(files)}개 파일)")
-    print(f"   경로: {excel_dir}")
+    print(f"\n[*] 신규DB Excel 청킹 시작 ({len(files)}개 파일)")
+    print(f"    경로: {excel_dir}")
     if args.dry_run:
-        print("   🔍 DRY RUN 모드 (DB 저장 안 함)\n")
+        print("    [DRY RUN] DB 저장 안 함\n")
 
     total_saved = 0
     total_chunks = 0
 
     for f in files:
         filepath = os.path.join(excel_dir, f)
-        print(f"\n📄 {f}")
+        print(f"\n[>] {f}")
         result = process_excel(filepath, dry_run=args.dry_run)
-        print(f"   → {result['saved']}/{result['total']} 청크 저장")
+        print(f"    -> {result['saved']}/{result['total']} 청크 저장")
         total_saved += result["saved"]
         total_chunks += result["total"]
 
-    print(f"\n{'🔍 DRY RUN' if args.dry_run else '🎉'} 완료! 총 {total_saved}/{total_chunks} 청크 저장\n")
+    print(f"\n{'[DRY RUN]' if args.dry_run else '[DONE]'} 완료! 총 {total_saved}/{total_chunks} 청크 저장\n")
 
 
 if __name__ == "__main__":

@@ -111,7 +111,8 @@ class RetrievalAgent(AgentBase):
         try:
             # 짧은 후속 질문은 대화 맥락 결합 (검색 품질 향상)
             search_query = _enrich_short_query(ctx.message, ctx.history)
-            if search_query != ctx.message:
+            query_enriched = search_query != ctx.message
+            if query_enriched:
                 self.logger.info(
                     f"[Retrieval] Query enriched: '{ctx.message}' → '{search_query[:60]}'"
                 )
@@ -145,10 +146,18 @@ class RetrievalAgent(AgentBase):
                 ctx.sources = []
 
             # 신뢰도 기반 거부: 청크가 있어도 유사도가 낮으면 거부
-            if ctx.rag_score < CONFIDENCE_THRESHOLD:
+            # 대화 맥락이 있는 후속 질문은 임계값을 낮춤 (0.65 → 0.50)
+            threshold = CONFIDENCE_THRESHOLD
+            if query_enriched and ctx.history:
+                threshold = 0.50
+                self.logger.info(
+                    f"[Retrieval] Enriched query → lowered threshold: {CONFIDENCE_THRESHOLD} → {threshold}"
+                )
+
+            if ctx.rag_score < threshold:
                 ctx.confidence_rejected = True
                 self.logger.info(
-                    f"[Retrieval] Confidence rejected: rag_score={ctx.rag_score:.4f} < {CONFIDENCE_THRESHOLD}"
+                    f"[Retrieval] Confidence rejected: rag_score={ctx.rag_score:.4f} < {threshold}"
                 )
 
             ctx.timings["retrieval_ms"] = (time.time() - start) * 1000

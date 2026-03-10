@@ -304,17 +304,27 @@ def generate_answer_stream(
             yield chunk.text
 
 
-SUGGESTION_PROMPT = """당신의 역할: 아래 참조 문서에서 AI 답변이 다루지 않은 내용을 찾아 후속 안내 문장을 만드세요.
+SUGGESTION_PROMPT = """당신의 역할: 아래 참조 문서를 기반으로 후속 안내 2개를 만드세요.
 
 [절대 규칙]
 1. 참조 문서에 실제로 구체적 설명이 있는 주제만 사용하세요.
 2. 문서에 단어만 언급되고 설명이 없는 주제는 절대 사용하지 마세요.
-3. 반드시 "~에 대해서 알려드릴까요?" 형태로 작성하세요.
-4. 쉼표로 구분해서 3개만 반환. 설명 없이.
+3. 반드시 2개를 줄바꿈으로 구분해서 반환. 설명 없이.
+
+[형식 - 반드시 아래 2가지 유형을 각 1개씩]
+A. 정보 안내형: "~에 대해서 알려드릴까요?" 형태 (AI 답변이 다루지 않은 관련 주제)
+B. 역제안형: 구매 전략/절감 방안/대안을 능동적으로 제안하는 형태
+   - "~하시는 건 어떨까요?"
+   - "~도 검토해 보시겠습니까?"
+   - "~로 비용을 절감할 수 있는데 안내해 드릴까요?"
+   예시: "장기계약으로 렌탈료를 절감하는 방안도 안내해 드릴까요?"
+   예시: "볼륨 할인 조건을 활용한 비용 절감 전략을 검토해 보시겠습니까?"
+   예시: "공급사 선정 평가 기준에 대해서 알려드릴까요?"
 
 [판단 기준]
-- 좋은 예: 문서에 "운용리스는 리스료를 비용 처리하여 자산 부채에 영향을 주지 않는다"라는 설명이 있음 → "운용리스의 회계 처리 방식에 대해서 알려드릴까요?"
-- 나쁜 예: 문서에 "승계"라는 단어만 있고 구체적 설명 없음 → "승계 기준에 대해서 알려드릴까요?" (금지)
+- 좋은 예(정보형): 문서에 "운용리스는 리스료를 비용 처리하여 자산 부채에 영향을 주지 않는다" → "운용리스의 회계 처리 방식에 대해서 알려드릴까요?"
+- 좋은 예(역제안형): 문서에 "3년 이상 장기계약 시 15~20% 할인" → "장기계약으로 렌탈료를 절감하는 방안도 검토해 보시겠습니까?"
+- 나쁜 예: 문서에 "승계"라는 단어만 있고 설명 없음 → 사용 금지
 
 참조 문서:
 {context}
@@ -322,11 +332,12 @@ SUGGESTION_PROMPT = """당신의 역할: 아래 참조 문서에서 AI 답변이
 사용자 질문: {question}
 AI 답변 요약: {answer_summary}
 
-후속 안내 3개:"""
+A(정보 안내):
+B(역제안):"""
 
 
 def generate_suggestions(question: str, chunks: list[dict], answer_summary: str) -> list[str]:
-    """flash-lite로 검색된 청크 기반 후속 질문 생성 (경량, 빠름)"""
+    """flash-lite로 검색된 청크 기반 후속 질문 생성 (1개 정보형 + 1개 역제안형)"""
     if not chunks:
         return []
 
@@ -350,16 +361,20 @@ def generate_suggestions(question: str, chunks: list[dict], answer_summary: str)
         # 번호 리스트 형식(1. 2. 3.) 또는 줄바꿈 형식 처리
         import re
         lines = re.split(r'\n+', text)
-        if len(lines) >= 2:
-            suggestions = []
-            for line in lines:
-                line = re.sub(r'^\d+[\.\)]\s*', '', line).strip()
-                if line:
-                    suggestions.append(line)
-        else:
-            # 쉼표 구분
+        suggestions = []
+        for line in lines:
+            # "A(정보 안내):", "B(역제안):" 접두사 제거
+            line = re.sub(r'^[AB]\s*[\(（][^)）]*[\)）]\s*[:：]\s*', '', line)
+            line = re.sub(r'^\d+[\.\)]\s*', '', line).strip()
+            # "- " 접두사 제거
+            line = re.sub(r'^[-]\s*', '', line).strip()
+            if line:
+                suggestions.append(line)
+
+        # 쉼표 구분 폴백
+        if len(suggestions) < 2 and ',' in text:
             suggestions = [s.strip() for s in text.split(",") if s.strip()]
 
-        return suggestions[:3]
+        return suggestions[:2]
     except Exception:
         return []

@@ -252,6 +252,30 @@ CATEGORY_TAXONOMY_MAP = {
     "방역 및 해충 방제 서비스":               ("건물 관리", "건물 관리 용역 서비스"),
     "공조기·냉난방기 유지보수":               ("건물 관리", "건물 관리 용역 서비스"),
 
+    # ── Excel 신규DB sub_cat 매핑 ──
+    "디지털 광고 제작 및 운영":               ("마케팅", "디지털 광고"),
+    "바이럴 마케팅 대행":                    ("마케팅", "디지털 광고"),
+    "전자시장정보 구독":                     ("마케팅", "전자시장정보"),
+    "보안경비 용역 서비스":                  ("건물 관리", "건물 관리 용역 서비스"),
+    "조경관리 용역 서비스":                  ("건물 관리", "건물 관리 용역 서비스"),
+    "안전관리 서비스":                       ("건물 관리", "건물 관리 용역 서비스"),
+    "방역소독 서비스":                       ("건물 관리", "건물 관리 용역 서비스"),
+    "물리보안 서비스":                       ("건물 관리", "건물 관리 용역 서비스"),
+    "문서파기 서비스":                       ("건물 관리", "비품 구매/렌탈"),
+    "복합기 렌탈 서비스":                    ("건물 관리", "비품 구매/렌탈"),
+    "비데 렌탈 서비스":                      ("건물 관리", "비품 구매/렌탈"),
+    "정수기 렌탈 서비스":                    ("건물 관리", "비품 구매/렌탈"),
+    "법정의무교육":                          ("교육 서비스", "교육 서비스"),
+    "어학교육":                             ("교육 서비스", "교육 서비스"),
+    "전문교육":                             ("교육 서비스", "교육 서비스"),
+    "법인차량 렌탈 서비스":                  ("차량관리", "법인차"),
+
+    # 대분류명 그대로 사용되는 경우 (sub_cat 없는 청크 폴백)
+    "건물 관리":                             ("건물 관리", "건물 관리 용역 서비스"),
+    "마케팅":                               ("마케팅", "디지털 광고"),
+    "교육 서비스":                           ("교육 서비스", "교육 서비스"),
+    "차량관리":                              ("차량관리", "법인차"),
+
     # ── 인쇄 서비스 (변형) ──
     "명함 제작 서비스":                      ("인쇄 서비스", "명함"),
     "명함·봉투 제작 서비스":                  ("인쇄 서비스", "명함"),
@@ -374,12 +398,16 @@ def main():
 
     supabase = get_client()
 
-    # 1. 전체 청크 조회
-    query = supabase.table("knowledge_chunks").select("id, category, doc_name, content")
+    # 1. 전체 청크 조회 (sub_cat 포함)
+    query = supabase.table("knowledge_chunks").select("id, category, sub_cat, doc_name, content")
     if args.category:
-        query = query.eq("category", args.category)
+        # sub_cat 또는 category로 필터
+        query = query.or_(f"category.eq.{args.category},sub_cat.eq.{args.category}")
     result = query.execute()
     all_chunks = result.data
+    # FAQ 카테고리는 sub_cat 우선, 없으면 category 사용
+    for c in all_chunks:
+        c["faq_category"] = c.get("sub_cat") or c.get("category", "")
     print(f"전체 청크: {len(all_chunks)}개")
 
     # 2. 이미 처리된 chunk_id 조회
@@ -396,7 +424,8 @@ def main():
     # 분류체계 매핑 통계
     taxonomy_stats = {}
     for c in chunks:
-        major, _ = get_taxonomy(c["category"])
+        faq_cat = c.get("faq_category") or c["category"]
+        major, _ = get_taxonomy(faq_cat)
         taxonomy_stats[major] = taxonomy_stats.get(major, 0) + 1
     print("분류체계 매핑:")
     for major, count in sorted(taxonomy_stats.items()):
@@ -419,7 +448,7 @@ def main():
         if (idx + 1) % 50 == 0 or idx == 0:
             print(f"\n--- 진행: {idx+1}/{len(chunks)} | 생성: {total_generated} | 스킵: {total_skipped} | 에러: {total_errors} | {rate:.0f}개/분 ---\n")
 
-        category = chunk["category"]
+        category = chunk.get("faq_category") or chunk["category"]
         doc_name = chunk["doc_name"]
         chunk_id = chunk["id"]
         content = chunk["content"]

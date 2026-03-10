@@ -63,12 +63,12 @@ class GroundingValidator:
         if significant:
             issues.append("답변에 근거 문서에 없는 수치가 포함되어 있을 수 있습니다.")
 
-        # 3. 헌법 규칙 준수
+        # 3. 헌법 규칙 준수 (hot/warm: 역제안·비교 모드에서는 공급업체 언급 허용)
         for rule in rules:
             content = rule.get("content", "")
             rule_type = rule.get("rule_type", "")
             if rule_type == "거부조건":
-                if "공급업체" in content and self._mentions_specific_supplier(answer):
+                if cta_intent not in ("hot", "warm") and "공급업체" in content and self._mentions_specific_supplier(answer):
                     issues.append("특정 공급업체를 추천하는 내용이 감지되었습니다.")
                 if "개인정보" in content and self._contains_pii(answer):
                     issues.append("개인정보가 포함되어 있을 수 있습니다.")

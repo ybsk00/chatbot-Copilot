@@ -48,18 +48,32 @@ RFP_SCHEMAS = {
     },
 }
 
-PHASE_PROMPT = """사용자 메시지와 대화 이력을 분석하여 JSON만 반환하세요. 설명 없이 JSON만.
+PHASE_PROMPT = """사용자 메시지에서 RFP 필드 값을 추출하여 JSON만 반환하세요. 설명 없이 JSON만.
 
-## 판단 기준
-1. rfp_fields: phase가 filling일 때만 추출. 아니면 빈 객체.
-   필드키: {fields}
-2. is_complete: 주요 필드({required_keys}) 모두 채워졌으면 true.
+## 전체 필드 목록
+{fields}
 
-현재 phase: {phase} / 채워진 필드: {filled_keys}
+## 섹션 구조
+{sections}
 
-대화이력: {history}
+## 현재 상태
+- 현재 phase: {phase}
+- 이미 채워진 필드: {filled_keys}
+- 주요 필수 필드: {required_keys}
 
-현재 메시지: {message}
+## 핵심 규칙
+1. 대화 이력에서 AI가 마지막으로 요청한 섹션/필드를 확인하세요.
+2. 사용자의 현재 메시지는 AI가 요청한 필드에 대한 답변입니다.
+3. 쉼표로 구분된 값(예: "65, 15, 10, 10")은 AI가 요청한 필드 순서대로 매핑하세요.
+4. 아직 요청하지 않은 섹션의 필드에 값을 넣지 마세요.
+5. 이미 채워진 필드는 다시 추출하지 마세요.
+6. is_complete: 이미 채워진 필드 + 새로 추출한 필드로 주요 필수 필드가 모두 채워졌으면 true.
 
-출력:
-{{"rfp_fields": {{}}, "is_complete": false}}"""
+## 대화 이력
+{history}
+
+## 현재 사용자 메시지
+{message}
+
+## 출력 형식
+{{"rfp_fields": {{"s15": "65", "s16": "15"}}, "is_complete": false}}"""

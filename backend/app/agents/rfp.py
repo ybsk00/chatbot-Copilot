@@ -45,12 +45,13 @@ class RfpAgent(AgentBase):
                 filled_keys = "없음"
 
             history_text = ""
-            for msg in (ctx.history or [])[-4:]:
+            for msg in (ctx.history or [])[-6:]:
                 role = "사용자" if msg.get("role") == "user" else "AI"
                 history_text += f"{role}: {msg.get('content', '')}\n"
 
             prompt = PHASE_PROMPT.format(
                 fields=schema["fields"],
+                sections=schema.get("sections", ""),
                 required_keys=schema["required"],
                 phase=ctx.phase,
                 filled_keys=filled_keys,

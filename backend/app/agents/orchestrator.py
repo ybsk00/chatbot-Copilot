@@ -213,9 +213,9 @@ class OrchestratorAgent(AgentBase):
                 self.classification.execute(ctx, self._background_pool),
             )
         elif ctx.filling_intent == "rfp_question":
-            # RFP 개념 질문 → Retrieval 크리티컬, RFP 백그라운드
+            # RFP 개념 질문 → Retrieval 스킵 (다른 카테고리 문서 오염 방지)
+            # LLM이 현재 RFP 유형 맥락에서 필드 개념 직접 설명
             await asyncio.gather(
-                self.retrieval.execute(ctx, self._critical_pool),
                 self.rfp.extract_fields(ctx, self._background_pool),
                 self.classification.execute(ctx, self._background_pool),
             )

@@ -40,7 +40,7 @@ def _parse_fields(fields_str: str) -> list[tuple[str, str]]:
 
 
 def _parse_sections(sections_str: str) -> list[dict]:
-    """섹션 문자열 파싱 → [{title, hints}, ...]"""
+    """섹션 문자열 파싱 → [{title, hint_count}, ...]"""
     sections = []
     for line in sections_str.strip().split("\n"):
         line = line.strip()
@@ -48,32 +48,30 @@ def _parse_sections(sections_str: str) -> list[dict]:
             continue
         if "." in line[:4]:
             line = line.split(".", 1)[1].strip()
-        hints = []
         title = line
+        hint_count = 0
         if "(" in line and ")" in line:
             paren_start = line.index("(")
             paren_end = line.rindex(")")
             title = line[:paren_start].strip()
             hints_str = line[paren_start + 1:paren_end]
-            hints = [h.strip() for h in hints_str.split(",") if h.strip()]
-        sections.append({"title": title, "hints": hints})
+            hint_count = len([h.strip() for h in hints_str.split(",") if h.strip()])
+        sections.append({"title": title, "hint_count": hint_count})
     return sections
 
 
-def _match_fields_to_section(hints: list[str], field_list: list[tuple[str, str]]) -> list[str]:
-    """힌트를 필드에 매칭"""
-    matched = []
-    for hint in hints:
-        for key, label in field_list:
-            if (hint in label or label in hint) and key not in matched:
-                matched.append(key)
-                break
-        else:
-            for key, label in field_list:
-                if any(h in label for h in [hint]) and key not in matched:
-                    matched.append(key)
-                    break
-    return matched
+def _assign_fields_to_sections(
+    sections: list[dict], field_list: list[tuple[str, str]]
+) -> list[list[str]]:
+    """섹션별 힌트 개수만큼 필드를 순서대로 할당."""
+    result = []
+    idx = 0
+    for sec in sections:
+        count = sec["hint_count"]
+        keys = [field_list[i][0] for i in range(idx, min(idx + count, len(field_list)))]
+        result.append(keys)
+        idx += count
+    return result
 
 
 def _esc(value) -> str:
@@ -105,16 +103,8 @@ def _render_rfp_html(rfp: dict) -> str:
     field_labels = {k: v for k, v in field_list}
     sections = _parse_sections(schema["sections"])
 
-    # 섹션별 필드 매칭
-    section_fields = []
-    for sec in sections:
-        matched = _match_fields_to_section(sec["hints"], field_list)
-        if not matched and sec["hints"]:
-            for hint in sec["hints"]:
-                for key, label in field_list:
-                    if hint in label and key not in matched:
-                        matched.append(key)
-        section_fields.append(matched)
+    # 섹션별 필드 순서대로 할당
+    section_fields = _assign_fields_to_sections(sections, field_list)
 
     # 기본 정보 추출
     org_name = _esc(fields_data.get("s1", ""))

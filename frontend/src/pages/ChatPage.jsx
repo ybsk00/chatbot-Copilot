@@ -801,6 +801,7 @@ export default function ChatPage() {
             alert("RFP 저장 중입니다. 잠시 후 다시 시도해주세요.");
             return;
           }
+          setEmailTo(fields?.s5?.value || "");
           setShowEmailModal(true);
         }} style={{
           flex:1, padding:"14px", borderRadius: T.r10,

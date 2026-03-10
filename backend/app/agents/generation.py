@@ -8,18 +8,30 @@ from app.constants.rfp_schemas import RFP_SCHEMAS
 
 
 def _build_filled_keys(filled_fields: dict, rfp_type: str) -> str:
-    """filled_fields의 키(s1,s2...)를 한국어 라벨+값으로 변환."""
-    if not filled_fields:
-        return ""
+    """filled_fields의 키(s1,s2...)를 한국어 라벨+값으로 변환 + 미입력 필드 표시."""
     schema = RFP_SCHEMAS.get(rfp_type, RFP_SCHEMAS["service_contract"])
     field_labels = {}
+    all_keys = []
     for pair in schema["fields"].split(", "):
         parts = pair.split(":")
         if len(parts) == 2:
-            field_labels[parts[0].strip()] = parts[1].strip()
-    return ", ".join(
-        f"{field_labels.get(k, k)}: {v}" for k, v in filled_fields.items()
-    )
+            key = parts[0].strip()
+            label = parts[1].strip()
+            field_labels[key] = label
+            all_keys.append(key)
+
+    parts_list = []
+    # 채워진 필드
+    for k in all_keys:
+        if k in filled_fields and filled_fields[k]:
+            parts_list.append(f"{field_labels.get(k, k)}: {filled_fields[k]}")
+
+    # 미입력 필드
+    empty_keys = [field_labels.get(k, k) for k in all_keys if k not in filled_fields or not filled_fields.get(k)]
+    if empty_keys:
+        parts_list.append(f"\n미입력 필드: {', '.join(empty_keys)}")
+
+    return "\n".join(parts_list) if parts_list else ""
 
 
 class GenerationAgent(AgentBase):

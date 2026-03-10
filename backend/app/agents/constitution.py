@@ -66,6 +66,7 @@ class ConstitutionAgent(AgentBase):
                 executor,
                 self.grounding_validator.validate,
                 ctx.answer, ctx.chunks, ctx.constitution_rules,
+                ctx.cta_intent,
             )
             if not validation["grounded"]:
                 ctx.post_check_violation = validation["message"]

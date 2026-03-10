@@ -103,6 +103,7 @@ function ConvHistory() {
   const [selectedDate, setSelectedDate] = useState(formatDate(today.getFullYear(), today.getMonth(), today.getDate()))
   const [page, setPage] = useState(1)
   const [detailConv, setDetailConv] = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
   const [hoveredRow, setHoveredRow] = useState(null)
   const [hoveredDay, setHoveredDay] = useState(null)
 
@@ -116,6 +117,16 @@ function ConvHistory() {
       console.error('Conversations load error:', err)
     }
     setLoading(false)
+  }
+
+  const handleDelete = async (conv) => {
+    try {
+      await api.deleteConversation(conv.id)
+      setConversations(prev => prev.filter(c => c.id !== conv.id))
+      setDeleteTarget(null)
+    } catch (err) {
+      console.error('Delete error:', err)
+    }
   }
 
   // 날짜별 대화 수 집계
@@ -318,7 +329,7 @@ function ConvHistory() {
 
           {/* 테이블 헤더 */}
           <div style={{
-            display: 'grid', gridTemplateColumns: '1fr 140px 100px 70px 80px',
+            display: 'grid', gridTemplateColumns: '1fr 140px 100px 70px 110px',
             padding: '10px 24px', borderBottom: '1px solid #F0F2F5', background: '#FAFBFC',
           }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: '#94A3B8' }}>사용자</div>
@@ -341,7 +352,7 @@ function ConvHistory() {
                   <div
                     key={conv.id}
                     style={{
-                      display: 'grid', gridTemplateColumns: '1fr 140px 100px 70px 80px',
+                      display: 'grid', gridTemplateColumns: '1fr 140px 100px 70px 110px',
                       padding: '14px 24px', alignItems: 'center',
                       borderBottom: idx < paged.length - 1 ? '1px solid #F8FAFC' : 'none',
                       background: hoveredRow === idx ? '#F8FFFE' : 'transparent',
@@ -383,11 +394,11 @@ function ConvHistory() {
                         {conv.status === 'active' ? '진행' : conv.status === 'complete' ? '완료' : conv.status || '-'}
                       </span>
                     </div>
-                    <div style={{ textAlign: 'center' }}>
+                    <div style={{ textAlign: 'center', display: 'flex', gap: 6, justifyContent: 'center' }}>
                       <button
                         onClick={() => setDetailConv(conv)}
                         style={{
-                          padding: '6px 12px', borderRadius: 8, border: '1px solid #E2E8F0',
+                          padding: '6px 10px', borderRadius: 8, border: '1px solid #E2E8F0',
                           background: '#fff', fontSize: 12, fontWeight: 600, color: '#64748B',
                           cursor: 'pointer', transition: 'all 0.15s',
                         }}
@@ -395,6 +406,18 @@ function ConvHistory() {
                         onMouseLeave={e => { e.target.style.borderColor = '#E2E8F0'; e.target.style.color = '#64748B' }}
                       >
                         보기
+                      </button>
+                      <button
+                        onClick={() => setDeleteTarget(conv)}
+                        style={{
+                          padding: '6px 10px', borderRadius: 8, border: '1px solid #E2E8F0',
+                          background: '#fff', fontSize: 12, fontWeight: 600, color: '#94A3B8',
+                          cursor: 'pointer', transition: 'all 0.15s',
+                        }}
+                        onMouseEnter={e => { e.target.style.borderColor = '#EF4444'; e.target.style.color = '#EF4444' }}
+                        onMouseLeave={e => { e.target.style.borderColor = '#E2E8F0'; e.target.style.color = '#94A3B8' }}
+                      >
+                        삭제
                       </button>
                     </div>
                   </div>
@@ -454,6 +477,35 @@ function ConvHistory() {
       {/* 대화 상세 모달 */}
       {detailConv && (
         <DetailModal conv={detailConv} onClose={() => setDetailConv(null)} />
+      )}
+
+      {/* 삭제 확인 모달 */}
+      {deleteTarget && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(4px)',
+        }} onClick={() => setDeleteTarget(null)}>
+          <div style={{
+            background: '#fff', borderRadius: 16, width: 380, padding: '28px 24px',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#1E293B', marginBottom: 8 }}>대화 이력 삭제</div>
+            <div style={{ fontSize: 13, color: '#64748B', lineHeight: 1.6, marginBottom: 20 }}>
+              {deleteTarget.user_name || '익명'} ({new Date(deleteTarget.created_at).toLocaleString('ko-KR')}) 대화를 삭제하시겠습니까?
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setDeleteTarget(null)} style={{
+                padding: '8px 16px', borderRadius: 8, border: '1px solid #E2E8F0',
+                background: '#fff', fontSize: 13, fontWeight: 600, color: '#64748B', cursor: 'pointer',
+              }}>취소</button>
+              <button onClick={() => handleDelete(deleteTarget)} style={{
+                padding: '8px 16px', borderRadius: 8, border: 'none',
+                background: '#EF4444', fontSize: 13, fontWeight: 600, color: '#fff', cursor: 'pointer',
+              }}>삭제</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

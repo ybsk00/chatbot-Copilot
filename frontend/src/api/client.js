@@ -149,6 +149,11 @@ export const api = {
     return res.json();
   },
 
+  async deleteConversation(id) {
+    const res = await fetch(`${API_URL}/admin/conversations/${id}`, { method: "DELETE" });
+    return res.json();
+  },
+
   async getTaxonomy() {
     const res = await fetch(`${API_URL}/admin/taxonomy`);
     return res.json();

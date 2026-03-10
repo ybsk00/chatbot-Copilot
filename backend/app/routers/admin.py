@@ -165,6 +165,13 @@ async def get_conversation(session_id: str):
     return {"conversation": result.data[0] if result.data else None}
 
 
+@router.delete("/conversations/{conversation_id}")
+async def delete_conversation(conversation_id: int):
+    supabase = get_client()
+    supabase.table("conversations").delete().eq("id", conversation_id).execute()
+    return {"status": "deleted"}
+
+
 # ── 분류체계 ──
 @router.get("/taxonomy")
 async def list_taxonomy():

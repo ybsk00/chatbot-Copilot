@@ -6,7 +6,7 @@ from app.rag.retriever import get_faq_suggestions
 from app.rag.generator import generate_suggestions
 from app.rag import prefetcher
 
-RFP_SUGGESTION = "제안요청서(RFP)를 작성하시겠습니까?"
+RFP_SUGGESTION = "RFP 작성하기"
 
 
 class SuggestionAgent(AgentBase):

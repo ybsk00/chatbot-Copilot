@@ -230,20 +230,51 @@ class OrchestratorAgent(AgentBase):
         # ── PHASE 3: 새 필드 머지 + 완성 여부 판단 ──
         trigger = None
         if ctx.phase == "filling":
-            # 새로 추출된 필드를 filled_fields에 머지 (Generation이 최신 상태 참조)
             new_fields = ctx.rfp_fields.get("rfp_fields", {})
-            if new_fields:
-                for k, v in new_fields.items():
-                    if v:
-                        ctx.filled_fields[k] = v
-
             schema = RFP_SCHEMAS.get(ctx.rfp_type, RFP_SCHEMAS["service_contract"])
+
+            if new_fields:
+                # 안전장치: 이전 섹션이 비어있는데 뒤 섹션 필드를 추출한 경우 제거
+                # (LLM 할루시네이션 방지 — 요청하지 않은 섹션 필드 차단)
+                already_filled = set(k for k, v in ctx.filled_fields.items() if v)
+                all_field_keys = [
+                    p.split(":")[0].strip()
+                    for p in schema["fields"].split(", ")
+                    if ":" in p
+                ]
+                safe_fields = {}
+                for k, v in new_fields.items():
+                    if not v:
+                        continue
+                    # 이 필드보다 앞에 있는 필드 중 비어있는 게 2개 이상이면 의심
+                    idx = all_field_keys.index(k) if k in all_field_keys else -1
+                    if idx >= 0:
+                        preceding_empty = sum(
+                            1 for pk in all_field_keys[:idx]
+                            if pk not in already_filled and pk not in new_fields
+                        )
+                        if preceding_empty >= 3:
+                            logger.warning(
+                                f"[Orchestrator] Skipping hallucinated field {k}={v} "
+                                f"({preceding_empty} preceding fields empty)"
+                            )
+                            continue
+                    safe_fields[k] = v
+
+                for k, v in safe_fields.items():
+                    ctx.filled_fields[k] = v
+                # rfp_fields도 안전한 것만 남김
+                ctx.rfp_fields["rfp_fields"] = safe_fields
+
             required_keys = set(k.strip() for k in schema["required"].split(","))
             all_filled = set(k for k, v in ctx.filled_fields.items() if v)
             if required_keys.issubset(all_filled):
                 trigger = "complete"
                 ctx.phase = "complete"  # Generation이 complete 프롬프트 사용
                 logger.info(f"[Orchestrator] RFP complete! required={required_keys}, filled={all_filled}")
+            else:
+                missing = required_keys - all_filled
+                logger.info(f"[Orchestrator] RFP not complete. missing={missing}")
 
         # ── PHASE 4: 헌법 규칙주입 (Retrieval 실행 시만) ──
         if ctx.query_embedding:

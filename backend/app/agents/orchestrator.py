@@ -227,14 +227,19 @@ class OrchestratorAgent(AgentBase):
                 self.retrieval.execute(ctx, self._critical_pool),
             )
 
-        # ── PHASE 3: 완성 여부 판단 (Generation 이전 — complete 프롬프트 전환용) ──
+        # ── PHASE 3: 새 필드 머지 + 완성 여부 판단 ──
         trigger = None
         if ctx.phase == "filling":
+            # 새로 추출된 필드를 filled_fields에 머지 (Generation이 최신 상태 참조)
+            new_fields = ctx.rfp_fields.get("rfp_fields", {})
+            if new_fields:
+                for k, v in new_fields.items():
+                    if v:
+                        ctx.filled_fields[k] = v
+
             schema = RFP_SCHEMAS.get(ctx.rfp_type, RFP_SCHEMAS["service_contract"])
             required_keys = set(k.strip() for k in schema["required"].split(","))
             all_filled = set(k for k, v in ctx.filled_fields.items() if v)
-            new_fields = ctx.rfp_fields.get("rfp_fields", {})
-            all_filled.update(k for k, v in new_fields.items() if v)
             if required_keys.issubset(all_filled):
                 trigger = "complete"
                 ctx.phase = "complete"  # Generation이 complete 프롬프트 사용

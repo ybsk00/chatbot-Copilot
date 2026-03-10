@@ -1,15 +1,19 @@
-"""Suggestion Agent — FAQ 추천 + 프리페치"""
+"""Suggestion Agent — FAQ 추천 + LLM 후속질문 + 프리페치"""
 import time
 from concurrent.futures import ThreadPoolExecutor
 from app.agents.base import AgentBase, AgentContext, AgentResult, AgentPriority
 from app.rag.retriever import get_faq_suggestions
+from app.rag.generator import generate_suggestions
 from app.rag import prefetcher
+
+RFP_SUGGESTION = "제안요청서(RFP)를 작성하시겠습니까?"
 
 
 class SuggestionAgent(AgentBase):
-    """FAQ 추천 에이전트. 레이턴시 예산: <500ms
+    """FAQ 추천 + LLM 후속질문 에이전트. 레이턴시 예산: <500ms
 
-    핵심 변경: ctx.query_embedding 재사용 (embed_query 중복 호출 제거).
+    첫 턴: FAQ 기반 추천 + RFP 유도
+    후속 턴: LLM 기반 후속 질문 생성 + RFP 유도
     """
     name = "suggestion"
     priority = AgentPriority.LOW
@@ -31,7 +35,7 @@ class SuggestionAgent(AgentBase):
                 faq_items = await self.run_in_thread(
                     executor,
                     lambda: get_faq_suggestions(
-                        ctx.query_embedding,  # 재사용! embed_query 추가 호출 없음
+                        ctx.query_embedding,
                         ctx.taxonomy_major,
                         used_ids,
                         top_k=1,
@@ -39,9 +43,26 @@ class SuggestionAgent(AgentBase):
                         answered_text=ctx.answer,
                     ),
                 )
-                ctx.suggestions = faq_items[:1] + ["제안요청서(RFP)를 작성하시겠습니까?"]
+                ctx.suggestions = faq_items[:1] + [RFP_SUGGESTION]
             else:
-                ctx.suggestions = ["제안요청서(RFP)를 작성하시겠습니까?"]
+                # 후속 턴: LLM 기반 후속 질문 생성 (청크 기반)
+                if ctx.chunks and ctx.answer:
+                    llm_suggestions = await self.run_in_thread(
+                        executor,
+                        lambda: generate_suggestions(
+                            ctx.message,
+                            ctx.chunks,
+                            ctx.answer[:200],
+                        ),
+                    )
+                    # RFP 관련 중복 제거
+                    llm_suggestions = [
+                        s for s in llm_suggestions
+                        if "RFP" not in s and "제안요청서" not in s
+                    ]
+                    ctx.suggestions = llm_suggestions[:2] + [RFP_SUGGESTION]
+                else:
+                    ctx.suggestions = [RFP_SUGGESTION]
 
             # 백그라운드 프리페치 (fire-and-forget)
             executor.submit(
@@ -52,5 +73,5 @@ class SuggestionAgent(AgentBase):
             return self._timed_result(start)
         except Exception as e:
             self.logger.warning(f"Suggestions failed: {e}")
-            ctx.suggestions = ["제안요청서(RFP)를 작성하시겠습니까?"]
+            ctx.suggestions = [RFP_SUGGESTION]
             return self._timed_result(start, success=False, error=str(e))

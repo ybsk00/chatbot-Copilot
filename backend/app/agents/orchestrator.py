@@ -220,11 +220,8 @@ class OrchestratorAgent(AgentBase):
 
         # ── PHASE 2: 의도별 에이전트 라우팅 ──
         if ctx.filling_intent == "field_input":
-            # 필드 입력 → RFP만 크리티컬, Retrieval 스킵
-            await asyncio.gather(
-                self.rfp.extract_fields(ctx, self._critical_pool),
-                self.classification.execute(ctx, self._background_pool),
-            )
+            # 필드 입력 → RFP만 크리티컬, Classification/Retrieval 스킵
+            await self.rfp.extract_fields(ctx, self._critical_pool)
         elif ctx.filling_intent == "question":
             # 일반 질문 → Retrieval + RFP 병렬 (질문에 필드 포함 가능)
             await asyncio.gather(

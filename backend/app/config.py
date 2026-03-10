@@ -8,7 +8,7 @@ MODELS = {
     "refinement": "gemini-2.5-flash-lite",
     "embedding":  "gemini-embedding-001",
     "generation": "gemini-2.5-flash-lite",      # flash-lite: thinking 없이 빠른 TTFT
-    "rfp_extract": "gemini-2.5-flash",           # RFP 필드 추출 전용 (정확도 우선)
+    "rfp_extract": "gemini-2.5-flash",           # RFP 필드 추출 전용 (정확도 우선, thinking_budget=0으로 속도 확보)
 }
 EMBEDDING_DIM = 1536
 

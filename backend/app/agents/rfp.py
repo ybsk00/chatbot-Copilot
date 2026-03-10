@@ -4,6 +4,7 @@ import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 from google import genai
+from google.genai import types
 from app.agents.base import AgentBase, AgentContext, AgentResult, AgentPriority
 from app.config import GOOGLE_API_KEY, MODELS
 from app.constants.rfp_schemas import RFP_SCHEMAS, PHASE_PROMPT
@@ -63,6 +64,11 @@ class RfpAgent(AgentBase):
                 response = self._get_client().models.generate_content(
                     model=MODELS.get("rfp_extract", MODELS["refinement"]),
                     contents=prompt,
+                    config=types.GenerateContentConfig(
+                        max_output_tokens=300,
+                        temperature=0.2,
+                        thinking_config=types.ThinkingConfig(thinking_budget=0),
+                    ),
                 )
                 text = response.text.strip()
                 if text.startswith("```"):

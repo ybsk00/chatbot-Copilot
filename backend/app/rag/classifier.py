@@ -58,11 +58,11 @@ CLASSIFY_PROMPT = """사용자의 간접구매 질문을 아래 분류체계에 
 
 # ── 분류체계 → RFP 유형 매핑 (9종) ──
 TAXONOMY_TO_RFP = {
-    "건물 관리":         {"_default": "service_contract", "비품 구매/렌탈": "purchase_maintenance"},
+    "건물 관리":         {"_default": "service_contract", "비품 구매/렌탈": "rental_maintenance"},
     "마케팅":           "service_contract",
     "보험 서비스":       "service",
     "복지 서비스":       {"_default": "service", "의약품": "purchase"},
-    "비품/소모품":       {"_default": "purchase", "사무용가구": "purchase_maintenance", "전자기기": "purchase_lease"},
+    "비품/소모품":       {"_default": "purchase", "사무용가구": "purchase", "전자기기": "purchase_lease"},
     "사무 보조 서비스":   "service",
     "시설 공사":         "construction",
     "인쇄 서비스":       "purchase",
@@ -76,15 +76,31 @@ TAXONOMY_TO_RFP = {
     "전문 용역 서비스":   "consulting",
 }
 
+# ── 렌탈/리스 키워드 오버라이드 ──
+RENTAL_KEYWORDS = ["렌탈", "렌트", "리스", "임대", "대여"]
+MAINTENANCE_KEYWORDS = ["유지보수", "A/S", "정기점검", "필터교체", "소모품"]
 
-def _get_rfp_type(major: str, middle: str | None = None) -> str:
-    """분류체계에서 RFP 유형 결정"""
+
+def _get_rfp_type(major: str, middle: str | None = None, question: str = "") -> str:
+    """분류체계에서 RFP 유형 결정. 렌탈/리스 키워드 감지 시 오버라이드."""
     mapping = TAXONOMY_TO_RFP.get(major, "service_contract")
     if isinstance(mapping, str):
-        return mapping
-    if middle and middle in mapping:
-        return mapping[middle]
-    return mapping.get("_default", "service_contract")
+        base_type = mapping
+    elif middle and middle in mapping:
+        base_type = mapping[middle]
+    else:
+        base_type = mapping.get("_default", "service_contract")
+
+    # 렌탈/리스 키워드가 질문에 포함되면 rental 계열로 오버라이드
+    q = question.lower()
+    has_rental = any(kw in q for kw in RENTAL_KEYWORDS)
+    if has_rental and base_type not in ("rental", "rental_maintenance"):
+        has_maint = any(kw in q for kw in MAINTENANCE_KEYWORDS)
+        if has_maint or base_type in ("purchase_maintenance",):
+            return "rental_maintenance"
+        return "rental"
+
+    return base_type
 
 
 def classify_intent(question: str, history: list[dict] | None = None) -> dict | None:
@@ -122,7 +138,7 @@ def classify_intent(question: str, history: list[dict] | None = None) -> dict | 
             return None
 
         middle = result.get("중분류", "")
-        rfp_type = _get_rfp_type(major, middle)
+        rfp_type = _get_rfp_type(major, middle, question)
         return {"대분류": major, "중분류": middle, "rfp_type": rfp_type}
 
     except Exception:

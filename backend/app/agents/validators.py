@@ -35,9 +35,10 @@ class GroundingValidator:
 
         issues = []
 
-        # 1. 토큰 오버랩
+        # 1. 토큰 오버랩 (짧은 답변은 토큰이 적어 overlap이 부정확 → 스킵)
+        answer_tokens = self._tokenize(answer)
         overlap = self.compute_overlap(answer, chunks)
-        if overlap < 0.30:
+        if len(answer_tokens) >= 20 and overlap < 0.30:
             issues.append(
                 f"답변의 근거 문서 기반율이 낮습니다 ({overlap:.0%}). "
                 "참조 문서를 재확인하시기 바랍니다."

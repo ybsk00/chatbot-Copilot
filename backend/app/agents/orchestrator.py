@@ -49,6 +49,26 @@ class OrchestratorAgent(AgentBase):
         self.suggestion = SuggestionAgent()
         self.rfp = RfpAgent()
 
+    # RFP 유형 한국어 라벨
+    _RFP_TYPE_LABELS = {
+        "purchase": "구매", "service_contract": "용역",
+        "service": "서비스", "rental": "렌탈·리스",
+        "construction": "공사", "consulting": "컨설팅",
+        "purchase_maintenance": "구매·유지보수",
+        "rental_maintenance": "렌탈·유지보수",
+        "purchase_lease": "구매·리스",
+    }
+
+    def _enrich_rfp_query(self, ctx: AgentContext) -> str:
+        """RFP 질문을 현재 맥락으로 보강. 원본 message는 보존하고 검색용만 변경."""
+        # 사업명/공사명 등 개요 필드에서 맥락 추출 (s6이 대부분 사업명)
+        business_name = ctx.filled_fields.get("s6", "")
+        rfp_label = self._RFP_TYPE_LABELS.get(ctx.rfp_type, "")
+        prefix = f"{business_name} {rfp_label}".strip()
+        if prefix:
+            return f"{prefix} {ctx.message}"
+        return ctx.message
+
     def _detect_phase_trigger(self, message: str, phase: str) -> str | None:
         """키워드 기반 phase 전환 감지 (0ms)."""
         msg = message.strip()
@@ -213,12 +233,16 @@ class OrchestratorAgent(AgentBase):
                 self.classification.execute(ctx, self._background_pool),
             )
         elif ctx.filling_intent == "rfp_question":
-            # RFP 개념 질문 → Retrieval 스킵 (다른 카테고리 문서 오염 방지)
-            # LLM이 현재 RFP 유형 맥락에서 필드 개념 직접 설명
+            # RFP 개념 질문 → 검색 쿼리를 현재 RFP 맥락으로 보강
+            # 예: "품질기준이 뭔가요?" → "사무실인테리어 공사 품질기준이 뭔가요?"
+            original_message = ctx.message
+            ctx.message = self._enrich_rfp_query(ctx)
             await asyncio.gather(
+                self.retrieval.execute(ctx, self._critical_pool),
                 self.rfp.extract_fields(ctx, self._background_pool),
                 self.classification.execute(ctx, self._background_pool),
             )
+            ctx.message = original_message  # Generation에는 원본 질문 사용
         else:
             # 폴백 → 전부 실행
             await asyncio.gather(

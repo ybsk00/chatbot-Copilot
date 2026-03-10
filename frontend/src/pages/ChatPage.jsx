@@ -662,8 +662,13 @@ export default function ChatPage() {
         </div>
         <button
           onClick={() => {
-            const tmpl = RFP_TEMPLATES[rfpType];
-            if (tmpl) downloadRfpPdf(fields, tmpl.sections, tmpl.label, fields.s1?.value);
+            if (rfpRequestId) {
+              const baseUrl = import.meta.env.VITE_API_URL || "https://ip-assist-backend-1058034030780.asia-northeast3.run.app";
+              window.open(`${baseUrl}/rfp/view/${rfpRequestId}`, "_blank");
+            } else {
+              const tmpl = RFP_TEMPLATES[rfpType];
+              if (tmpl) downloadRfpPdf(fields, tmpl.sections, tmpl.label, fields.s1?.value);
+            }
             setDownloaded(true);
           }}
           style={{
@@ -781,8 +786,13 @@ export default function ChatPage() {
       {/* 발송 버튼 */}
       <div style={{ marginTop:16, display:"flex", gap:8 }}>
         <button onClick={() => {
-          const tmpl = RFP_TEMPLATES[rfpType];
-          if (tmpl) downloadRfpPdf(fields, tmpl.sections, tmpl.label, fields.s1?.value);
+          if (rfpRequestId) {
+            const baseUrl = import.meta.env.VITE_API_URL || "https://ip-assist-backend-1058034030780.asia-northeast3.run.app";
+            window.open(`${baseUrl}/rfp/view/${rfpRequestId}`, "_blank");
+          } else {
+            const tmpl = RFP_TEMPLATES[rfpType];
+            if (tmpl) downloadRfpPdf(fields, tmpl.sections, tmpl.label, fields.s1?.value);
+          }
           setDownloaded(true);
         }} style={{
           flex:1, padding:"14px", borderRadius: T.r10,

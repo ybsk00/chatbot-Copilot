@@ -61,7 +61,7 @@ class RfpAgent(AgentBase):
 
             def _extract():
                 response = self._get_client().models.generate_content(
-                    model=MODELS["refinement"],
+                    model=MODELS.get("rfp_extract", MODELS["refinement"]),
                     contents=prompt,
                 )
                 text = response.text.strip()

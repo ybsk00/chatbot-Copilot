@@ -1,6 +1,7 @@
 """Chat Router — 멀티에이전트 Orchestrator에 위임하는 얇은 라우터"""
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
@@ -11,6 +12,9 @@ from app.db.supabase_client import get_client
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+# 대화 저장용 백그라운드 풀 (응답 블로킹 방지)
+_save_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="conv-save")
 
 
 def _save_conversation(session_id: str, message: str, answer: str,
@@ -136,8 +140,9 @@ async def chat(req: ChatRequest):
     orchestrator = _get_orchestrator()
     result = await orchestrator.execute_sync(ctx)
 
-    # 대화 이력 저장
-    _save_conversation(
+    # 대화 이력 비동기 저장 (응답 블로킹 방지)
+    _save_pool.submit(
+        _save_conversation,
         req.session_id, req.message, result.get("answer", ""),
         req.category, result.get("rag_score", 0), req.phase, req.history,
     )

@@ -155,8 +155,14 @@ export const api = {
   },
 
   async getDashboard() {
-    const res = await fetch(`${API_URL}/admin/dashboard`);
-    return res.json();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    try {
+      const res = await fetch(`${API_URL}/admin/dashboard`, { signal: controller.signal });
+      return res.json();
+    } finally {
+      clearTimeout(timer);
+    }
   },
 
   // ── RFP 신청 관리 ──

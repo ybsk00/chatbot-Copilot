@@ -1,5 +1,6 @@
 import hashlib
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -10,6 +11,11 @@ from app.services.email_service import send_rfp_email
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+# ── 대시보드 캐시 (60초 TTL) ──
+_dashboard_cache: dict | None = None
+_dashboard_cache_ts: float = 0
+_DASHBOARD_CACHE_TTL = 60  # seconds
 
 
 # ── 로그인 ──
@@ -389,22 +395,38 @@ async def delete_rfp_template(template_id: int):
 
 
 # ── 대시보드 ──
+_dash_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="dash")
+
+
 @router.get("/dashboard")
 async def dashboard():
+    global _dashboard_cache, _dashboard_cache_ts
+
+    # 캐시 유효 → 즉시 반환 (0ms)
+    now = time.time()
+    if _dashboard_cache and (now - _dashboard_cache_ts) < _DASHBOARD_CACHE_TTL:
+        return _dashboard_cache
+
     supabase = get_client()
 
     def count_table(table_name):
         return supabase.table(table_name).select("id", count="exact", head=True).execute()
 
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        f_chunks = pool.submit(count_table, "knowledge_chunks")
-        f_convs = pool.submit(count_table, "conversations")
-        f_suppliers = pool.submit(count_table, "suppliers")
-        f_rules = pool.submit(count_table, "constitution_rules")
+    # 재사용 풀로 병렬 실행 (풀 생성 오버헤드 제거)
+    f_chunks = _dash_pool.submit(count_table, "knowledge_chunks")
+    f_convs = _dash_pool.submit(count_table, "conversations")
+    f_suppliers = _dash_pool.submit(count_table, "suppliers")
+    f_rules = _dash_pool.submit(count_table, "constitution_rules")
 
-    return {
-        "knowledge_chunks": f_chunks.result().count or 0,
-        "conversations": f_convs.result().count or 0,
-        "suppliers": f_suppliers.result().count or 0,
-        "constitution_rules": f_rules.result().count or 0,
+    result = {
+        "knowledge_chunks": f_chunks.result(timeout=10).count or 0,
+        "conversations": f_convs.result(timeout=10).count or 0,
+        "suppliers": f_suppliers.result(timeout=10).count or 0,
+        "constitution_rules": f_rules.result(timeout=10).count or 0,
     }
+
+    # 캐시 갱신
+    _dashboard_cache = result
+    _dashboard_cache_ts = now
+    logger.info(f"[Dashboard] Refreshed in {(time.time()-now)*1000:.0f}ms")
+    return result

@@ -37,15 +37,18 @@ const CARD_STYLES = [
 function Dashboard() {
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   useEffect(() => { loadStats() }, [])
 
   const loadStats = async () => {
+    setError(null)
     try {
       const data = await api.getDashboard()
       setStats(data)
     } catch (err) {
       console.error('Dashboard load error:', err)
+      setError(err.name === 'AbortError' ? '응답 시간 초과 (8초)' : '데이터를 불러올 수 없습니다')
     }
     setLoading(false)
   }
@@ -61,6 +64,20 @@ function Dashboard() {
           }} />
           <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
           <div style={{ fontSize: 14, color: '#94A3B8' }}>대시보드 로딩 중...</div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 400 }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 14, color: '#EF4444', marginBottom: 12 }}>{error}</div>
+          <button onClick={() => { setLoading(true); loadStats() }}
+            style={{ padding: '8px 20px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', cursor: 'pointer', fontSize: 13 }}>
+            다시 시도
+          </button>
         </div>
       </div>
     )

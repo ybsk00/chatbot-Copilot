@@ -179,15 +179,15 @@ class OrchestratorAgent(AgentBase):
         ctx.answer = accumulated
         await gen_task
 
-        # ── PHASE 4: 사후검증 (비차단) ──
-        await self.constitution.post_check(ctx, self._background_pool)
+        # ── PHASE 4+5: 사후검증 + Suggestions 병렬 실행 ──
+        await asyncio.gather(
+            self.constitution.post_check(ctx, self._background_pool),
+            self.suggestion.execute(ctx, self._background_pool),
+        )
         if ctx.post_check_violation:
             yield self._sse("token", {
                 "content": f"\n\n[안내] {ctx.post_check_violation}"
             })
-
-        # ── PHASE 5: Suggestions ──
-        await self.suggestion.execute(ctx, self._background_pool)
         yield self._sse("suggestions", {"items": ctx.suggestions})
         yield self._sse("done", {})
 

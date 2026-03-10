@@ -46,6 +46,29 @@ app.include_router(admin.router)
 app.include_router(rfp_view.router)
 
 
+@app.on_event("startup")
+async def startup_warmup():
+    """콜드 스타트 완화: Gemini 클라이언트 + Supabase 연결 프리웜."""
+    import threading
+
+    def _warmup():
+        try:
+            from app.db.supabase_client import get_client
+            get_client().table("constitution_rules").select("id").limit(1).execute()
+            logger.info("[Warmup] Supabase connection OK")
+        except Exception as e:
+            logger.warning(f"[Warmup] Supabase: {e}")
+        try:
+            from google import genai
+            from app.config import GOOGLE_API_KEY
+            genai.Client(api_key=GOOGLE_API_KEY)
+            logger.info("[Warmup] Gemini client initialized")
+        except Exception as e:
+            logger.warning(f"[Warmup] Gemini: {e}")
+
+    threading.Thread(target=_warmup, daemon=True).start()
+
+
 @app.get("/")
 async def root():
     return {"service": "IP Assist API", "version": "2.0.0", "status": "running"}

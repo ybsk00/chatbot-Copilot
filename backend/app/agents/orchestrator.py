@@ -120,9 +120,17 @@ class OrchestratorAgent(AgentBase):
         """키워드 기반 phase 전환 감지 (0ms)."""
         msg = message.strip()
         if phase in ("chat", "asked"):
-            # 1. 기존 동의 키워드
+            # 1. 기존 동의 키워드 (짧은 응답만 — 긴 문장은 일반 질문일 가능성)
             if any(kw in msg for kw in RFP_AGREE_KEYWORDS):
-                return "rfp_agreed"
+                # 질문형이거나 긴 문장이면 RFP 동의가 아닌 일반 질문으로 판단
+                is_question = any(q in msg for q in self._RFP_QUESTION_MARKERS)
+                is_long = len(msg) > 15
+                if is_question and is_long:
+                    pass  # 일반 질문 → RFP 트리거 안 함
+                elif is_long and not any(kw in msg for kw in ("RFP", "rfp", "제안요청서", "작성해", "작성할", "작성하")):
+                    pass  # 긴 문장인데 RFP/작성 언급 없음 → 일반 질문
+                else:
+                    return "rfp_agreed"
             # 2. RFP 직접 요청 ("rfp 작성해줘", "rfp 할게" 등)
             msg_lower = msg.lower()
             if any(p in msg_lower for p in self._RFP_DIRECT_PATTERNS):

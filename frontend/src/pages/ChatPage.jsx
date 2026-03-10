@@ -312,8 +312,8 @@ export default function ChatPage() {
     ]);
   };
 
-  const handleSend = async () => {
-    const text = userInput.trim();
+  const handleSend = async (directText) => {
+    const text = (directText || userInput).trim();
     if (!text || isTyping) return;
 
     const userMsg = { id: msgIdCounter++, role: "user", text };
@@ -383,9 +383,8 @@ export default function ChatPage() {
           },
           (items) => {
             if (items && items.length > 0) {
-              const suggestionText = "\n\n" + items.join("\n");
               setMessages(prev => prev.map(m =>
-                m.id === aiMsgId ? { ...m, text: m.text + suggestionText } : m
+                m.id === aiMsgId ? { ...m, suggestions: items } : m
               ));
             }
           },
@@ -1346,6 +1345,31 @@ export default function ChatPage() {
                         ))}
                       </span>
                     ) : null}
+                  </div>
+                )}
+
+                {/* 추천 질문 버튼 */}
+                {msg.suggestions && msg.suggestions.length > 0 && !msg.isStreaming && (
+                  <div style={{ display:"flex", flexDirection:"column", gap:6, marginTop:4 }}>
+                    {msg.suggestions.map((item, i) => (
+                      <button key={i} onClick={() => handleSend(item)} style={{
+                        padding:"9px 14px", borderRadius: T.r10,
+                        border:`1px solid ${item.includes("RFP") || item.includes("제안요청서") ? 'rgba(14,165,160,0.3)' : 'rgba(14,165,160,0.12)'}`,
+                        background: item.includes("RFP") || item.includes("제안요청서")
+                          ? 'linear-gradient(135deg, rgba(14,165,160,0.08), rgba(14,165,160,0.04))'
+                          : 'rgba(255,255,255,0.7)',
+                        color: T.text, fontSize:12, fontWeight: item.includes("RFP") || item.includes("제안요청서") ? 600 : 500,
+                        cursor:"pointer", textAlign:"left", fontFamily:"inherit",
+                        transition:"all 0.15s", display:"flex", alignItems:"center", gap:6,
+                        backdropFilter:"blur(4px)", WebkitBackdropFilter:"blur(4px)",
+                      }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = T.primary; e.currentTarget.style.background = 'rgba(14,165,160,0.06)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = item.includes("RFP") || item.includes("제안요청서") ? 'rgba(14,165,160,0.3)' : 'rgba(14,165,160,0.12)'; e.currentTarget.style.background = item.includes("RFP") || item.includes("제안요청서") ? 'linear-gradient(135deg, rgba(14,165,160,0.08), rgba(14,165,160,0.04))' : 'rgba(255,255,255,0.7)'; }}
+                      >
+                        <span style={{ color: T.primary, fontSize:13 }}>›</span>
+                        {item}
+                      </button>
+                    ))}
                   </div>
                 )}
 

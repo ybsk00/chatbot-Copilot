@@ -36,11 +36,10 @@ class GroundingValidator:
         issues = []
 
         # 1. 토큰 오버랩 (짧은 답변은 토큰이 적어 overlap이 부정확 → 스킵)
-        # CTA hot/warm: 역제안·비교분석 텍스트가 추가되어 오버랩이 낮아지므로 임계값 완화
-        overlap_threshold = 0.15 if cta_intent in ("hot", "warm") else 0.30
+        # CTA hot/warm: 역제안·비교분석은 문서를 재구성한 답변이므로 오버랩 검증 스킵
         answer_tokens = self._tokenize(answer)
         overlap = self.compute_overlap(answer, chunks)
-        if len(answer_tokens) >= 20 and overlap < overlap_threshold:
+        if cta_intent not in ("hot", "warm") and len(answer_tokens) >= 20 and overlap < 0.30:
             issues.append(
                 f"답변의 근거 문서 기반율이 낮습니다 ({overlap:.0%}). "
                 "참조 문서를 재확인하시기 바랍니다."

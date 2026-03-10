@@ -347,9 +347,15 @@ class OrchestratorAgent(AgentBase):
             self.suggestion.execute(ctx, self._background_pool),
         )
         if ctx.post_check_violation:
-            yield self._sse("token", {
-                "content": f"\n\n[안내] {ctx.post_check_violation}"
-            })
+            # 근거 없는 수치 → 답변 끝에 경고 추가
+            if "수치" in ctx.post_check_violation:
+                yield self._sse("token", {
+                    "content": "\n\n[안내] 위 답변에는 참조 문서에서 확인되지 않은 수치가 포함되어 있을 수 있습니다. 정확한 수치는 별도 확인이 필요합니다."
+                })
+            else:
+                yield self._sse("token", {
+                    "content": f"\n\n[안내] {ctx.post_check_violation}"
+                })
         yield self._sse("suggestions", {"items": ctx.suggestions})
         yield self._sse("done", {})
 

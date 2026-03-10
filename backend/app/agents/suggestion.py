@@ -19,6 +19,16 @@ class SuggestionAgent(AgentBase):
     name = "suggestion"
     priority = AgentPriority.LOW
 
+    @staticmethod
+    def _is_relevant(suggestion: str, chunks: list[dict], answer: str) -> bool:
+        """추천 질문이 현재 청크/답변과 관련 있는지 검증.
+        추천에 포함된 명사(3글자+)가 청크나 답변에 1개 이상 있어야 통과."""
+        combined = answer + " " + " ".join(c.get("content", "")[:200] for c in chunks)
+        words = [w for w in suggestion.split() if len(w) >= 3]
+        if not words:
+            return True  # 검증 불가 → 통과
+        return any(w in combined for w in words)
+
     async def execute(self, ctx: AgentContext, executor: ThreadPoolExecutor) -> AgentResult:
         start = time.time()
         try:
@@ -64,6 +74,7 @@ class SuggestionAgent(AgentBase):
                     llm_suggestions = [
                         s for s in llm_suggestions
                         if "RFP" not in s and "제안요청서" not in s
+                        and self._is_relevant(s, ctx.chunks, ctx.answer)
                     ]
                     ctx.suggestions = llm_suggestions[:2] + [RFP_SUGGESTION]
                 else:

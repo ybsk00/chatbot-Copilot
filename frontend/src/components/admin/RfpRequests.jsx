@@ -24,6 +24,25 @@ const RFP_TYPE_LABELS = {
   purchase_lease: '구매·리스',
 }
 
+// RFP 스키마 필드 라벨 (rfp_schemas.py와 동일)
+const RFP_FIELD_LABELS = {
+  purchase: "s1:발주기관명, s2:담당부서, s3:담당자, s4:연락처, s5:이메일, s6:구매품목, s7:구매목적, s8:수량, s9:납품기한, s10:요구사양, s11:품질기준, s12:납품조건, s13:평가①가격경쟁력, s14:평가②품질신뢰도, s15:평가③납기준수, s16:평가④기술역량, s17:제출기한, s18:제출방식",
+  service_contract: "s1:발주기관명, s2:담당부서, s3:담당자, s4:연락처, s5:이메일, s6:사업명, s7:사업목적, s8:계약형태, s9:수행기간, s10:대상인원, s11:서비스범위, s12:수행방식, s13:요구사양, s14:SLA기준, s15:평가①가격경쟁력, s16:평가②전문성실적, s17:평가③ESG대응, s18:평가④기술역량, s19:제출기한, s20:제출방식",
+  service: "s1:발주기관명, s2:담당부서, s3:담당자, s4:연락처, s5:이메일, s6:서비스명, s7:서비스목적, s8:계약기간, s9:대상규모, s10:서비스범위, s11:제공방식, s12:품질SLA기준, s13:보안요건, s14:평가①가격경쟁력, s15:평가②서비스품질, s16:평가③안정성신뢰도, s17:평가④ESG대응, s18:제출기한, s19:제출방식",
+  rental: "s1:발주기관명, s2:담당부서, s3:담당자, s4:연락처, s5:이메일, s6:사업명, s7:계약목적, s8:리스렌탈형태, s9:계약기간, s10:대상규모, s11:요구사양, s12:포함서비스, s13:유지보수기준, s14:반납인수조건, s15:평가①총비용TCO, s16:평가②서비스품질, s17:평가③신뢰도실적, s18:평가④ESG대응, s19:제출기한, s20:제출방식",
+  construction: "s1:발주기관명, s2:담당부서, s3:담당자, s4:연락처, s5:이메일, s6:공사명, s7:공사목적, s8:공사기간, s9:공사규모면적, s10:공사범위, s11:요구사양, s12:품질기준, s13:안전기준, s14:평가①가격경쟁력, s15:평가②시공실적, s16:평가③기술역량, s17:평가④안전관리, s18:제출기한, s19:제출방식",
+  consulting: "s1:발주기관명, s2:담당부서, s3:담당자, s4:연락처, s5:이메일, s6:사업명, s7:사업목적, s8:수행기간, s9:투입인력, s10:컨설팅범위, s11:요구역량, s12:산출물, s13:보안기밀요건, s14:평가①전문성실적, s15:평가②투입인력역량, s16:평가③가격경쟁력, s17:평가④방법론, s18:제출기한, s19:제출방식",
+  purchase_maintenance: "s1:발주기관명, s2:담당부서, s3:담당자, s4:연락처, s5:이메일, s6:구매품목, s7:구매목적, s8:수량, s9:납품기한, s10:요구사양, s11:품질기준, s12:유지보수범위, s13:유지보수기간, s14:A/S조건, s15:소모품교체기준, s16:평가①가격경쟁력, s17:평가②품질신뢰도, s18:평가③유지보수역량, s19:평가④기술지원, s20:제출기한, s21:제출방식",
+  rental_maintenance: "s1:발주기관명, s2:담당부서, s3:담당자, s4:연락처, s5:이메일, s6:사업명, s7:계약목적, s8:렌탈형태, s9:계약기간, s10:대상규모, s11:요구사양, s12:포함서비스, s13:유지보수SLA, s14:장애대응기준, s15:소모품포함여부, s16:반납인수조건, s17:평가①총비용TCO, s18:평가②유지보수품질, s19:평가③신뢰도실적, s20:평가④ESG대응, s21:제출기한, s22:제출방식",
+  purchase_lease: "s1:발주기관명, s2:담당부서, s3:담당자, s4:연락처, s5:이메일, s6:대상장비, s7:도입목적, s8:계약형태, s9:수량, s10:계약기간, s11:요구사양, s12:품질기준, s13:리스조건, s14:중도해지조건, s15:잔존가치처리, s16:평가①총비용TCO, s17:평가②장비성능, s18:평가③기술지원, s19:평가④ESG대응, s20:제출기한, s21:제출방식",
+}
+
+function getFieldLabel(rfpType, key) {
+  const str = RFP_FIELD_LABELS[rfpType] || ""
+  const match = str.match(new RegExp(`${key}:([^,]+)`))
+  return match ? match[1].trim() : key
+}
+
 /* ── 달력 유틸 ── */
 function getDaysInMonth(y, m) { return new Date(y, m + 1, 0).getDate() }
 function getFirstDayOfWeek(y, m) { return new Date(y, m, 1).getDay() }
@@ -113,14 +132,22 @@ function DetailModal({ req, onClose, onStatusChange, onDelete }) {
           {/* 입력 필드 */}
           {req.fields && Object.keys(req.fields).length > 0 && (
             <>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 8 }}>입력 필드</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 8 }}>RFP 입력 필드</div>
               <div style={{ background: '#FAFBFC', borderRadius: 12, overflow: 'hidden' }}>
-                {Object.entries(req.fields).map(([k, v], i, arr) => (
+                {Object.entries(req.fields)
+                  .sort(([a], [b]) => {
+                    const na = parseInt(a.replace('s', ''), 10) || 0
+                    const nb = parseInt(b.replace('s', ''), 10) || 0
+                    return na - nb
+                  })
+                  .map(([k, v], i, arr) => (
                   <div key={k} style={{
                     display: 'flex', padding: '10px 16px',
                     borderBottom: i < arr.length - 1 ? '1px solid #F0F2F5' : 'none',
                   }}>
-                    <span style={{ width: 128, fontSize: 12, color: '#94A3B8', fontWeight: 500, flexShrink: 0 }}>{k}</span>
+                    <span style={{ width: 140, fontSize: 12, color: '#94A3B8', fontWeight: 500, flexShrink: 0 }}>
+                      {getFieldLabel(req.rfp_type, k)}
+                    </span>
                     <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: '#1E293B' }}>{String(v)}</span>
                   </div>
                 ))}

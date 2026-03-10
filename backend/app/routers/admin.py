@@ -261,7 +261,7 @@ class RfpStatusUpdate(BaseModel):
 async def list_rfp_requests(status: str | None = None, limit: int = 50):
     supabase = get_client()
     query = supabase.table("rfp_requests").select(
-        "id, session_id, user_name, department, category, template_type, status, created_at, updated_at"
+        "id, session_id, rfp_type, title, org_name, department, requester, fields, status, created_at, updated_at"
     )
     if status:
         query = query.eq("status", status)

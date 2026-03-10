@@ -194,6 +194,11 @@ class OrchestratorAgent(AgentBase):
         )
         await asyncio.gather(classification_task, retrieval_task)
 
+        # CTA 의도 추출
+        if ctx.classification and ctx.classification.get("cta"):
+            ctx.cta_intent = ctx.classification["cta"]
+            logger.info(f"[Orchestrator] CTA intent: {ctx.cta_intent}")
+
         # ── GATE 3: 신뢰도 거부 ──
         if ctx.confidence_rejected:
             yield self._sse("meta", {
@@ -220,6 +225,7 @@ class OrchestratorAgent(AgentBase):
             "rag_score": round(ctx.rag_score, 4),
             "phase_trigger": ctx.phase_trigger,
             "classification": ctx.classification,
+            "cta_intent": ctx.cta_intent,
         })
 
         # ── PHASE 3: 스트리밍 생성 ──
@@ -265,6 +271,7 @@ class OrchestratorAgent(AgentBase):
         ctx.timings["total_ms"] = (time.time() - total_start) * 1000
         logger.info(
             f"[Orchestrator] Total: {ctx.timings['total_ms']:.0f}ms | "
+            f"CTA: {ctx.cta_intent} | "
             f"Classification: {ctx.timings.get('classification_ms', 0):.0f}ms | "
             f"Retrieval: {ctx.timings.get('retrieval_ms', 0):.0f}ms | "
             f"Constitution: {ctx.timings.get('constitution_inject_ms', 0):.0f}ms | "

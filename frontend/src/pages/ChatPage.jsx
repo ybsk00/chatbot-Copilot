@@ -63,6 +63,13 @@ const IconDownload = ({ size = 16 }) => (
   </svg>
 );
 
+const IconPreview = ({ size = 14 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+
 const IconSearch = ({ size = 14 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
@@ -655,32 +662,30 @@ export default function ChatPage() {
         <IconParty size={32} />
         <div>
           <div style={{ fontSize:14, fontWeight:800, color: T.greenDark }}>RFP 작성 완료!</div>
-          <div style={{ fontSize:11, color:"#16a34a", marginTop:3 }}>모든 항목이 입력되었습니다. 다운로드 후 공급업체에 발송하세요.</div>
+          <div style={{ fontSize:11, color:"#16a34a", marginTop:3 }}>미리보기로 확인 후 다운로드하세요.</div>
         </div>
         <button
           onClick={() => {
+            const baseUrl = import.meta.env.VITE_API_URL || "https://ip-assist-backend-1058034030780.asia-northeast3.run.app";
             if (rfpRequestId) {
-              const baseUrl = import.meta.env.VITE_API_URL || "https://ip-assist-backend-1058034030780.asia-northeast3.run.app";
               window.open(`${baseUrl}/rfp/view/${rfpRequestId}`, "_blank");
             } else {
               const tmpl = RFP_TEMPLATES[rfpType];
               if (tmpl) downloadRfpPdf(fields, tmpl.sections, tmpl.label, fields.s1?.value);
             }
-            setDownloaded(true);
           }}
           style={{
             marginLeft:"auto", padding:"10px 22px", borderRadius: T.r10,
-            border:"none",
-            background: downloaded ? T.greenDark : T.gradPrimary,
-            color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
-            whiteSpace:"nowrap", transition:"all 0.3s",
+            border:`1.5px solid ${T.primary}`,
+            background: "rgba(14,165,160,0.06)",
+            color: T.primary, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
+            whiteSpace:"nowrap", transition:"all 0.2s",
             display:"flex", alignItems:"center", gap:6,
-            boxShadow: downloaded ? "none" : T.shadowBlue,
           }}
-          onMouseEnter={e => { if(!downloaded) e.currentTarget.style.transform = "scale(1.04)"; }}
-          onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
+          onMouseEnter={e => e.currentTarget.style.background = "rgba(14,165,160,0.12)"}
+          onMouseLeave={e => e.currentTarget.style.background = "rgba(14,165,160,0.06)"}
         >
-          {downloaded ? <><IconCheck /> 다운로드 완료</> : <><IconDownload /> RFP 다운로드</>}
+          <IconPreview size={14} /> 미리보기
         </button>
       </div>
 
@@ -782,6 +787,26 @@ export default function ChatPage() {
 
       {/* 발송 버튼 */}
       <div style={{ marginTop:16, display:"flex", gap:8 }}>
+        <button onClick={() => {
+          const baseUrl = import.meta.env.VITE_API_URL || "https://ip-assist-backend-1058034030780.asia-northeast3.run.app";
+          if (rfpRequestId) {
+            window.open(`${baseUrl}/rfp/view/${rfpRequestId}`, "_blank");
+          } else {
+            const tmpl = RFP_TEMPLATES[rfpType];
+            if (tmpl) downloadRfpPdf(fields, tmpl.sections, tmpl.label, fields.s1?.value);
+          }
+        }} style={{
+          flex:1, padding:"14px", borderRadius: T.r10,
+          border:`1px solid ${T.primary}`, background: "rgba(14,165,160,0.04)",
+          color: T.primary, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
+          display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+          transition:"all 0.2s",
+        }}
+          onMouseEnter={e => { e.currentTarget.style.background = "rgba(14,165,160,0.1)"; }}
+          onMouseLeave={e => { e.currentTarget.style.background = "rgba(14,165,160,0.04)"; }}
+        >
+          <IconPreview size={14} /> 미리보기
+        </button>
         <button onClick={() => {
           if (rfpRequestId) {
             const baseUrl = import.meta.env.VITE_API_URL || "https://ip-assist-backend-1058034030780.asia-northeast3.run.app";

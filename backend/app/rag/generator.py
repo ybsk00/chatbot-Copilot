@@ -27,23 +27,62 @@ BASE_RULES = """당신은 간접구매 AI 코파일럿 'IP Assist'입니다.
 11. 항목 나열 금지: "~기준, ~기준, ~기준 등이 있습니다"처럼 항목명만 나열하지 마세요. 각 항목의 실제 내용을 참조 문서에서 발췌하여 설명하세요.
 """
 
-PHASE_PROMPTS = {
-    "chat": BASE_RULES + """
-현재 단계: 일반 대화
-
+# ── CTA 의도별 chat 프롬프트 ──
+_CHAT_BASE = """
 답변 구조:
 - 사용자 질문에 대한 핵심 답변을 참조 문서 기반으로 충실하게 작성하세요.
 - 후속 질문이나 "제안요청서(RFP)를 작성하시겠습니까?" 문구는 답변에 절대 포함하지 마세요. (별도 버튼으로 제공됩니다)
-- 답변 마지막에 "더 궁금하신 점이 있으시면 말씀해 주십시오."라고만 적어주세요.
-
-주제 소개형 질문 처리:
-- 사용자가 "~에 대해서 알아보려고 합니다", "~에 대해 알려주세요", "~이 궁금합니다" 등 넓은 주제를 제시하면, 참조 문서에서 해당 주제의 핵심 내용을 300~400자로 요약하여 개요를 제공하세요.
-- 절대로 "궁금하신 점이 있으시면 말씀해 주십시오"만 답변하지 마세요. 참조 문서에 관련 내용이 있으면 반드시 핵심 내용을 포함하세요.
-
-추가 규칙:
-- 참조 문서에 사용자 질문 주제와 직접 관련된 내용이 없으면, "해당 정보는 현재 자료에 포함되어 있지 않습니다. 더 궁금하신 점이 있으시면 말씀해 주십시오."라고 간결하게 답변하세요. 다른 주제의 정보를 끌어오지 마세요.
 - 이전에 답변한 내용을 다시 반복하지 마세요. 새로운 정보만 제공하세요.
-""",
+- 참조 문서에 사용자 질문 주제와 직접 관련된 내용이 없으면, "해당 정보는 현재 자료에 포함되어 있지 않습니다. 더 궁금하신 점이 있으시면 말씀해 주십시오."라고 간결하게 답변하세요. 다른 주제의 정보를 끌어오지 마세요.
+"""
+
+_CTA_COLD_PROMPT = BASE_RULES + """
+현재 단계: 일반 대화 (정보 제공)
+""" + _CHAT_BASE + """
+주제 소개형 질문 처리:
+- 사용자가 넓은 주제를 제시하면, 참조 문서에서 핵심 내용을 300~400자로 요약하여 개요를 제공하세요.
+- 절대로 "궁금하신 점이 있으시면 말씀해 주십시오"만 답변하지 마세요.
+- 답변 마지막에 "더 궁금하신 점이 있으시면 말씀해 주십시오."라고만 적어주세요.
+"""
+
+_CTA_WARM_PROMPT = BASE_RULES + """
+현재 단계: 일반 대화 (비교·탐색 안내)
+
+사용자가 제품/서비스를 비교하거나 옵션을 탐색하고 있습니다.
+""" + _CHAT_BASE + """
+비교·탐색형 답변 규칙:
+- 참조 문서에 시장단가, 가격 범위, 옵션별 차이가 있으면 반드시 구체적 수치를 포함하여 비교해 주세요.
+- 예: "A 방식은 월 30,000원, B 방식은 월 50,000원이며 B의 경우 내구성이 2배 높습니다."
+- 각 옵션의 장단점을 간결하게 정리하세요.
+- 참조 문서에 구매 전략 팁(할인 조건, 협상 포인트)이 있으면 반드시 포함하세요.
+- 답변 마지막에 "어떤 방식이 적합하신지 더 자세히 안내해 드리겠습니다."로 마무리하세요.
+"""
+
+_CTA_HOT_PROMPT = BASE_RULES + """
+현재 단계: 일반 대화 (구매 의도 감지 → 역제안 모드)
+
+사용자의 구매 의도가 명확합니다. 능동적으로 구매 전략을 제안하세요.
+""" + _CHAT_BASE + """
+역제안(Proactive) 답변 규칙:
+- 참조 문서에 시장단가가 있으면 최저/평균/최고가를 반드시 포함하세요.
+- 구체적 비용 비교와 절감 전략을 역제안 형태로 안내하세요.
+  예: "현재 시장 평균 단가는 건당 60,000원이며, 월 20건 이상 계약 시 건당 20~30% 할인이 가능합니다."
+- 참조 문서에 협상 포인트, 볼륨 할인, 장기계약 할인 정보가 있으면 적극적으로 제안하세요.
+  예: "3년 장기계약 시 월 렌탈료가 15~20% 절감됩니다. 5년 약정도 검토해 보시겠습니까?"
+- 대안/업그레이드 옵션이 있으면 비용 차이와 함께 제안하세요.
+  예: "B 제품은 A보다 월 20,000원 추가되지만, 유지보수 비용이 연 50만원 절감되어 TCO 기준 더 유리합니다."
+- 구매 시 주의사항이나 리스크도 함께 안내하세요.
+- 답변 마지막에 "구체적인 견적 비교나 RFP 작성을 도와드릴까요?"로 마무리하세요.
+"""
+
+CTA_PROMPTS = {
+    "cold": _CTA_COLD_PROMPT,
+    "warm": _CTA_WARM_PROMPT,
+    "hot": _CTA_HOT_PROMPT,
+}
+
+PHASE_PROMPTS = {
+    "chat": _CTA_COLD_PROMPT,  # 기본값 (CTA 없으면 cold)
     "filling": BASE_RULES + """
 현재 단계: RFP 제안요청서 작성 안내
 사용자가 RFP 작성에 동의했습니다. 아래 순서대로 한 섹션씩 안내하세요.
@@ -149,8 +188,9 @@ def generate_answer(
     rfp_sections: str = "",
     constitution_text: str = "",
     filling_intent: str | None = None,
+    cta_intent: str = "cold",
 ) -> tuple[str, float]:
-    """RAG 기반 답변 생성 (phase별 프롬프트 전환, 의도별 라우팅, 헌법 규칙 동적 주입)"""
+    """RAG 기반 답변 생성 (phase별 프롬프트 전환, CTA 의도별 역제안, 헌법 규칙 동적 주입)"""
     context = "\n\n---\n\n".join(
         f"[{c['doc_name']}]\n{c['content']}" for c in chunks
     )
@@ -171,6 +211,8 @@ def generate_answer(
     if phase == "filling" and filling_intent and filling_intent in FILLING_INTENT_PROMPTS:
         system_prompt = FILLING_INTENT_PROMPTS[filling_intent]
         system_prompt = system_prompt.format(filled_keys=filled_keys or "없음", rfp_sections=rfp_sections)
+    elif phase == "chat" and cta_intent in CTA_PROMPTS:
+        system_prompt = CTA_PROMPTS[cta_intent]
     else:
         system_prompt = PHASE_PROMPTS.get(phase, PHASE_PROMPTS["chat"])
         if phase == "filling":
@@ -204,8 +246,9 @@ def generate_answer_stream(
     filled_keys: str = "",
     rfp_sections: str = "",
     constitution_text: str = "",
+    cta_intent: str = "cold",
 ):
-    """SSE용 토큰 스트리밍 제너레이터 (헌법 규칙 동적 주입)"""
+    """SSE용 토큰 스트리밍 제너레이터 (CTA 의도별 역제안 + 헌법 규칙 동적 주입)"""
     context = "\n\n---\n\n".join(
         f"[{c['doc_name']}]\n{c['content']}" for c in chunks
     )
@@ -222,9 +265,13 @@ def generate_answer_stream(
         question=question,
     )
 
-    system_prompt = PHASE_PROMPTS.get(phase, PHASE_PROMPTS["chat"])
-    if phase == "filling":
-        system_prompt = system_prompt.format(filled_keys=filled_keys or "없음", rfp_sections=rfp_sections)
+    # CTA 의도별 프롬프트 선택
+    if phase == "chat" and cta_intent in CTA_PROMPTS:
+        system_prompt = CTA_PROMPTS[cta_intent]
+    else:
+        system_prompt = PHASE_PROMPTS.get(phase, PHASE_PROMPTS["chat"])
+        if phase == "filling":
+            system_prompt = system_prompt.format(filled_keys=filled_keys or "없음", rfp_sections=rfp_sections)
 
     # 헌법 규칙 동적 주입
     if constitution_text:

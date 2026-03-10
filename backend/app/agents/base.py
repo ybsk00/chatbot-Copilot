@@ -39,6 +39,7 @@ class AgentContext:
     taxonomy_major: str | None = None
     taxonomy_middle: str | None = None
     classification: dict | None = None
+    cta_intent: str = "cold"  # "hot" | "warm" | "cold"
     chunks: list[dict] = field(default_factory=list)
     constitution_rules: list[dict] = field(default_factory=list)
     constitution_text: str = ""

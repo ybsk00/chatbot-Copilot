@@ -39,21 +39,26 @@ TAXONOMY_TEXT = "\n".join(
     for major, middles in TAXONOMY.items()
 )
 
-CLASSIFY_PROMPT = """사용자의 간접구매 질문을 아래 분류체계에 매칭하세요. JSON만 반환.
+CLASSIFY_PROMPT = """사용자의 간접구매 질문을 아래 분류체계에 매칭하고, 구매 의도(CTA)를 판단하세요. JSON만 반환.
 
 [분류체계]
 {taxonomy}
 
+[CTA 의도 판단 기준]
+- "hot": 구매/발주/도입 의사가 명확함 (예: "설치하고 싶어요", "견적 받고 싶어요", "50대 필요해요", "계약하려고", "도입 검토 중")
+- "warm": 비교/탐색/검토 중 (예: "종류가 뭐가 있어요?", "A랑 B 차이", "추천해주세요", "비용이 얼마나", "어떤 게 좋을까")
+- "cold": 일반 정보 수집/개념 질문 (예: "뭔가요?", "알려주세요", "설명해주세요", "절차가 어떻게")
+
 [규칙]
 1. 가장 관련 있는 대분류와 중분류 1개를 선택하세요.
-2. 매칭 불가 시 null을 반환하세요.
+2. 매칭 불가 시 대분류/중분류는 null, cta는 "cold"를 반환하세요.
 3. JSON만 반환, 설명 없이.
 4. 대화 이력이 있으면 맥락을 반드시 참고하세요. 짧거나 모호한 질문은 이전 대화 주제와 같은 분류로 판단하세요.
 
 {history_section}[사용자 질문]
 {question}
 
-출력: {{"대분류": "...", "중분류": "..."}}"""
+출력: {{"대분류": "...", "중분류": "...", "cta": "hot|warm|cold"}}"""
 
 
 # ── 분류체계 → RFP 유형 매핑 (9종) ──
@@ -103,6 +108,31 @@ def _get_rfp_type(major: str, middle: str | None = None, question: str = "") -> 
     return base_type
 
 
+# ── CTA 키워드 사전감지 (LLM 결과 보정용) ──
+_CTA_HOT_KEYWORDS = [
+    "설치하고", "도입하고", "계약하고", "발주하고", "구매하고",
+    "설치할", "도입할", "계약할", "발주할", "구매할",
+    "견적", "설치 예정", "도입 예정", "계약 예정",
+    "필요해", "필요합니다", "신청하고", "주문하고",
+    "검토 중", "검토중", "도입 검토", "구매 검토",
+]
+_CTA_WARM_KEYWORDS = [
+    "비교", "차이", "추천", "어떤 게", "뭐가 좋", "얼마나", "얼마",
+    "종류", "옵션", "대안", "선택", "장단점", "비용",
+    "가격", "단가", "견적서", "시세", "시장가",
+]
+
+
+def _detect_cta_keyword(question: str) -> str | None:
+    """키워드 기반 CTA 사전감지. 확실한 경우만 반환."""
+    q = question.lower()
+    if any(kw in q for kw in _CTA_HOT_KEYWORDS):
+        return "hot"
+    if any(kw in q for kw in _CTA_WARM_KEYWORDS):
+        return "warm"
+    return None
+
+
 def classify_intent(question: str, history: list[dict] | None = None) -> dict | None:
     """사용자 질문을 분류체계(대분류/중분류)에 매칭 + RFP 유형 추천. 매칭 불가 시 None."""
     history_section = ""
@@ -138,8 +168,17 @@ def classify_intent(question: str, history: list[dict] | None = None) -> dict | 
             return None
 
         middle = result.get("중분류", "")
+        cta = result.get("cta", "cold")
+        if cta not in ("hot", "warm", "cold"):
+            cta = "cold"
+        # 키워드 보정: LLM이 cold인데 키워드가 hot/warm이면 상향
+        kw_cta = _detect_cta_keyword(question)
+        if kw_cta == "hot" and cta != "hot":
+            cta = "hot"
+        elif kw_cta == "warm" and cta == "cold":
+            cta = "warm"
         rfp_type = _get_rfp_type(major, middle, question)
-        return {"대분류": major, "중분류": middle, "rfp_type": rfp_type}
+        return {"대분류": major, "중분류": middle, "rfp_type": rfp_type, "cta": cta}
 
     except Exception:
         return None

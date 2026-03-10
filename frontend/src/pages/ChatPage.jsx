@@ -320,7 +320,7 @@ export default function ChatPage() {
   };
 
   const handleSend = async (directText) => {
-    const text = (directText || userInput).trim();
+    const text = (typeof directText === "string" ? directText : userInput).trim();
     if (!text || isTyping) return;
 
     const userMsg = { id: msgIdCounter++, role: "user", text };

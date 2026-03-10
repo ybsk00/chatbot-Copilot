@@ -24,6 +24,76 @@ const RFP_TYPE_LABELS = {
   purchase_lease: '구매·리스',
 }
 
+// RFP 섹션 구조 (rfp_schemas.py sections와 동일)
+const RFP_SECTIONS = {
+  purchase: [
+    { title: '발주기관 정보', keys: ['s1','s2','s3','s4','s5'] },
+    { title: '구매 개요', keys: ['s6','s7','s8','s9'] },
+    { title: '요구사항', keys: ['s10','s11','s12'] },
+    { title: '평가 기준', keys: ['s13','s14','s15','s16'] },
+    { title: '제출 안내', keys: ['s17','s18'] },
+  ],
+  service_contract: [
+    { title: '발주기관 정보', keys: ['s1','s2','s3','s4','s5'] },
+    { title: '사업 개요', keys: ['s6','s7','s8','s9','s10'] },
+    { title: '서비스 요건', keys: ['s11','s12','s13','s14'] },
+    { title: '평가 기준', keys: ['s15','s16','s17','s18'] },
+    { title: '제출 안내', keys: ['s19','s20'] },
+  ],
+  service: [
+    { title: '발주기관 정보', keys: ['s1','s2','s3','s4','s5'] },
+    { title: '서비스 개요', keys: ['s6','s7','s8','s9'] },
+    { title: '서비스 요건', keys: ['s10','s11','s12','s13'] },
+    { title: '평가 기준', keys: ['s14','s15','s16','s17'] },
+    { title: '제출 안내', keys: ['s18','s19'] },
+  ],
+  rental: [
+    { title: '발주기관 정보', keys: ['s1','s2','s3','s4','s5'] },
+    { title: '계약 개요', keys: ['s6','s7','s8','s9','s10'] },
+    { title: '요구사항', keys: ['s11','s12','s13','s14'] },
+    { title: '평가 기준', keys: ['s15','s16','s17','s18'] },
+    { title: '제출 안내', keys: ['s19','s20'] },
+  ],
+  construction: [
+    { title: '발주기관 정보', keys: ['s1','s2','s3','s4','s5'] },
+    { title: '공사 개요', keys: ['s6','s7','s8','s9'] },
+    { title: '공사 요건', keys: ['s10','s11','s12','s13'] },
+    { title: '평가 기준', keys: ['s14','s15','s16','s17'] },
+    { title: '제출 안내', keys: ['s18','s19'] },
+  ],
+  consulting: [
+    { title: '발주기관 정보', keys: ['s1','s2','s3','s4','s5'] },
+    { title: '사업 개요', keys: ['s6','s7','s8','s9'] },
+    { title: '수행 요건', keys: ['s10','s11','s12','s13'] },
+    { title: '평가 기준', keys: ['s14','s15','s16','s17'] },
+    { title: '제출 안내', keys: ['s18','s19'] },
+  ],
+  purchase_maintenance: [
+    { title: '발주기관 정보', keys: ['s1','s2','s3','s4','s5'] },
+    { title: '구매 개요', keys: ['s6','s7','s8','s9'] },
+    { title: '제품 요구사항', keys: ['s10','s11'] },
+    { title: '유지보수 요건', keys: ['s12','s13','s14','s15'] },
+    { title: '평가 기준', keys: ['s16','s17','s18','s19'] },
+    { title: '제출 안내', keys: ['s20','s21'] },
+  ],
+  rental_maintenance: [
+    { title: '발주기관 정보', keys: ['s1','s2','s3','s4','s5'] },
+    { title: '렌탈 개요', keys: ['s6','s7','s8','s9','s10'] },
+    { title: '장비 요구사항', keys: ['s11','s12'] },
+    { title: '유지보수 요건', keys: ['s13','s14','s15','s16'] },
+    { title: '평가 기준', keys: ['s17','s18','s19','s20'] },
+    { title: '제출 안내', keys: ['s21','s22'] },
+  ],
+  purchase_lease: [
+    { title: '발주기관 정보', keys: ['s1','s2','s3','s4','s5'] },
+    { title: '구매·리스 개요', keys: ['s6','s7','s8','s9','s10'] },
+    { title: '장비 요구사항', keys: ['s11','s12'] },
+    { title: '리스 조건', keys: ['s13','s14','s15'] },
+    { title: '평가 기준', keys: ['s16','s17','s18','s19'] },
+    { title: '제출 안내', keys: ['s20','s21'] },
+  ],
+}
+
 // RFP 스키마 필드 라벨 (rfp_schemas.py와 동일)
 const RFP_FIELD_LABELS = {
   purchase: "s1:발주기관명, s2:담당부서, s3:담당자, s4:연락처, s5:이메일, s6:구매품목, s7:구매목적, s8:수량, s9:납품기한, s10:요구사양, s11:품질기준, s12:납품조건, s13:평가①가격경쟁력, s14:평가②품질신뢰도, s15:평가③납기준수, s16:평가④기술역량, s17:제출기한, s18:제출방식",
@@ -91,24 +161,9 @@ function DetailModal({ req, onClose, onStatusChange, onDelete }) {
 
         {/* 바디 */}
         <div style={{ padding: 24, overflowY: 'auto', flex: 1 }}>
-          {/* 기본 정보 */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
-            {[
-              { label: '기관명', value: req.org_name },
-              { label: '부서', value: req.department },
-              { label: '요청자', value: req.requester },
-              { label: 'Session', value: req.session_id?.slice(0, 8) },
-            ].map(item => (
-              <div key={item.label} style={{ background: '#FAFBFC', borderRadius: 12, padding: 14 }}>
-                <div style={{ fontSize: 12, color: '#94A3B8', marginBottom: 4 }}>{item.label}</div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#1E293B' }}>{item.value || '-'}</div>
-              </div>
-            ))}
-          </div>
-
           {/* 상태 변경 */}
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 8 }}>상태 변경</div>
+          <div style={{ marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>상태</div>
             <select
               value={req.status}
               onChange={e => onStatusChange(req.id, e.target.value)}
@@ -127,33 +182,49 @@ function DetailModal({ req, onClose, onStatusChange, onDelete }) {
               <option value="rejected">반려</option>
               <option value="sent">발송완료</option>
             </select>
+            <span style={{ fontSize: 11, color: '#94A3B8', marginLeft: 'auto' }}>Session: {req.session_id?.slice(0, 8)}</span>
           </div>
 
-          {/* 입력 필드 */}
-          {req.fields && Object.keys(req.fields).length > 0 && (
-            <>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 8 }}>RFP 입력 필드</div>
-              <div style={{ background: '#FAFBFC', borderRadius: 12, overflow: 'hidden' }}>
-                {Object.entries(req.fields)
-                  .sort(([a], [b]) => {
-                    const na = parseInt(a.replace('s', ''), 10) || 0
-                    const nb = parseInt(b.replace('s', ''), 10) || 0
-                    return na - nb
-                  })
-                  .map(([k, v], i, arr) => (
-                  <div key={k} style={{
-                    display: 'flex', padding: '10px 16px',
-                    borderBottom: i < arr.length - 1 ? '1px solid #F0F2F5' : 'none',
+          {/* 섹션별 RFP 필드 */}
+          {req.fields && Object.keys(req.fields).length > 0 && (() => {
+            const sections = RFP_SECTIONS[req.rfp_type] || []
+            const SECTION_COLORS = ['#0D9488', '#2563EB', '#7C3AED', '#D97706', '#DC2626', '#059669']
+            return sections.map((sec, si) => {
+              const hasData = sec.keys.some(k => req.fields[k])
+              if (!hasData) return null
+              return (
+                <div key={si} style={{ marginBottom: 16 }}>
+                  <div style={{
+                    fontSize: 12, fontWeight: 700, color: SECTION_COLORS[si % SECTION_COLORS.length],
+                    marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8,
                   }}>
-                    <span style={{ width: 140, fontSize: 12, color: '#94A3B8', fontWeight: 500, flexShrink: 0 }}>
-                      {getFieldLabel(req.rfp_type, k)}
-                    </span>
-                    <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: '#1E293B' }}>{String(v)}</span>
+                    <span style={{
+                      width: 6, height: 6, borderRadius: '50%',
+                      background: SECTION_COLORS[si % SECTION_COLORS.length],
+                    }} />
+                    {sec.title}
                   </div>
-                ))}
-              </div>
-            </>
-          )}
+                  <div style={{ background: '#FAFBFC', borderRadius: 12, overflow: 'hidden' }}>
+                    {sec.keys.map((k, i) => {
+                      const val = req.fields[k]
+                      if (!val) return null
+                      return (
+                        <div key={k} style={{
+                          display: 'flex', padding: '10px 16px',
+                          borderBottom: '1px solid #F0F2F5',
+                        }}>
+                          <span style={{ width: 120, fontSize: 12, color: '#64748B', fontWeight: 500, flexShrink: 0 }}>
+                            {getFieldLabel(req.rfp_type, k)}
+                          </span>
+                          <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: '#1E293B' }}>{String(val)}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })
+          })()}
         </div>
 
         {/* 푸터 */}

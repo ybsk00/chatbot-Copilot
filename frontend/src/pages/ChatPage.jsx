@@ -324,11 +324,8 @@ export default function ChatPage() {
     const history = messages.map(m => ({ role: m.role, content: m.text }));
 
     try {
-      // 이전 분류 결과의 중분류를 category로 전달 (검색 정확도 향상)
-      const prevCategory = lastClassification?.중분류 || null;
-
       if (phase === "filling") {
-        const data = await api.chat(sessionId, text, prevCategory, history, phase, getFilledFields(), rfpType);
+        const data = await api.chat(sessionId, text, null, history, phase, getFilledFields(), rfpType);
         if (data.rfp_fields && Object.keys(data.rfp_fields).length > 0) {
           applyFills(data.rfp_fields);
         }
@@ -347,7 +344,7 @@ export default function ChatPage() {
         setMessages(prev => [...prev, { id: aiMsgId, role: "assistant", text: "", isStreaming: true }]);
 
         await api.streamChat(
-          sessionId, text, prevCategory, history, phase, getFilledFields(),
+          sessionId, text, null, history, phase, getFilledFields(),
           (token) => {
             setMessages(prev => prev.map(m =>
               m.id === aiMsgId ? { ...m, text: m.text + token } : m

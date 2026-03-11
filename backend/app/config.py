@@ -33,6 +33,7 @@ RRF_TOP_K        = 5           # 최종 리랭킹 결과 수
 
 # 헌법 벡터 검색 파라미터
 CONSTITUTION_TOP_K = 3         # 질문당 검색할 헌법 규칙 수
+SCRIPT_TOP_K       = 2         # 질문당 검색할 화법 스크립트 수
 
 # Phase 감지 키워드 (Gemini 호출 대체)
 PURCHASE_KEYWORDS = ["구매", "발주", "조달", "계약", "견적", "입찰", "리스", "임대", "용역", "외주"]

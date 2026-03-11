@@ -14,6 +14,7 @@ from app.agents.constitution import ConstitutionAgent
 from app.agents.generation import GenerationAgent
 from app.agents.suggestion import SuggestionAgent
 from app.agents.rfp import RfpAgent
+from app.agents.script import ScriptAgent
 from app.config import RFP_AGREE_KEYWORDS, CONFIDENCE_THRESHOLD
 from app.constants.rfp_schemas import RFP_SCHEMAS
 from app.rag.classifier import TAXONOMY
@@ -80,6 +81,7 @@ class OrchestratorAgent(AgentBase):
         self.generation = GenerationAgent()
         self.suggestion = SuggestionAgent()
         self.rfp = RfpAgent()
+        self.script = ScriptAgent()
 
     # RFP 유형 한국어 라벨
     _RFP_TYPE_LABELS = {
@@ -302,8 +304,11 @@ class OrchestratorAgent(AgentBase):
             yield self._sse("done", {})
             return
 
-        # ── PHASE 2: 헌법 규칙주입 (~200ms, 임베딩 재사용) ──
-        await self.constitution.inject_rules(ctx, self._critical_pool)
+        # ── PHASE 2: 헌법 규칙 + 화법 스크립트 주입 (병렬, 임베딩 재사용) ──
+        await asyncio.gather(
+            self.constitution.inject_rules(ctx, self._critical_pool),
+            self.script.inject_scripts(ctx, self._critical_pool),
+        )
 
         # ── Meta 이벤트 전송 ──
         yield self._sse("meta", {
@@ -367,6 +372,7 @@ class OrchestratorAgent(AgentBase):
             f"Classification: {ctx.timings.get('classification_ms', 0):.0f}ms | "
             f"Retrieval: {ctx.timings.get('retrieval_ms', 0):.0f}ms | "
             f"Constitution: {ctx.timings.get('constitution_inject_ms', 0):.0f}ms | "
+            f"Script: {ctx.timings.get('script_inject_ms', 0):.0f}ms | "
             f"Generation: {ctx.timings.get('generation_ms', 0):.0f}ms | "
             f"PostCheck: {ctx.timings.get('constitution_postcheck_ms', 0):.0f}ms | "
             f"Suggestions: {ctx.timings.get('suggestion_ms', 0):.0f}ms"
@@ -469,9 +475,12 @@ class OrchestratorAgent(AgentBase):
                 missing = required_keys - all_filled
                 logger.info(f"[Orchestrator] RFP not complete. missing={missing}")
 
-        # ── PHASE 4: 헌법 규칙주입 (Retrieval 실행 시만) ──
+        # ── PHASE 4: 헌법 규칙 + 화법 스크립트 주입 (Retrieval 실행 시만) ──
         if ctx.query_embedding:
-            await self.constitution.inject_rules(ctx, self._critical_pool)
+            await asyncio.gather(
+                self.constitution.inject_rules(ctx, self._critical_pool),
+                self.script.inject_scripts(ctx, self._critical_pool),
+            )
 
         # ── PHASE 5: 답변 생성 ──
         await self.generation.execute(ctx, self._critical_pool)

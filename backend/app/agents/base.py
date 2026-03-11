@@ -43,6 +43,8 @@ class AgentContext:
     chunks: list[dict] = field(default_factory=list)
     constitution_rules: list[dict] = field(default_factory=list)
     constitution_text: str = ""
+    script_rules: list[dict] = field(default_factory=list)
+    script_text: str = ""
     rag_score: float = 0.0
     sources: list[str] = field(default_factory=list)
 

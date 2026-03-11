@@ -91,10 +91,11 @@ def generate_answer(
     filled_keys: str = "",
     rfp_sections: str = "",
     constitution_text: str = "",
+    script_text: str = "",
     filling_intent: str | None = None,
     cta_intent: str = "cold",
 ) -> tuple[str, float]:
-    """RAG 기반 답변 생성 (phase별 프롬프트 전환, CTA 의도별 역제안, 헌법 규칙 동적 주입)"""
+    """RAG 기반 답변 생성 (phase별 프롬프트 전환, CTA 의도별 역제안, 헌법+화법 동적 주입)"""
     context = "\n\n---\n\n".join(
         f"[{c['doc_name']}]\n{c['content']}" for c in chunks
     )
@@ -122,9 +123,11 @@ def generate_answer(
         if phase == "filling":
             system_prompt = system_prompt.format(filled_keys=filled_keys or "없음", rfp_sections=rfp_sections)
 
-    # 헌법 규칙 동적 주입
+    # 헌법 규칙 + 화법 스크립트 동적 주입
     if constitution_text:
         system_prompt = system_prompt + "\n" + constitution_text
+    if script_text:
+        system_prompt = system_prompt + "\n" + script_text
 
     response = _get_client().models.generate_content(
         model=MODELS["generation"],
@@ -150,9 +153,10 @@ def generate_answer_stream(
     filled_keys: str = "",
     rfp_sections: str = "",
     constitution_text: str = "",
+    script_text: str = "",
     cta_intent: str = "cold",
 ):
-    """SSE용 토큰 스트리밍 제너레이터 (CTA 의도별 역제안 + 헌법 규칙 동적 주입)"""
+    """SSE용 토큰 스트리밍 제너레이터 (CTA 의도별 역제안 + 헌법+화법 동적 주입)"""
     context = "\n\n---\n\n".join(
         f"[{c['doc_name']}]\n{c['content']}" for c in chunks
     )
@@ -177,9 +181,11 @@ def generate_answer_stream(
         if phase == "filling":
             system_prompt = system_prompt.format(filled_keys=filled_keys or "없음", rfp_sections=rfp_sections)
 
-    # 헌법 규칙 동적 주입
+    # 헌법 규칙 + 화법 스크립트 동적 주입
     if constitution_text:
         system_prompt = system_prompt + "\n" + constitution_text
+    if script_text:
+        system_prompt = system_prompt + "\n" + script_text
 
     response = _get_client().models.generate_content_stream(
         model=MODELS["generation"],

@@ -59,6 +59,7 @@ class GenerationAgent(AgentBase):
                         ctx.message, ctx.chunks, ctx.history,
                         ctx.phase, filled_keys, rfp_sections,
                         constitution_text=ctx.constitution_text,
+                        script_text=ctx.script_text,
                         cta_intent=ctx.cta_intent,
                     ):
                         loop.call_soon_threadsafe(ctx.token_queue.put_nowait, token)
@@ -91,6 +92,7 @@ class GenerationAgent(AgentBase):
                     ctx.message, ctx.chunks, ctx.history,
                     ctx.phase, filled_keys, rfp_sections,
                     constitution_text=ctx.constitution_text,
+                    script_text=ctx.script_text,
                     filling_intent=ctx.filling_intent,
                     cta_intent=ctx.cta_intent,
                 )

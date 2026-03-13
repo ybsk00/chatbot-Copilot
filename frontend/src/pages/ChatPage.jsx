@@ -369,12 +369,6 @@ export default function ChatPage() {
     });
     setTimeout(() => setPrJustFilled(new Set()), 2500);
 
-    // 50% 이상 시 우측 패널 표시
-    const newFilledCount = Object.values(prFields).filter(f => (f.value || "").trim()).length + Object.keys(fills).length;
-    const totalFields = Object.keys(prFields).length;
-    if (totalFields > 0 && newFilledCount / totalFields >= 0.5 && !prRightVisible) {
-      setPrRightVisible(true);
-    }
   };
 
   const getPrFilledFields = () => {
@@ -412,6 +406,7 @@ export default function ChatPage() {
       templateFields[k] = { ...v };
     });
     setPrFields(templateFields);
+    setPrRightVisible(true);
     setPhase("pr_filling");
 
     const tmpl = PR_TEMPLATES[type];

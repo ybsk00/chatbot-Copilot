@@ -246,7 +246,9 @@ export default function ChatPage() {
   const [prJustFilled, setPrJustFilled] = useState(new Set());
   const [prRightVisible, setPrRightVisible] = useState(false);
   const [prSuppliers, setPrSuppliers]       = useState([]);
-  const [selectedPrSupplier, setSelectedPrSupplier] = useState(null);
+  const [selectedPrSuppliers, setSelectedPrSuppliers] = useState([]);  // [{id, name}, ...]
+  const [prSaved, setPrSaved] = useState(false);
+  const [uploadedPrSuppliers, setUploadedPrSuppliers] = useState([]);  // PDF에서 추출된 공급업체
   const [prSupplierLoading, setPrSupplierLoading] = useState(false);
   const msgEndRef  = useRef(null);
   const chatScrollRef = useRef(null);
@@ -592,8 +594,8 @@ export default function ChatPage() {
   );
 
   // ═══ RFP 유형 선택 카드 (9종, 3×3 그리드) ═══
-  const RfpTypeSelector = () => (
-    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginTop:12 }}>
+  const renderRfpTypeSelector = () => (
+    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginTop:12, position:"relative", zIndex:2 }}>
       {Object.entries(RFP_TEMPLATES).map(([key, tmpl]) => {
         const iconCfg = RFP_TYPE_ICONS[key];
         if (!iconCfg) return null;
@@ -601,7 +603,8 @@ export default function ChatPage() {
         return (
           <button
             key={key}
-            onClick={(e) => { e.stopPropagation(); handleRfpTypeSelect(key); }}
+            onPointerDown={(e) => { e.stopPropagation(); handleRfpTypeSelect(key); }}
+            onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
             style={{
               display:"flex", flexDirection:"column", alignItems:"center", gap:6,
               padding:"14px 8px 12px", borderRadius: T.r12,
@@ -610,7 +613,7 @@ export default function ChatPage() {
               cursor:"pointer", textAlign:"center", fontFamily:"inherit",
               transition:"border-color 0.15s, background 0.15s, box-shadow 0.15s",
               boxShadow: isRecommended ? `0 0 0 3px ${iconCfg.bg}` : T.shadowXs,
-              position:"relative",
+              position:"relative", zIndex:3,
             }}
             onMouseEnter={e => {
               e.currentTarget.style.borderColor = iconCfg.color;
@@ -652,8 +655,8 @@ export default function ChatPage() {
     "교육 서비스": { emoji: "📚", color: "#818CF8", bg: "#EEF2FF" },
   };
 
-  const PrTypeSelector = () => (
-    <div style={{ marginTop:12 }}>
+  const renderPrTypeSelector = () => (
+    <div style={{ marginTop:12, position:"relative", zIndex:2 }}>
       {Object.entries(PR_CATEGORIES).map(([category, keys]) => {
         const catCfg = PR_CATEGORY_ICONS[category] || { emoji: "📦", color: T.primary, bg: T.primaryLight };
         return (
@@ -668,12 +671,14 @@ export default function ChatPage() {
                 return (
                   <button
                     key={key}
-                    onClick={(e) => { e.stopPropagation(); handlePrTypeSelect(key); }}
+                    onPointerDown={(e) => { e.stopPropagation(); handlePrTypeSelect(key); }}
+                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
                     style={{
                       padding:"10px 8px", borderRadius: T.r10,
                       border:`1.5px solid ${T.border}`, background: T.card,
                       cursor:"pointer", fontFamily:"inherit", textAlign:"center",
                       transition:"all 0.15s", fontSize:11, fontWeight:600, color: T.text,
+                      position:"relative", zIndex:3,
                     }}
                     onMouseEnter={e => {
                       e.currentTarget.style.borderColor = catCfg.color;
@@ -983,6 +988,40 @@ export default function ChatPage() {
           }}>RAG 기반 생성 · 구매전략·표준프로세스 문서 근거</span>
         </div>
       </div>
+
+      {/* 사용자 선택 공급업체 (PDF 업로드 시) */}
+      {uploadedPrSuppliers.length > 0 && (
+        <div style={{
+          background: `linear-gradient(135deg, rgba(14,165,160,0.06), rgba(6,182,212,0.04))`,
+          borderRadius: T.r16, padding:"18px 22px", marginTop:16,
+          border:`1.5px solid rgba(14,165,160,0.15)`,
+        }}>
+          <div style={{ fontSize:13, fontWeight:800, color: T.primary, marginBottom:6, display:"flex", alignItems:"center", gap:6 }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+            요청자 선택 공급업체
+          </div>
+          <div style={{ fontSize:11, color: T.sub, marginBottom:12 }}>구매요청서에서 요청자가 선택한 공급업체입니다.</div>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            {uploadedPrSuppliers.map((name, i) => (
+              <div key={i} style={{
+                display:"flex", alignItems:"center", gap:8,
+                padding:"10px 16px", borderRadius: T.r12,
+                background:"rgba(255,255,255,0.8)", border:`1px solid rgba(14,165,160,0.15)`,
+              }}>
+                <div style={{
+                  width:28, height:28, borderRadius:7,
+                  background: T.gradPrimary,
+                  display:"flex", alignItems:"center", justifyContent:"center",
+                  color:"#fff", fontSize:12, fontWeight:800,
+                }}>{i + 1}</div>
+                <span style={{ fontSize:13, fontWeight:700, color: T.text }}>{name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 발송 버튼 */}
       <div style={{ marginTop:16, display:"flex", gap:8 }}>
@@ -1458,7 +1497,7 @@ export default function ChatPage() {
                 setMessages([{ id: msgIdCounter++, role: "assistant", text: "안녕하세요! 간접구매 상담도우미입니다.\n\n구매하려는 품목이나 서비스를 말씀해 주세요.\n견적 요청부터 공급업체 추천까지 함께 도와드립니다.\n\n💡 **물건·서비스를 구매하시는 분**이라면 구매요청서 작성을,\n**구매 업무를 담당하시는 분**이라면 RFP 작성을 도와드립니다.\n역할을 미리 알려주시면 더 정확한 안내가 가능합니다." }]);
                 setPhase("chat"); setRfpType(null); setFields({}); setRightVisible(false); setDownloaded(false); setRecommendedRfp(null); setLastClassification(null); setSent(false); setEmailSent(false); setRfpRequestId(null); setRfpHistory([]); setShowEmailModal(false); setEmailTo("");
                 // PR state 초기화
-                setUserRole(null); setRoleTurnCount(0); setPrType(null); setPrFields({}); setPrJustFilled(new Set()); setPrRightVisible(false); setPrSuppliers([]); setSelectedPrSupplier(null); setPrSupplierLoading(false);
+                setUserRole(null); setRoleTurnCount(0); setPrType(null); setPrFields({}); setPrJustFilled(new Set()); setPrRightVisible(false); setPrSuppliers([]); setSelectedPrSuppliers([]); setPrSaved(false); setPrSupplierLoading(false); setUploadedPrSuppliers([]);
               }}
               style={{
                 width:34, height:34, borderRadius: T.r8,
@@ -1633,10 +1672,10 @@ export default function ChatPage() {
                 )}
 
                 {/* PR 카테고리 선택 카드 */}
-                {msg.prTypeSelect && !prType && <PrTypeSelector />}
+                {msg.prTypeSelect && !prType && renderPrTypeSelector()}
 
                 {/* RFP 유형 선택 카드 */}
-                {msg.rfpTypeSelect && !rfpType && <RfpTypeSelector />}
+                {msg.rfpTypeSelect && !rfpType && renderRfpTypeSelector()}
 
                 {/* 출처 표시 */}
                 {msg.sources && msg.sources.length > 0 && !msg.isStreaming && (
@@ -1725,6 +1764,11 @@ export default function ChatPage() {
                       } else {
                         // 추출된 필드로 RFP 자동 채움
                         const extractedFields = res.extracted_fields || {};
+                        // 공급업체 정보 저장
+                        if (res.selected_supplier) {
+                          const suppliers = res.selected_supplier.split(/[,，、]/).map(s => s.trim()).filter(Boolean);
+                          setUploadedPrSuppliers(suppliers);
+                        }
                         setMessages(prev => [...prev, {
                           id: msgIdCounter++, role: "assistant",
                           text: `구매요청서를 분석했습니다.\n\n**유형:** ${res.label || "일반"}\n**제목:** ${res.title || "-"}\n**요청부서:** ${res.department || "-"}\n**요청자:** ${res.requester || "-"}\n${res.selected_supplier ? `**선택 공급업체:** ${res.selected_supplier}` : ""}\n\n총 ${Object.keys(extractedFields).length}개 필드를 추출했습니다.\n이 내용을 바탕으로 제안요청서(RFP)를 작성하시겠습니까?`,
@@ -1888,29 +1932,38 @@ export default function ChatPage() {
                 }}>
                   <IconParty size={32} />
                   <div style={{ flex:1 }}>
-                    <div style={{ fontSize:14, fontWeight:800, color: T.greenDark }}>구매요청서 작성 완료!</div>
+                    <div style={{ fontSize:14, fontWeight:800, color: T.greenDark }}>
+                      {prSaved ? "구매요청서 저장 완료!" : "구매요청서 작성 완료!"}
+                    </div>
                     <div style={{ fontSize:11, color:"#16a34a", marginTop:3 }}>
-                      {selectedPrSupplier ? `공급업체: ${selectedPrSupplier}` : "아래에서 공급업체를 선택해 주세요."}
+                      {prSaved
+                        ? `공급업체 ${selectedPrSuppliers.length}개 선택됨`
+                        : selectedPrSuppliers.length > 0
+                          ? `공급업체 ${selectedPrSuppliers.length}개 선택 중`
+                          : "아래에서 공급업체를 선택해 주세요."}
                     </div>
                   </div>
-                  <button
-                    onClick={() => {
-                      if (currentPrTemplate) {
-                        downloadPrPdf(prFields, currentPrSections, currentPrTemplate.label, selectedPrSupplier);
-                      }
-                    }}
-                    style={{
-                      padding:"8px 16px", borderRadius: T.r10,
-                      border:`1px solid ${T.primary}`, background:"rgba(6,182,212,0.06)",
-                      color: T.primary, fontSize:11, fontWeight:700, cursor:"pointer",
-                      fontFamily:"inherit", whiteSpace:"nowrap",
-                      display:"flex", alignItems:"center", gap:5,
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.background = "rgba(6,182,212,0.12)"}
-                    onMouseLeave={e => e.currentTarget.style.background = "rgba(6,182,212,0.06)"}
-                  >
-                    <IconDownload size={13} /> PDF
-                  </button>
+                  {prSaved && (
+                    <button
+                      onClick={() => {
+                        if (currentPrTemplate) {
+                          const supplierNames = selectedPrSuppliers.map(s => s.name).join(", ");
+                          downloadPrPdf(prFields, currentPrSections, currentPrTemplate.label, supplierNames);
+                        }
+                      }}
+                      style={{
+                        padding:"8px 16px", borderRadius: T.r10,
+                        border:`1px solid ${T.primary}`, background:"rgba(6,182,212,0.06)",
+                        color: T.primary, fontSize:11, fontWeight:700, cursor:"pointer",
+                        fontFamily:"inherit", whiteSpace:"nowrap",
+                        display:"flex", alignItems:"center", gap:5,
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = "rgba(6,182,212,0.12)"}
+                      onMouseLeave={e => e.currentTarget.style.background = "rgba(6,182,212,0.06)"}
+                    >
+                      <IconDownload size={13} /> PDF
+                    </button>
+                  )}
                 </div>
 
                 {/* 채워진 필드 요약 (접기/펼치기) */}
@@ -1952,16 +2005,45 @@ export default function ChatPage() {
                   )}
                 </div>
 
-                {/* 공급업체 추천 (사용자 전용) */}
-                {userRole === "user" && !selectedPrSupplier && (
+                {/* 공급업체 추천 (사용자 전용) — 저장 전 */}
+                {userRole === "user" && !prSaved && (
                   <>
+                    {/* 선택된 공급업체 태그 */}
+                    {selectedPrSuppliers.length > 0 && (
+                      <div style={{
+                        background: 'rgba(16,185,129,0.06)', borderRadius: T.r12,
+                        padding:"12px 16px", marginBottom:12,
+                        border:`1px solid rgba(16,185,129,0.12)`,
+                      }}>
+                        <div style={{ fontSize:11, fontWeight:700, color: T.greenDark, marginBottom:8 }}>
+                          선택된 공급업체 ({selectedPrSuppliers.length}개)
+                        </div>
+                        <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                          {selectedPrSuppliers.map(sp => (
+                            <span key={sp.id} style={{
+                              display:"inline-flex", alignItems:"center", gap:4,
+                              fontSize:11, padding:"4px 10px", borderRadius:20,
+                              background:"rgba(16,185,129,0.12)", color: T.greenDark,
+                              fontWeight:600,
+                            }}>
+                              {sp.name}
+                              <span
+                                onClick={() => setSelectedPrSuppliers(prev => prev.filter(x => x.id !== sp.id))}
+                                style={{ cursor:"pointer", fontSize:13, lineHeight:1, marginLeft:2, opacity:0.6 }}
+                              >✕</span>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     <div style={{
                       background: `linear-gradient(135deg, rgba(14,165,160,0.08), rgba(6,182,212,0.06))`,
                       borderRadius: T.r16, padding:"14px 18px", marginBottom:14,
                       border:`1px solid rgba(14,165,160,0.12)`,
                     }}>
                       <div style={{ fontSize:13, fontWeight:800, color: T.primary }}>추천 공급업체</div>
-                      <div style={{ fontSize:11, color: T.sub, marginTop:3 }}>구매요청 내용 기반 매칭 결과입니다.</div>
+                      <div style={{ fontSize:11, color: T.sub, marginTop:3 }}>구매요청 내용 기반 매칭 결과입니다. 여러 업체를 선택할 수 있습니다.</div>
                     </div>
 
                     {prSupplierLoading ? (
@@ -1973,27 +2055,34 @@ export default function ChatPage() {
                         매칭되는 공급업체가 없습니다.
                       </div>
                     ) : prSuppliers.slice(0, 8).map((s, i) => {
-                      const satScore = Math.round((s.score || 0) / 20 * 100);
                       const isTop = i < 3;
+                      const isSelected = selectedPrSuppliers.some(sp => sp.id === s.id);
                       return (
                         <div key={s.id || s.name + i} style={{
-                          background: 'rgba(255,255,255,0.75)',
+                          background: isSelected ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.75)',
                           backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
                           borderRadius: T.r12, padding:"14px 18px", marginBottom:8,
-                          border:`1px solid rgba(14,165,160,0.08)`,
+                          border: isSelected ? `2px solid rgba(16,185,129,0.4)` : `1px solid rgba(14,165,160,0.08)`,
                           transition:"all 0.2s", cursor:"pointer",
                         }}
-                          onMouseEnter={e => { e.currentTarget.style.borderColor = T.primary; e.currentTarget.style.boxShadow = "0 4px 16px rgba(14,165,160,0.12)"; }}
-                          onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(14,165,160,0.08)"; e.currentTarget.style.boxShadow = "none"; }}
+                          onClick={() => {
+                            if (isSelected) {
+                              setSelectedPrSuppliers(prev => prev.filter(x => x.id !== s.id));
+                            } else {
+                              setSelectedPrSuppliers(prev => [...prev, { id: s.id, name: s.name }]);
+                            }
+                          }}
+                          onMouseEnter={e => { if (!isSelected) { e.currentTarget.style.borderColor = T.primary; e.currentTarget.style.boxShadow = "0 4px 16px rgba(14,165,160,0.12)"; }}}
+                          onMouseLeave={e => { if (!isSelected) { e.currentTarget.style.borderColor = "rgba(14,165,160,0.08)"; e.currentTarget.style.boxShadow = "none"; }}}
                         >
                           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
                             <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                               <div style={{
                                 width:32, height:32, borderRadius:8,
-                                background: isTop ? T.gradPrimary : `linear-gradient(135deg, ${T.bgSubtle}, ${T.bg})`,
+                                background: isSelected ? "rgba(16,185,129,0.15)" : isTop ? T.gradPrimary : `linear-gradient(135deg, ${T.bgSubtle}, ${T.bg})`,
                                 display:"flex", alignItems:"center", justifyContent:"center",
-                                color: isTop ? "#fff" : T.sub, fontSize:13, fontWeight:800,
-                              }}>{i + 1}</div>
+                                color: isSelected ? T.greenDark : isTop ? "#fff" : T.sub, fontSize:13, fontWeight:800,
+                              }}>{isSelected ? "✓" : i + 1}</div>
                               <div>
                                 <div style={{ fontSize:13, fontWeight:700, color: T.text }}>{s.name}</div>
                                 <div style={{ fontSize:10, color: T.muted }}>{s.sub_category || s.category}</div>
@@ -2001,22 +2090,22 @@ export default function ChatPage() {
                             </div>
                             <span style={{
                               fontSize:9, fontWeight:600, padding:"2px 6px", borderRadius:8,
-                              background: isTop ? "rgba(16,185,129,0.1)" : "rgba(251,191,36,0.1)",
-                              color: isTop ? "#059669" : "#d97706",
-                            }}>{isTop ? "추천" : "검토"}</span>
+                              background: isSelected ? "rgba(16,185,129,0.15)" : isTop ? "rgba(16,185,129,0.1)" : "rgba(251,191,36,0.1)",
+                              color: isSelected ? T.greenDark : isTop ? "#059669" : "#d97706",
+                            }}>{isSelected ? "선택됨" : isTop ? "추천" : "검토"}</span>
                           </div>
 
                           {/* 매칭률 바 */}
                           <div style={{ marginBottom:8 }}>
                             <div style={{ fontSize:9, color: T.muted, marginBottom:3 }}>매칭률</div>
                             <div style={{ height:5, borderRadius:3, background: T.bgSubtle, overflow:"hidden" }}>
-                              <div style={{ width:`${s.match_rate || 80}%`, height:"100%", borderRadius:3, background: T.gradPrimary, transition:"width 1s ease" }} />
+                              <div style={{ width:`${s.match_rate || 80}%`, height:"100%", borderRadius:3, background: isSelected ? "linear-gradient(90deg,#10b981,#059669)" : T.gradPrimary, transition:"width 1s ease" }} />
                             </div>
-                            <div style={{ fontSize:10, fontWeight:700, color: T.primary, marginTop:2 }}>{s.match_rate || 80}%</div>
+                            <div style={{ fontSize:10, fontWeight:700, color: isSelected ? T.greenDark : T.primary, marginTop:2 }}>{s.match_rate || 80}%</div>
                           </div>
 
                           {/* 태그 */}
-                          <div style={{ display:"flex", gap:4, flexWrap:"wrap", marginBottom:8 }}>
+                          <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
                             {(s.tags || []).slice(0, 3).map(tag => (
                               <span key={tag} style={{
                                 fontSize:9, padding:"2px 7px", borderRadius:10,
@@ -2024,29 +2113,6 @@ export default function ChatPage() {
                               }}>{tag}</span>
                             ))}
                           </div>
-
-                          {/* 선택 버튼 */}
-                          <button
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              setSelectedPrSupplier(s.name);
-                              try {
-                                await api.updatePrSupplier(sessionId, s.id, s.name);
-                              } catch (err) {
-                                console.warn("PR supplier update failed:", err);
-                              }
-                            }}
-                            style={{
-                              width:"100%", padding:"8px", borderRadius: T.r10,
-                              border:"none", background: T.gradPrimary,
-                              color:"#fff", fontSize:11, fontWeight:700, cursor:"pointer",
-                              fontFamily:"inherit", transition:"all 0.2s",
-                            }}
-                            onMouseEnter={e => e.currentTarget.style.transform = "scale(1.02)"}
-                            onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
-                          >
-                            이 업체 선택
-                          </button>
                         </div>
                       );
                     })}
@@ -2058,46 +2124,94 @@ export default function ChatPage() {
                     }}>
                       업무마켓9(workmarket9.com) 등록 업체 기준
                     </div>
+
+                    {/* 저장 버튼 */}
+                    <button
+                      onClick={async () => {
+                        try {
+                          const supplierNames = selectedPrSuppliers.map(sp => sp.name).join(", ");
+                          const supplierIds = selectedPrSuppliers.map(sp => sp.id);
+                          // 첫 번째 공급업체로 DB 저장 (기존 API 호환) + 전체 목록은 fields에 포함
+                          if (selectedPrSuppliers.length > 0) {
+                            await api.updatePrSupplier(sessionId, supplierIds[0], supplierNames);
+                          }
+                          setPrSaved(true);
+                          setMessages(prev => [...prev, {
+                            id: msgIdCounter++, role: "assistant",
+                            text: `구매요청서가 저장되었습니다.${selectedPrSuppliers.length > 0 ? `\n선택 공급업체: ${supplierNames}` : ""}\n\n구매담당자가 확인할 수 있습니다.`,
+                          }]);
+                        } catch (err) {
+                          console.warn("PR save failed:", err);
+                        }
+                      }}
+                      style={{
+                        width:"100%", padding:"14px", borderRadius: T.r12, marginTop:12,
+                        border:"none", background: T.gradPrimary,
+                        color:"#fff", fontSize:14, fontWeight:800, cursor:"pointer",
+                        fontFamily:"inherit", transition:"all 0.2s",
+                        boxShadow: "0 4px 16px rgba(6,182,212,0.3)",
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.transform = "translateY(-1px)"}
+                      onMouseLeave={e => e.currentTarget.style.transform = "translateY(0)"}
+                    >
+                      {selectedPrSuppliers.length > 0
+                        ? `구매요청서 저장 (공급업체 ${selectedPrSuppliers.length}개)`
+                        : "구매요청서 저장"}
+                    </button>
                   </>
                 )}
 
-                {/* 공급업체 선택 완료 */}
-                {selectedPrSupplier && (
+                {/* 저장 완료 */}
+                {prSaved && (
                   <div style={{
                     background: 'rgba(16,185,129,0.06)', borderRadius: T.r16,
-                    padding:"18px 22px", border:`1.5px solid rgba(16,185,129,0.15)`,
+                    padding:"22px", border:`1.5px solid rgba(16,185,129,0.15)`,
                     textAlign:"center",
                   }}>
-                    <IconCheck size={24} />
-                    <div style={{ fontSize:14, fontWeight:700, color: T.greenDark, marginTop:8 }}>
-                      공급업체 선택 완료
+                    <IconCheck size={28} />
+                    <div style={{ fontSize:15, fontWeight:800, color: T.greenDark, marginTop:10 }}>
+                      구매요청서 저장 완료
                     </div>
-                    <div style={{ fontSize:13, fontWeight:600, color: T.text, marginTop:6 }}>{selectedPrSupplier}</div>
-                    <div style={{ fontSize:11, color: T.sub, marginTop:8 }}>
-                      구매요청서가 업데이트되었습니다.
+                    {selectedPrSuppliers.length > 0 && (
+                      <div style={{ marginTop:10, display:"flex", gap:6, flexWrap:"wrap", justifyContent:"center" }}>
+                        {selectedPrSuppliers.map(sp => (
+                          <span key={sp.id} style={{
+                            fontSize:12, padding:"5px 14px", borderRadius:20,
+                            background:"rgba(16,185,129,0.12)", color: T.greenDark, fontWeight:700,
+                          }}>{sp.name}</span>
+                        ))}
+                      </div>
+                    )}
+                    <div style={{ fontSize:11, color: T.sub, marginTop:10 }}>
+                      구매담당자가 관리 페이지에서 확인할 수 있습니다.
                     </div>
-                    <div style={{ display:"flex", gap:8, marginTop:14, justifyContent:"center" }}>
+                    <div style={{ display:"flex", gap:8, marginTop:16, justifyContent:"center" }}>
                       <button
-                        onClick={() => setSelectedPrSupplier(null)}
-                        style={{
-                          padding:"8px 20px", borderRadius: T.r10,
-                          border:`1px solid ${T.border}`, background: T.card,
-                          color: T.sub, fontSize:11, fontWeight:600, cursor:"pointer",
-                          fontFamily:"inherit",
+                        onClick={() => {
+                          if (currentPrTemplate) {
+                            const supplierNames = selectedPrSuppliers.map(s => s.name).join(", ");
+                            downloadPrPdf(prFields, currentPrSections, currentPrTemplate.label, supplierNames);
+                          }
                         }}
-                      >다른 업체 선택</button>
+                        style={{
+                          padding:"10px 22px", borderRadius: T.r10,
+                          border:`1px solid ${T.primary}`, background:"rgba(6,182,212,0.06)",
+                          color: T.primary, fontSize:12, fontWeight:700, cursor:"pointer",
+                          fontFamily:"inherit", display:"flex", alignItems:"center", gap:6,
+                        }}
+                      ><IconDownload size={14} /> PDF 다운로드</button>
                       <button
                         onClick={() => {
                           setPhase("chat"); setPrRightVisible(false);
                           setMessages(prev => [...prev, {
                             id: msgIdCounter++, role: "assistant",
-                            text: "구매요청서 작성과 공급업체 선택이 완료되었습니다.\n다른 질문이 있으시면 말씀해 주세요.",
+                            text: "다른 질문이 있으시면 말씀해 주세요.",
                           }]);
                         }}
                         style={{
-                          padding:"8px 20px", borderRadius: T.r10,
+                          padding:"10px 22px", borderRadius: T.r10,
                           border:"none", background: T.gradPrimary,
-                          color:"#fff", fontSize:11, fontWeight:700, cursor:"pointer",
+                          color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer",
                           fontFamily:"inherit",
                         }}
                       >새 질문하기</button>

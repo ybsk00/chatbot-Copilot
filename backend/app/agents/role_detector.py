@@ -23,7 +23,8 @@ _USER_KEYWORDS = [
     "교육 받고", "교육받고", "교육받으려", "수강하고", "수강하려",
     "청소해", "파기해", "소독해",
     "도입하고", "도입하려", "도입할",
-    "하고자 합니다", "하려고 합니다", "하고 싶습니다",
+    "구매하고자", "렌탈하고자", "도입하고자",
+    "구매하려고", "렌탈하려고", "도입하려고",
 ]
 _PROCUREMENT_KEYWORDS = [
     "RFP", "rfp", "제안요청서", "입찰", "견적 비교", "소싱",
@@ -80,16 +81,20 @@ class RoleDetectorAgent(AgentBase):
         return self._timed_result(start)
 
     def _detect_by_keywords(self, message: str) -> str | None:
-        """키워드 기반 역할 감지."""
+        """키워드 기반 역할 감지.
+        구매담당자 키워드를 먼저 체크 (더 명시적이므로 우선).
+        양쪽 모두 매칭 시 구매담당자 우선.
+        """
         if not message:
             return None
         msg = message.strip()
-        for kw in _USER_KEYWORDS:
-            if kw in msg:
-                return "user"
+        # 구매담당자 키워드 먼저 (더 명시적)
         for kw in _PROCUREMENT_KEYWORDS:
             if kw in msg:
                 return "procurement"
+        for kw in _USER_KEYWORDS:
+            if kw in msg:
+                return "user"
         return None
 
     def _detect_by_pattern(self, ctx: AgentContext) -> str | None:

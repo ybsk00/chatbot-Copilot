@@ -76,6 +76,7 @@ const BORDER = { lineColor: [51, 51, 51], lineWidth: 0.3 };
  * @param {string} supplierName - 선택된 공급업체명 (optional)
  */
 export async function downloadPrPdf(fields, sections, templateLabel, supplierName) {
+  console.log("[prExport] downloadPrPdf called. supplierName:", supplierName, "templateLabel:", templateLabel);
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
 
   // ── 한글 폰트 로드 + 등록 ──

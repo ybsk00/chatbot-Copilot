@@ -10,6 +10,7 @@ import UserManagement from './UserManagement'
 import RfpRequests from './RfpRequests'
 // import SupplierRecommend from './SupplierRecommend'  // 공급업체 관리로 통합
 import RfpTemplates from './RfpTemplates'
+import PrRequests from './PrRequests'
 
 /* ── SVG Icons (stroke, 20×20) ── */
 const Icon = ({ children, size = 20 }) => (
@@ -26,6 +27,7 @@ const ICONS = {
   constitution: <Icon><path d="M12 3 2 7l10 4 10-4-10-4Z"/><path d="m2 17 10 4 10-4"/><path d="m2 12 10 4 10-4"/></Icon>,
   conversations: <Icon><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></Icon>,
   'rfp-requests': <Icon><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a1 1 0 0 0 1 1h3"/><path d="M10 13h4"/><path d="M10 17h4"/></Icon>,
+  'pr-requests': <Icon><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="2"/><path d="M9 14h.01"/><path d="M13 14h2"/><path d="M9 18h.01"/><path d="M13 18h2"/></Icon>,
   'rfp-templates': <Icon><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/></Icon>,
   suppliers: <Icon><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></Icon>,
   // taxonomy: <Icon><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></Icon>,  // 분류체계 메뉴 비활성화
@@ -45,6 +47,7 @@ const NAV_SECTIONS = [
     title: '애플리케이션',
     items: [
       { key: 'rfp-requests', label: 'RFP 신청' },
+      { key: 'pr-requests', label: '구매요청서' },
       { key: 'rfp-templates', label: 'RFP 양식' },
       { key: 'suppliers', label: '공급업체 관리' },
       // { key: 'taxonomy', label: '분류체계' },  // 분류체계 메뉴 비활성화
@@ -59,6 +62,7 @@ const TAB_TITLES = {
   constitution: '헌법 관리',
   conversations: '대화 이력',
   'rfp-requests': 'RFP 신청 관리',
+  'pr-requests': '구매요청서 관리',
   'rfp-templates': 'RFP 양식 관리',
   suppliers: '공급업체 관리',
   // taxonomy: '분류체계 관리',  // 분류체계 메뉴 비활성화
@@ -208,6 +212,7 @@ function AdminPage() {
       case 'constitution': return <Constitution />
       case 'conversations': return <ConvHistory />
       case 'rfp-requests': return <RfpRequests />
+      case 'pr-requests': return <PrRequests />
       case 'rfp-templates': return <RfpTemplates />
       case 'suppliers': return <Suppliers />
       // case 'taxonomy': return <Taxonomy />  // 분류체계 메뉴 비활성화

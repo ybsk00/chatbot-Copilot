@@ -48,6 +48,14 @@ class AgentContext:
     rag_score: float = 0.0
     sources: list[str] = field(default_factory=list)
 
+    # ── 역할 감지 ──
+    user_role: str | None = None       # "user" | "procurement" | None
+    role_turn_count: int = 0           # 역할 감지용 턴 카운터
+
+    # ── PR (구매요청서) ──
+    pr_type: str | None = None         # 구매요청서 카테고리 키
+    pr_fields: dict = field(default_factory=dict)  # 추출된 PR 필드
+
     # ── 출력 ──
     answer: str = ""
     suggestions: list[str] = field(default_factory=list)

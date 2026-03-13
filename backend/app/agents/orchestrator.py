@@ -14,9 +14,12 @@ from app.agents.constitution import ConstitutionAgent
 from app.agents.generation import GenerationAgent
 from app.agents.suggestion import SuggestionAgent
 from app.agents.rfp import RfpAgent
+from app.agents.pr import PrAgent
+from app.agents.role_detector import RoleDetectorAgent
 from app.agents.script import ScriptAgent
-from app.config import RFP_AGREE_KEYWORDS, CONFIDENCE_THRESHOLD
+from app.config import RFP_AGREE_KEYWORDS, PR_AGREE_KEYWORDS, CONFIDENCE_THRESHOLD
 from app.constants.rfp_schemas import RFP_SCHEMAS
+from app.constants.pr_schemas import PR_SCHEMAS
 from app.rag.classifier import TAXONOMY
 
 logger = logging.getLogger(__name__)
@@ -81,6 +84,8 @@ class OrchestratorAgent(AgentBase):
         self.generation = GenerationAgent()
         self.suggestion = SuggestionAgent()
         self.rfp = RfpAgent()
+        self.pr = PrAgent()
+        self.role_detector = RoleDetectorAgent()
         self.script = ScriptAgent()
 
     # RFP 유형 한국어 라벨
@@ -193,10 +198,18 @@ class OrchestratorAgent(AgentBase):
                 return self._GREETING_RESPONSES["default"]
         return None
 
-    def _detect_phase_trigger(self, message: str, phase: str) -> str | None:
+    def _detect_phase_trigger(self, message: str, phase: str, user_role: str | None = None) -> str | None:
         """키워드 기반 phase 전환 감지 (0ms)."""
         msg = message.strip()
-        if phase in ("chat", "asked"):
+        if phase in ("chat", "asked", "pr_asked"):
+            # PR 동의 감지 (사용자 역할일 때)
+            if user_role == "user" or phase == "pr_asked":
+                if any(kw in msg for kw in PR_AGREE_KEYWORDS):
+                    return "pr_agreed"
+                # pr_asked 상태에서 짧은 동의 응답
+                if phase == "pr_asked" and any(kw in msg for kw in RFP_AGREE_KEYWORDS):
+                    return "pr_agreed"
+
             # 1. 기존 동의 키워드 (짧은 응답만 — 긴 문장은 일반 질문일 가능성)
             if any(kw in msg for kw in RFP_AGREE_KEYWORDS):
                 # 질문형이거나 긴 문장이면 RFP 동의가 아닌 일반 질문으로 판단
@@ -207,6 +220,8 @@ class OrchestratorAgent(AgentBase):
                 elif is_long and not any(kw in msg for kw in ("RFP", "rfp", "제안요청서", "작성해", "작성할", "작성하")):
                     pass  # 긴 문장인데 RFP/작성 언급 없음 → 일반 질문
                 else:
+                    if user_role == "user":
+                        return "pr_agreed"
                     return "rfp_agreed"
             # 2. RFP 직접 요청 ("rfp 작성해줘", "rfp 할게" 등)
             msg_lower = msg.lower()
@@ -244,12 +259,31 @@ class OrchestratorAgent(AgentBase):
             yield self._sse("done", {})
             return
 
+        # ── GATE 1.5: 역할 감지 (~0ms) ──
+        await self.role_detector.execute(ctx, self._critical_pool)
+        ask_role = RoleDetectorAgent.should_ask_role(ctx)
+
         # ── GATE 2: Phase 감지 (~0ms) ──
-        ctx.phase_trigger = self._detect_phase_trigger(ctx.message, ctx.phase)
+        ctx.phase_trigger = self._detect_phase_trigger(ctx.message, ctx.phase, ctx.user_role)
+
+        # PR 동의 감지
+        if ctx.phase_trigger == "pr_agreed":
+            yield self._sse("meta", {
+                "sources": [], "rag_score": 0,
+                "phase_trigger": "pr_agreed", "classification": None,
+                "user_role": ctx.user_role,
+            })
+            yield self._sse("token", {
+                "content": "구매요청서 작성을 진행하겠습니다. 아래에서 구매 카테고리를 선택해 주십시오."
+            })
+            yield self._sse("done", {})
+            return
+
         if ctx.phase_trigger == "rfp_agreed":
             yield self._sse("meta", {
                 "sources": [], "rag_score": 0,
                 "phase_trigger": ctx.phase_trigger, "classification": None,
+                "user_role": ctx.user_role,
             })
             yield self._sse("token", {
                 "content": "제안요청서(RFP) 작성을 진행하겠습니다. 아래에서 RFP 유형을 선택해 주십시오."
@@ -317,6 +351,8 @@ class OrchestratorAgent(AgentBase):
             "phase_trigger": ctx.phase_trigger,
             "classification": ctx.classification,
             "cta_intent": ctx.cta_intent,
+            "user_role": ctx.user_role,
+            "ask_role": ask_role,
         })
 
         # ── PHASE 3: 스트리밍 생성 ──
@@ -361,6 +397,14 @@ class OrchestratorAgent(AgentBase):
                 yield self._sse("token", {
                     "content": f"\n\n[안내] {ctx.post_check_violation}"
                 })
+        # 역할별 CTA 제안 추가
+        if ctx.cta_intent in ("hot", "warm") and ctx.user_role == "user":
+            if "구매요청서 작성하기" not in ctx.suggestions:
+                ctx.suggestions.append("구매요청서 작성하기")
+        elif ctx.cta_intent in ("hot", "warm") and ctx.user_role != "user":
+            if "RFP 작성하기" not in ctx.suggestions:
+                ctx.suggestions.append("RFP 작성하기")
+
         yield self._sse("suggestions", {"items": ctx.suggestions})
         yield self._sse("done", {})
 
@@ -507,6 +551,106 @@ class OrchestratorAgent(AgentBase):
             "rag_score": round(ctx.rag_score, 4),
             "phase_trigger": trigger,
             "rfp_fields": ctx.rfp_fields.get("rfp_fields", {}),
+            "classification": ctx.classification,
+        }
+
+    async def execute_sync_pr(self, ctx: AgentContext) -> dict:
+        """동기 실행 (pr_filling phase용) — 구매요청서 필드 추출.
+
+        성능 최적화:
+        - 의도감지 + PR추출 병렬 (~1000ms, 순차→병렬)
+        - field_input 시 Retrieval/Constitution/PostCheck 전부 스킵
+        - question 시만 Retrieval 실행
+        """
+        total_start = time.time()
+
+        # ── GATE 1: 헌법 사전검사 (~0ms, 키워드) ──
+        await self.constitution.pre_check(ctx, self._critical_pool)
+        if ctx.violation:
+            return {
+                "answer": ctx.violation, "sources": [], "rag_score": 0,
+                "phase_trigger": None, "pr_fields": {}, "classification": None,
+            }
+
+        # ── PHASE 1+2: 의도 감지 + PR 추출 병렬 (~1000ms) ──
+        # PR 추출은 항상 필요하므로 의도 감지와 동시에 시작
+        await asyncio.gather(
+            self.classification.detect_filling_intent(ctx, self._critical_pool),
+            self.pr.extract_fields(ctx, self._critical_pool),
+        )
+
+        # ── question/rfp_question일 때만 Retrieval (선택적) ──
+        if ctx.filling_intent in ("question", "rfp_question"):
+            await self.retrieval.execute(ctx, self._critical_pool)
+
+        # ── PHASE 3: 새 필드 머지 + 완성 여부 판단 ──
+        trigger = None
+        if ctx.phase == "pr_filling":
+            new_fields = ctx.pr_fields.get("pr_fields", {})
+            schema = PR_SCHEMAS.get(ctx.pr_type, PR_SCHEMAS["_generic"])
+
+            if new_fields:
+                already_filled = set(k for k, v in ctx.filled_fields.items() if v)
+                all_field_keys = [
+                    p.split(":")[0].strip()
+                    for p in schema["fields"].split(", ")
+                    if ":" in p
+                ]
+                safe_fields = {}
+                for k, v in new_fields.items():
+                    if not v:
+                        continue
+                    idx = all_field_keys.index(k) if k in all_field_keys else -1
+                    if idx >= 0:
+                        preceding_empty = sum(
+                            1 for pk in all_field_keys[:idx]
+                            if pk not in already_filled and pk not in new_fields
+                        )
+                        if preceding_empty >= 3:
+                            logger.warning(
+                                f"[Orchestrator:PR] Skipping hallucinated field {k}={v}"
+                            )
+                            continue
+                    safe_fields[k] = v
+
+                for k, v in safe_fields.items():
+                    ctx.filled_fields[k] = v
+                ctx.pr_fields["pr_fields"] = safe_fields
+
+            required_keys = set(k.strip() for k in schema["required"].split(","))
+            all_filled = set(k for k, v in ctx.filled_fields.items() if v)
+            if required_keys.issubset(all_filled):
+                trigger = "pr_complete"
+                ctx.phase = "pr_complete"
+                logger.info(f"[Orchestrator:PR] PR complete! required={required_keys}, filled={all_filled}")
+            else:
+                missing = required_keys - all_filled
+                logger.info(f"[Orchestrator:PR] PR not complete. missing={missing}")
+
+        # ── PHASE 4: 답변 생성 (헌법/화법 주입은 question일 때만) ──
+        if ctx.filling_intent in ("question", "rfp_question") and ctx.query_embedding:
+            await self.constitution.inject_rules(ctx, self._background_pool)
+
+        await self.generation.execute(ctx, self._critical_pool)
+        # PR filling은 post_check 스킵 (RFP filling과 동일)
+
+        # ── 타이밍 로그 ──
+        total_ms = (time.time() - total_start) * 1000
+        logger.info(
+            f"[Orchestrator:pr_filling] Intent: {ctx.filling_intent} | "
+            f"IntentDetect: {ctx.timings.get('filling_intent_ms', 0):.0f}ms | "
+            f"PR: {ctx.timings.get('pr_extract_ms', 0):.0f}ms | "
+            f"Retrieval: {ctx.timings.get('retrieval_ms', 0):.0f}ms | "
+            f"Generation: {ctx.timings.get('generation_ms', 0):.0f}ms | "
+            f"Total: {total_ms:.0f}ms"
+        )
+
+        return {
+            "answer": ctx.answer,
+            "sources": ctx.sources,
+            "rag_score": round(ctx.rag_score, 4),
+            "phase_trigger": trigger,
+            "pr_fields": ctx.pr_fields.get("pr_fields", {}),
             "classification": ctx.classification,
         }
 

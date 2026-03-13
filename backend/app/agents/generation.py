@@ -5,11 +5,12 @@ from concurrent.futures import ThreadPoolExecutor
 from app.agents.base import AgentBase, AgentContext, AgentResult, AgentPriority
 from app.rag.generator import generate_answer, generate_answer_stream
 from app.constants.rfp_schemas import RFP_SCHEMAS
+from app.constants.pr_schemas import PR_SCHEMAS
 
 
-def _build_filled_keys(filled_fields: dict, rfp_type: str) -> str:
-    """filled_fields의 키(s1,s2...)를 한국어 라벨+값으로 변환 + 미입력 필드 표시."""
-    schema = RFP_SCHEMAS.get(rfp_type, RFP_SCHEMAS["service_contract"])
+def _build_filled_keys(filled_fields: dict, rfp_type: str, schema_source: dict | None = None) -> str:
+    """filled_fields의 키를 한국어 라벨+값으로 변환 + 미입력 필드 표시."""
+    schema = schema_source or RFP_SCHEMAS.get(rfp_type, RFP_SCHEMAS["service_contract"])
     field_labels = {}
     all_keys = []
     for pair in schema["fields"].split(", "):
@@ -49,9 +50,15 @@ class GenerationAgent(AgentBase):
         start = time.time()
         try:
             loop = asyncio.get_event_loop()
-            filled_keys = _build_filled_keys(ctx.filled_fields, ctx.rfp_type)
-            schema = RFP_SCHEMAS.get(ctx.rfp_type, RFP_SCHEMAS["service_contract"])
-            rfp_sections = schema["sections"] if ctx.phase == "filling" else ""
+            # PR phase → PR 스키마, RFP phase → RFP 스키마
+            if ctx.phase.startswith("pr_"):
+                pr_schema = PR_SCHEMAS.get(ctx.pr_type, PR_SCHEMAS["_generic"])
+                filled_keys = _build_filled_keys(ctx.filled_fields, ctx.rfp_type, pr_schema)
+                rfp_sections = pr_schema["sections"] if ctx.phase == "pr_filling" else ""
+            else:
+                filled_keys = _build_filled_keys(ctx.filled_fields, ctx.rfp_type)
+                schema = RFP_SCHEMAS.get(ctx.rfp_type, RFP_SCHEMAS["service_contract"])
+                rfp_sections = schema["sections"] if ctx.phase == "filling" else ""
 
             def _produce():
                 try:
@@ -79,12 +86,18 @@ class GenerationAgent(AgentBase):
             return self._timed_result(start, success=False, error=str(e))
 
     async def execute(self, ctx: AgentContext, executor: ThreadPoolExecutor) -> AgentResult:
-        """동기 생성 (filling phase용)."""
+        """동기 생성 (filling/pr_filling phase용)."""
         start = time.time()
         try:
-            filled_keys = _build_filled_keys(ctx.filled_fields, ctx.rfp_type)
-            schema = RFP_SCHEMAS.get(ctx.rfp_type, RFP_SCHEMAS["service_contract"])
-            rfp_sections = schema["sections"] if ctx.phase == "filling" else ""
+            # PR phase → PR 스키마
+            if ctx.phase.startswith("pr_"):
+                pr_schema = PR_SCHEMAS.get(ctx.pr_type, PR_SCHEMAS["_generic"])
+                filled_keys = _build_filled_keys(ctx.filled_fields, ctx.rfp_type, pr_schema)
+                rfp_sections = pr_schema["sections"] if ctx.phase == "pr_filling" else ""
+            else:
+                filled_keys = _build_filled_keys(ctx.filled_fields, ctx.rfp_type)
+                schema = RFP_SCHEMAS.get(ctx.rfp_type, RFP_SCHEMAS["service_contract"])
+                rfp_sections = schema["sections"] if ctx.phase == "filling" else ""
 
             answer, score = await self.run_in_thread(
                 executor,

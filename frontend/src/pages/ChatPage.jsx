@@ -2,7 +2,9 @@ import { useState, useEffect, useRef } from "react";
 import { api } from "../api/client";
 import { T } from "../styles/tokens";
 import { RFP_TEMPLATES } from "../data/rfpTemplates";
+import { PR_TEMPLATES, PR_CATEGORIES } from "../data/prTemplates";
 import { downloadRfpPdf } from "../utils/rfpExport";
+import { downloadPrPdf } from "../utils/prExport";
 // BackgroundBlobs 제거 — 업무마켓9 임베드 시 외부 배경 불필요
 
 // ═══════════════════════════════════════════
@@ -236,6 +238,16 @@ export default function ChatPage() {
   const [rfpRequestId, setRfpRequestId] = useState(null);
   const [rfpHistory, setRfpHistory]     = useState([]);
   const [showHistory, setShowHistory]   = useState(false);
+  // PR (구매요청서) state
+  const [userRole, setUserRole]         = useState(null);    // "user" | "procurement"
+  const [roleTurnCount, setRoleTurnCount] = useState(0);
+  const [prType, setPrType]             = useState(null);
+  const [prFields, setPrFields]         = useState({});
+  const [prJustFilled, setPrJustFilled] = useState(new Set());
+  const [prRightVisible, setPrRightVisible] = useState(false);
+  const [prSuppliers, setPrSuppliers]       = useState([]);
+  const [selectedPrSupplier, setSelectedPrSupplier] = useState(null);
+  const [prSupplierLoading, setPrSupplierLoading] = useState(false);
   const msgEndRef  = useRef(null);
   const chatScrollRef = useRef(null);
   const fieldRefs  = useRef({});
@@ -246,6 +258,13 @@ export default function ChatPage() {
   const filled = Object.values(fields).filter(f => (f.value || "").trim()).length;
   const total  = Object.keys(fields).length;
   const pct    = total > 0 ? Math.round(filled / total * 100) : 0;
+
+  // PR 계산
+  const currentPrTemplate = prType ? PR_TEMPLATES[prType] : null;
+  const currentPrSections = currentPrTemplate?.sections || [];
+  const prFilled = Object.values(prFields).filter(f => (f.value || "").trim()).length;
+  const prTotal  = Object.keys(prFields).length;
+  const prPct    = prTotal > 0 ? Math.round(prFilled / prTotal * 100) : 0;
 
   useEffect(() => {
     if (chatScrollRef.current) {
@@ -267,6 +286,40 @@ export default function ChatPage() {
       }, 1500);
     }
   }, [phase]);
+
+  // PR 완료 시 공급업체 검색 (사용자 전용)
+  useEffect(() => {
+    if (phase === "pr_complete" && userRole === "user" && prType) {
+      setPrSupplierLoading(true);
+      // PR 카테고리 → 대분류 역매핑
+      let prCategory = "";
+      for (const [cat, keys] of Object.entries(PR_CATEGORIES)) {
+        if (keys.includes(prType)) { prCategory = cat; break; }
+      }
+      // PR 대분류 → DB 공급업체 카테고리 매핑
+      const PR_TO_DB_CATEGORY = {
+        "건물 관리": "일반 용역",
+        "마케팅": "서비스",
+        "교육 서비스": "서비스",
+      };
+      const dbCat = PR_TO_DB_CATEGORY[prCategory] || "일반 용역";
+      const schema = PR_TEMPLATES[prType];
+      // PR 필드에서 키워드 추출
+      const keywords = Object.values(prFields)
+        .map(f => (f.value || "").trim())
+        .filter(v => v && v.length >= 2 && v.length <= 30)
+        .slice(0, 5)
+        .join(",");
+
+      api.searchSuppliers(dbCat, keywords || schema?.label || "").then(res => {
+        setPrSuppliers(res.suppliers || []);
+      }).catch(() => {
+        api.getSuppliers(dbCat).then(res => {
+          setPrSuppliers(res.suppliers || []);
+        }).catch(() => setPrSuppliers([]));
+      }).finally(() => setPrSupplierLoading(false));
+    }
+  }, [phase, userRole, prType]);
 
   const applyFills = (fills) => {
     if (!fills || !Object.keys(fills).length) return;
@@ -300,6 +353,38 @@ export default function ChatPage() {
     return result;
   };
 
+  // PR 필드 적용
+  const applyPrFills = (fills) => {
+    if (!fills || !Object.keys(fills).length) return;
+    const keys = new Set(Object.keys(fills));
+    setPrJustFilled(keys);
+    setPrFields(prev => {
+      const next = { ...prev };
+      Object.entries(fills).forEach(([k,v]) => {
+        if (next[k] && v != null) {
+          next[k] = { ...next[k], value: String(v).trim() };
+        }
+      });
+      return next;
+    });
+    setTimeout(() => setPrJustFilled(new Set()), 2500);
+
+    // 50% 이상 시 우측 패널 표시
+    const newFilledCount = Object.values(prFields).filter(f => (f.value || "").trim()).length + Object.keys(fills).length;
+    const totalFields = Object.keys(prFields).length;
+    if (totalFields > 0 && newFilledCount / totalFields >= 0.5 && !prRightVisible) {
+      setPrRightVisible(true);
+    }
+  };
+
+  const getPrFilledFields = () => {
+    const result = {};
+    Object.entries(prFields).forEach(([k, v]) => {
+      if ((v.value || "").trim()) result[k] = v.value;
+    });
+    return result;
+  };
+
   const handleRfpTypeSelect = (type) => {
     setRfpType(type);
     const templateFields = {};
@@ -319,6 +404,42 @@ export default function ChatPage() {
     ]);
   };
 
+  // PR 카테고리 선택
+  const handlePrTypeSelect = (type) => {
+    setPrType(type);
+    const templateFields = {};
+    Object.entries(PR_TEMPLATES[type].fields).forEach(([k, v]) => {
+      templateFields[k] = { ...v };
+    });
+    setPrFields(templateFields);
+    setPhase("pr_filling");
+
+    const tmpl = PR_TEMPLATES[type];
+    const firstSection = tmpl.sections[0];
+    const firstFields = firstSection ? firstSection.fields.map(fk => tmpl.fields[fk]?.label).filter(Boolean).join(", ") : "";
+    setMessages(prev => [
+      ...prev,
+      { id: msgIdCounter++, role: "user", text: tmpl.label },
+      { id: msgIdCounter++, role: "assistant", text: `${tmpl.label} 구매요청서 작성을 시작하겠습니다.\n먼저 ${firstSection?.title || "기본 정보"}를 알려주십시오.\n${firstFields}이(가) 필요합니다.` }
+    ]);
+  };
+
+  // 역할 선택
+  const handleRoleSelect = (role) => {
+    setUserRole(role);
+    if (role === "user") {
+      setMessages(prev => [...prev, {
+        id: msgIdCounter++, role: "assistant",
+        text: "구매하시려는 품목이나 서비스에 대해 질문해 주세요.\n도움이 되는 정보를 안내해 드리고, 구매요청서 작성도 도와드리겠습니다.",
+      }]);
+    } else {
+      setMessages(prev => [...prev, {
+        id: msgIdCounter++, role: "assistant",
+        text: "구매 업무 관련 질문을 해 주세요.\n제안요청서(RFP) 작성이 필요하시면 말씀해 주십시오.",
+      }]);
+    }
+  };
+
   const handleSend = async (directText) => {
     const text = (typeof directText === "string" ? directText : userInput).trim();
     if (!text || isTyping) return;
@@ -331,7 +452,22 @@ export default function ChatPage() {
     const history = messages.map(m => ({ role: m.role, content: m.text }));
 
     try {
-      if (phase === "filling") {
+      if (phase === "pr_filling") {
+        // PR 필드 추출
+        const data = await api.chat(sessionId, text, null, history, phase, {}, rfpType, prType, getPrFilledFields(), userRole, roleTurnCount);
+        if (data.pr_fields && Object.keys(data.pr_fields).length > 0) {
+          applyPrFills(data.pr_fields);
+        }
+        setMessages(prev => [...prev, {
+          id: msgIdCounter++, role: "assistant",
+          text: data.answer, sources: data.sources,
+          rag_score: data.rag_score, trigger: data.phase_trigger,
+        }]);
+        if (data.phase_trigger === "pr_complete") {
+          setTimeout(() => setPhase("pr_complete"), 800);
+          setPrRightVisible(true);
+        }
+      } else if (phase === "filling") {
         const data = await api.chat(sessionId, text, null, history, phase, getFilledFields(), rfpType);
         if (data.rfp_fields && Object.keys(data.rfp_fields).length > 0) {
           applyFills(data.rfp_fields);
@@ -359,6 +495,16 @@ export default function ChatPage() {
           },
           (meta) => {
             metaData = meta;
+            // 역할 감지 결과 반영
+            if (meta.user_role && !userRole) {
+              setUserRole(meta.user_role);
+            }
+            if (meta.ask_role) {
+              // 3턴 초과: 역할 선택 카드 표시
+              setMessages(prev => prev.map(m =>
+                m.id === aiMsgId ? { ...m, roleSelect: true } : m
+              ));
+            }
             // 분류 결과 저장 (다음 요청의 카테고리 필터용)
             if (meta.classification) {
               setLastClassification(meta.classification);
@@ -380,7 +526,11 @@ export default function ChatPage() {
             setMessages(prev => prev.map(m =>
               m.id === aiMsgId ? { ...m, isStreaming: false } : m
             ));
-            if (metaData.phase_trigger === "rfp_agreed") {
+            if (metaData.phase_trigger === "pr_agreed") {
+              setMessages(prev => prev.map(m =>
+                m.id === aiMsgId ? { ...m, prTypeSelect: true } : m
+              ));
+            } else if (metaData.phase_trigger === "rfp_agreed") {
               setMessages(prev => prev.map(m =>
                 m.id === aiMsgId ? { ...m, rfpTypeSelect: true } : m
               ));
@@ -395,7 +545,10 @@ export default function ChatPage() {
               ));
             }
           },
-          rfpType
+          rfpType,
+          userRole,
+          roleTurnCount,
+          prType,
         );
       }
     } catch {
@@ -405,6 +558,7 @@ export default function ChatPage() {
       }]);
     } finally {
       setIsTyping(false);
+      if (!userRole) setRoleTurnCount(prev => prev + 1);
       inputRef.current?.focus();
     }
   };
@@ -491,6 +645,56 @@ export default function ChatPage() {
             <div style={{ fontSize:11, fontWeight:700, color: T.text, lineHeight:1.3 }}>{tmpl.label}</div>
             <div style={{ fontSize:9, color: T.sub, lineHeight:1.3 }}>{tmpl.desc}</div>
           </button>
+        );
+      })}
+    </div>
+  );
+
+  // ═══ PR 카테고리 선택 카드 (대분류별 그룹) ═══
+  const PR_CATEGORY_ICONS = {
+    "건물 관리": { emoji: "🏢", color: "#0EA5A0", bg: "#F0FAFA" },
+    "마케팅": { emoji: "📢", color: "#FB923C", bg: "#FFF7ED" },
+    "교육 서비스": { emoji: "📚", color: "#818CF8", bg: "#EEF2FF" },
+  };
+
+  const PrTypeSelector = () => (
+    <div style={{ marginTop:12 }}>
+      {Object.entries(PR_CATEGORIES).map(([category, keys]) => {
+        const catCfg = PR_CATEGORY_ICONS[category] || { emoji: "📦", color: T.primary, bg: T.primaryLight };
+        return (
+          <div key={category} style={{ marginBottom:12 }}>
+            <div style={{ fontSize:11, fontWeight:700, color: catCfg.color, marginBottom:6, display:"flex", alignItems:"center", gap:4 }}>
+              <span>{catCfg.emoji}</span> {category}
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>
+              {keys.map(key => {
+                const tmpl = PR_TEMPLATES[key];
+                if (!tmpl) return null;
+                return (
+                  <button
+                    key={key}
+                    onClick={(e) => { e.stopPropagation(); handlePrTypeSelect(key); }}
+                    style={{
+                      padding:"10px 8px", borderRadius: T.r10,
+                      border:`1.5px solid ${T.border}`, background: T.card,
+                      cursor:"pointer", fontFamily:"inherit", textAlign:"center",
+                      transition:"all 0.15s", fontSize:11, fontWeight:600, color: T.text,
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.borderColor = catCfg.color;
+                      e.currentTarget.style.background = catCfg.bg;
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.borderColor = T.border;
+                      e.currentTarget.style.background = T.card;
+                    }}
+                  >
+                    {tmpl.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         );
       })}
     </div>
@@ -1027,7 +1231,7 @@ export default function ChatPage() {
             ))}
             {(s.tags || []).length > 3 && (
               <span style={{ fontSize:9, padding:"2px 8px", borderRadius:10, color: T.muted }}>
-                +{(isDb ? s.tags : s.services || []).length - 3}개
+                +{(s.tags || []).length - 3}개
               </span>
             )}
           </div>
@@ -1258,6 +1462,8 @@ export default function ChatPage() {
               onClick={() => {
                 setMessages([{ id: msgIdCounter++, role: "assistant", text: "안녕하세요! 간접구매 상담도우미입니다.\n\n구매하려는 품목이나 서비스를 말씀해 주세요.\n견적 요청부터 공급업체 추천까지 함께 도와드립니다." }]);
                 setPhase("chat"); setRfpType(null); setFields({}); setRightVisible(false); setDownloaded(false); setRecommendedRfp(null); setLastClassification(null); setSent(false); setEmailSent(false); setRfpRequestId(null); setRfpHistory([]); setShowEmailModal(false); setEmailTo("");
+                // PR state 초기화
+                setUserRole(null); setRoleTurnCount(0); setPrType(null); setPrFields({}); setPrJustFilled(new Set()); setPrRightVisible(false); setPrSuppliers([]); setSelectedPrSupplier(null); setPrSupplierLoading(false);
               }}
               style={{
                 width:34, height:34, borderRadius: T.r8,
@@ -1396,6 +1602,44 @@ export default function ChatPage() {
                   </div>
                 )}
 
+                {/* 역할 선택 카드 */}
+                {msg.roleSelect && !userRole && (
+                  <div style={{ marginTop:12 }}>
+                    <div style={{ fontSize:12, fontWeight:600, color: T.sub, marginBottom:8 }}>어떤 업무를 도와드릴까요?</div>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                      <button onClick={() => handleRoleSelect("user")} style={{
+                        padding:"16px 14px", borderRadius: T.r12,
+                        border:`1.5px solid ${T.border}`, background: T.card,
+                        cursor:"pointer", fontFamily:"inherit", textAlign:"center",
+                        transition:"all 0.2s",
+                      }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = "#06B6D4"; e.currentTarget.style.background = "#ECFEFF"; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.background = T.card; }}
+                      >
+                        <div style={{ fontSize:22, marginBottom:6 }}>🛒</div>
+                        <div style={{ fontSize:12, fontWeight:700, color: T.text }}>물건/서비스를 구매하고 싶어요</div>
+                        <div style={{ fontSize:10, color: T.sub, marginTop:4 }}>구매요청서 작성 + 공급업체 추천</div>
+                      </button>
+                      <button onClick={() => handleRoleSelect("procurement")} style={{
+                        padding:"16px 14px", borderRadius: T.r12,
+                        border:`1.5px solid ${T.border}`, background: T.card,
+                        cursor:"pointer", fontFamily:"inherit", textAlign:"center",
+                        transition:"all 0.2s",
+                      }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = "#A78BFA"; e.currentTarget.style.background = "#F5F3FF"; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.background = T.card; }}
+                      >
+                        <div style={{ fontSize:22, marginBottom:6 }}>📋</div>
+                        <div style={{ fontSize:12, fontWeight:700, color: T.text }}>구매 업무를 담당하고 있어요</div>
+                        <div style={{ fontSize:10, color: T.sub, marginTop:4 }}>RFP/RFQ 작성 + 소싱</div>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* PR 카테고리 선택 카드 */}
+                {msg.prTypeSelect && !prType && <PrTypeSelector />}
+
                 {/* RFP 유형 선택 카드 */}
                 {msg.rfpTypeSelect && !rfpType && <RfpTypeSelector />}
 
@@ -1460,6 +1704,68 @@ export default function ChatPage() {
           borderTop:`1px solid rgba(14,165,160,0.08)`,
         }}>
           <div style={{ padding:"12px 16px 10px", display:"flex", gap:10, alignItems:"center" }}>
+            {/* 구매담당자 PDF 업로드 버튼 */}
+            {userRole === "procurement" && phase === "chat" && (
+              <>
+                <input
+                  type="file" accept=".pdf"
+                  id="pr-upload-input"
+                  style={{ display:"none" }}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setIsTyping(true);
+                    setMessages(prev => [...prev,
+                      { id: msgIdCounter++, role: "user", text: `[PDF 업로드] ${file.name}` },
+                    ]);
+                    try {
+                      const formData = new FormData();
+                      formData.append("file", file);
+                      const res = await api.uploadPr(formData);
+                      if (res.error) {
+                        setMessages(prev => [...prev, {
+                          id: msgIdCounter++, role: "assistant",
+                          text: `PDF 분석 실패: ${res.error}`,
+                        }]);
+                      } else {
+                        // 추출된 필드로 RFP 자동 채움
+                        const extractedFields = res.extracted_fields || {};
+                        setMessages(prev => [...prev, {
+                          id: msgIdCounter++, role: "assistant",
+                          text: `구매요청서를 분석했습니다.\n\n**유형:** ${res.label || "일반"}\n**제목:** ${res.title || "-"}\n**요청부서:** ${res.department || "-"}\n**요청자:** ${res.requester || "-"}\n${res.selected_supplier ? `**선택 공급업체:** ${res.selected_supplier}` : ""}\n\n총 ${Object.keys(extractedFields).length}개 필드를 추출했습니다.\n이 내용을 바탕으로 제안요청서(RFP)를 작성하시겠습니까?`,
+                          prUploadResult: res,
+                        }]);
+                      }
+                    } catch {
+                      setMessages(prev => [...prev, {
+                        id: msgIdCounter++, role: "assistant",
+                        text: "PDF 업로드 중 오류가 발생했습니다.",
+                      }]);
+                    }
+                    setIsTyping(false);
+                    e.target.value = "";
+                  }}
+                />
+                <button
+                  onClick={() => document.getElementById("pr-upload-input")?.click()}
+                  title="구매요청서 PDF 업로드"
+                  style={{
+                    width:48, height:48, borderRadius: T.r14, border:`1.5px solid ${T.border}`,
+                    background:"transparent", display:"flex", alignItems:"center", justifyContent:"center",
+                    cursor:"pointer", transition:"all 0.2s", flexShrink:0,
+                    color: T.sub,
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = T.primary; e.currentTarget.style.color = T.primary; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.color = T.sub; }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
+                  </svg>
+                </button>
+              </>
+            )}
             <input
               ref={inputRef}
               value={userInput}
@@ -1468,7 +1774,7 @@ export default function ChatPage() {
               onFocus={() => setInputFocused(true)}
               onBlur={() => setInputFocused(false)}
               placeholder={
-                phase === "chat" ? "궁금한 내용을 입력해주세요..."
+                phase === "chat" ? (userRole === "procurement" ? "질문을 입력하거나 구매요청서 PDF를 업로드하세요..." : "궁금한 내용을 입력해주세요...")
                   : phase === "complete" ? "공급업체 추천 또는 추가 질문..."
                   : "추가 정보를 입력하세요..."
               }
@@ -1512,6 +1818,407 @@ export default function ChatPage() {
           </div>
         </div>
       </div>
+
+      {/* ════ RIGHT: PR 패널 ════ */}
+      {prRightVisible && phase.startsWith("pr_") && (
+        <div style={{
+          width:440, maxWidth:440, height:"85vh",
+          display:"flex", flexDirection:"column",
+          background: 'rgba(255,255,255,0.72)',
+          backdropFilter: "blur(30px) saturate(1.4)",
+          WebkitBackdropFilter: "blur(30px) saturate(1.4)",
+          borderRadius: T.r24,
+          border: `1px solid rgba(14,165,160,0.12)`,
+          boxShadow: '0 4px 24px rgba(14,165,160,0.08), 0 1px 3px rgba(0,0,0,0.06)',
+          animation:"panel-slide-in 0.45s cubic-bezier(0.16, 1, 0.3, 1)",
+          flexShrink:0, overflow:"hidden",
+          position:"relative", zIndex:1,
+        }}>
+          {/* PR 헤더 */}
+          <div style={{
+            background: "rgba(255,255,255,0.75)",
+            backdropFilter: "blur(10px)",
+            WebkitBackdropFilter: "blur(10px)",
+            borderBottom:`1px solid rgba(14,165,160,0.08)`,
+            padding:"14px 20px",
+            display:"flex", alignItems:"center", gap:12, flexShrink:0,
+          }}>
+            <div style={{
+              width:38, height:38, borderRadius: T.r10,
+              background: "linear-gradient(135deg, #06B6D4, #0EA5A0)",
+              display:"flex", alignItems:"center", justifyContent:"center",
+              color:"#fff", boxShadow: T.shadowSm,
+            }}>
+              <IconDoc size={18} />
+            </div>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:13, fontWeight:800, color: T.text }}>
+                구매요청서 (PR) — {currentPrTemplate?.label || ""}
+              </div>
+              <div style={{ fontSize:10, color: T.sub, marginTop:2 }}>
+                {phase === "pr_filling" ? "작성 진행 중" : "작성 완료"}
+              </div>
+            </div>
+            <span style={{
+              fontSize:10, padding:"4px 10px", borderRadius:20, fontWeight:600,
+              background: phase === "pr_complete" ? T.greenLight : T.primaryLight,
+              color: phase === "pr_complete" ? T.greenDark : T.primary,
+              border: `1px solid ${phase === "pr_complete" ? T.greenMid : T.primaryMid}`,
+            }}>{phase === "pr_complete" ? "✓ 완료" : "작성 중"}</span>
+            <button
+              onClick={() => setPrRightVisible(false)}
+              style={{
+                width:28, height:28, borderRadius:8, border:"none",
+                background:"rgba(100,116,139,0.08)", cursor:"pointer",
+                display:"flex", alignItems:"center", justifyContent:"center",
+                color: T.muted, fontSize:16, lineHeight:1,
+                marginLeft:4, flexShrink:0, transition:"all 0.15s",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(239,68,68,0.1)"; e.currentTarget.style.color = "#ef4444"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "rgba(100,116,139,0.08)"; e.currentTarget.style.color = T.muted; }}
+              title="패널 닫기"
+            >✕</button>
+          </div>
+          {/* PR 패널 내용 — filling / complete 분기 */}
+          <div className="custom-scroll" style={{ flex:1, overflowY:"auto", padding:"20px 22px" }}>
+            {/* ── PR Complete: 성공 배너 + 공급업체 추천 ── */}
+            {phase === "pr_complete" && (
+              <>
+                {/* 성공 배너 */}
+                <div style={{
+                  background: `linear-gradient(135deg, rgba(16,185,129,0.08), rgba(6,182,212,0.06))`,
+                  borderRadius: T.r16, padding:"18px 22px", marginBottom:18,
+                  border:`1.5px solid rgba(16,185,129,0.15)`,
+                  display:"flex", alignItems:"center", gap:14,
+                }}>
+                  <IconParty size={32} />
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:14, fontWeight:800, color: T.greenDark }}>구매요청서 작성 완료!</div>
+                    <div style={{ fontSize:11, color:"#16a34a", marginTop:3 }}>
+                      {selectedPrSupplier ? `공급업체: ${selectedPrSupplier}` : "아래에서 공급업체를 선택해 주세요."}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (currentPrTemplate) {
+                        downloadPrPdf(prFields, currentPrSections, currentPrTemplate.label, selectedPrSupplier);
+                      }
+                    }}
+                    style={{
+                      padding:"8px 16px", borderRadius: T.r10,
+                      border:`1px solid ${T.primary}`, background:"rgba(6,182,212,0.06)",
+                      color: T.primary, fontSize:11, fontWeight:700, cursor:"pointer",
+                      fontFamily:"inherit", whiteSpace:"nowrap",
+                      display:"flex", alignItems:"center", gap:5,
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = "rgba(6,182,212,0.12)"}
+                    onMouseLeave={e => e.currentTarget.style.background = "rgba(6,182,212,0.06)"}
+                  >
+                    <IconDownload size={13} /> PDF
+                  </button>
+                </div>
+
+                {/* 채워진 필드 요약 (접기/펼치기) */}
+                <div style={{ marginBottom:16 }}>
+                  <div
+                    onClick={() => setOpenSec(p => ({...p, pr_summary: !p.pr_summary}))}
+                    style={{
+                      background: 'rgba(255,255,255,0.7)', padding:"12px 16px",
+                      border: `1px solid rgba(6,182,212,0.08)`,
+                      borderRadius: openSec.pr_summary ? `${T.r12}px ${T.r12}px 0 0` : T.r12,
+                      display:"flex", alignItems:"center", gap:10, cursor:"pointer",
+                    }}
+                  >
+                    <IconDoc size={14} />
+                    <span style={{ fontSize:12, fontWeight:700, flex:1, color: T.text }}>작성된 구매요청서</span>
+                    <Chip>{prFilled}/{prTotal} 항목</Chip>
+                    <span style={{ color: T.muted }}><IconChevron open={openSec.pr_summary} /></span>
+                  </div>
+                  {openSec.pr_summary && (
+                    <div style={{
+                      background: 'rgba(255,255,255,0.65)', border:`1px solid rgba(6,182,212,0.08)`, borderTop:"none",
+                      borderRadius:`0 0 ${T.r12}px ${T.r12}px`, overflow:"hidden",
+                    }}>
+                      {Object.entries(prFields).filter(([,f]) => f.value).map(([fk, f], fi) => (
+                        <div key={fk} style={{
+                          display:"flex", alignItems:"flex-start",
+                          borderBottom: `1px solid ${T.borderLight}`,
+                          background: fi % 2 === 1 ? "rgba(6,182,212,0.02)" : "transparent",
+                        }}>
+                          <div style={{
+                            width:136, padding:"8px 14px", flexShrink:0,
+                            background:"rgba(6,182,212,0.03)", borderRight:`1px solid rgba(6,182,212,0.06)`,
+                            fontSize:11, fontWeight:700, color: T.sub,
+                          }}>{f.label}</div>
+                          <div style={{ flex:1, padding:"8px 14px", fontSize:12, color: T.text }}>{f.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* 공급업체 추천 (사용자 전용) */}
+                {userRole === "user" && !selectedPrSupplier && (
+                  <>
+                    <div style={{
+                      background: `linear-gradient(135deg, rgba(14,165,160,0.08), rgba(6,182,212,0.06))`,
+                      borderRadius: T.r16, padding:"14px 18px", marginBottom:14,
+                      border:`1px solid rgba(14,165,160,0.12)`,
+                    }}>
+                      <div style={{ fontSize:13, fontWeight:800, color: T.primary }}>추천 공급업체</div>
+                      <div style={{ fontSize:11, color: T.sub, marginTop:3 }}>구매요청 내용 기반 매칭 결과입니다.</div>
+                    </div>
+
+                    {prSupplierLoading ? (
+                      <div style={{ textAlign:"center", padding:30, color: T.muted, fontSize:12 }}>
+                        공급업체 검색 중...
+                      </div>
+                    ) : prSuppliers.length === 0 ? (
+                      <div style={{ textAlign:"center", padding:30, color: T.muted, fontSize:12 }}>
+                        매칭되는 공급업체가 없습니다.
+                      </div>
+                    ) : prSuppliers.slice(0, 8).map((s, i) => {
+                      const satScore = Math.round((s.score || 0) / 20 * 100);
+                      const isTop = i < 3;
+                      return (
+                        <div key={s.id || s.name + i} style={{
+                          background: 'rgba(255,255,255,0.75)',
+                          backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
+                          borderRadius: T.r12, padding:"14px 18px", marginBottom:8,
+                          border:`1px solid rgba(14,165,160,0.08)`,
+                          transition:"all 0.2s", cursor:"pointer",
+                        }}
+                          onMouseEnter={e => { e.currentTarget.style.borderColor = T.primary; e.currentTarget.style.boxShadow = "0 4px 16px rgba(14,165,160,0.12)"; }}
+                          onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(14,165,160,0.08)"; e.currentTarget.style.boxShadow = "none"; }}
+                        >
+                          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+                            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                              <div style={{
+                                width:32, height:32, borderRadius:8,
+                                background: isTop ? T.gradPrimary : `linear-gradient(135deg, ${T.bgSubtle}, ${T.bg})`,
+                                display:"flex", alignItems:"center", justifyContent:"center",
+                                color: isTop ? "#fff" : T.sub, fontSize:13, fontWeight:800,
+                              }}>{i + 1}</div>
+                              <div>
+                                <div style={{ fontSize:13, fontWeight:700, color: T.text }}>{s.name}</div>
+                                <div style={{ fontSize:10, color: T.muted }}>{s.sub_category || s.category}</div>
+                              </div>
+                            </div>
+                            <span style={{
+                              fontSize:9, fontWeight:600, padding:"2px 6px", borderRadius:8,
+                              background: isTop ? "rgba(16,185,129,0.1)" : "rgba(251,191,36,0.1)",
+                              color: isTop ? "#059669" : "#d97706",
+                            }}>{isTop ? "추천" : "검토"}</span>
+                          </div>
+
+                          {/* 매칭률 바 */}
+                          <div style={{ marginBottom:8 }}>
+                            <div style={{ fontSize:9, color: T.muted, marginBottom:3 }}>매칭률</div>
+                            <div style={{ height:5, borderRadius:3, background: T.bgSubtle, overflow:"hidden" }}>
+                              <div style={{ width:`${s.match_rate || 80}%`, height:"100%", borderRadius:3, background: T.gradPrimary, transition:"width 1s ease" }} />
+                            </div>
+                            <div style={{ fontSize:10, fontWeight:700, color: T.primary, marginTop:2 }}>{s.match_rate || 80}%</div>
+                          </div>
+
+                          {/* 태그 */}
+                          <div style={{ display:"flex", gap:4, flexWrap:"wrap", marginBottom:8 }}>
+                            {(s.tags || []).slice(0, 3).map(tag => (
+                              <span key={tag} style={{
+                                fontSize:9, padding:"2px 7px", borderRadius:10,
+                                background: T.bgSubtle, color: T.sub, border:`1px solid ${T.border}`,
+                              }}>{tag}</span>
+                            ))}
+                          </div>
+
+                          {/* 선택 버튼 */}
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              setSelectedPrSupplier(s.name);
+                              try {
+                                await api.updatePrSupplier(sessionId, s.id, s.name);
+                              } catch (err) {
+                                console.warn("PR supplier update failed:", err);
+                              }
+                            }}
+                            style={{
+                              width:"100%", padding:"8px", borderRadius: T.r10,
+                              border:"none", background: T.gradPrimary,
+                              color:"#fff", fontSize:11, fontWeight:700, cursor:"pointer",
+                              fontFamily:"inherit", transition:"all 0.2s",
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.transform = "scale(1.02)"}
+                            onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
+                          >
+                            이 업체 선택
+                          </button>
+                        </div>
+                      );
+                    })}
+
+                    <div style={{
+                      textAlign:"center", padding:"12px", marginTop:6,
+                      fontSize:10, color: T.muted,
+                      background: T.bgSubtle, borderRadius: T.r10,
+                    }}>
+                      업무마켓9(workmarket9.com) 등록 업체 기준
+                    </div>
+                  </>
+                )}
+
+                {/* 공급업체 선택 완료 */}
+                {selectedPrSupplier && (
+                  <div style={{
+                    background: 'rgba(16,185,129,0.06)', borderRadius: T.r16,
+                    padding:"18px 22px", border:`1.5px solid rgba(16,185,129,0.15)`,
+                    textAlign:"center",
+                  }}>
+                    <IconCheck size={24} />
+                    <div style={{ fontSize:14, fontWeight:700, color: T.greenDark, marginTop:8 }}>
+                      공급업체 선택 완료
+                    </div>
+                    <div style={{ fontSize:13, fontWeight:600, color: T.text, marginTop:6 }}>{selectedPrSupplier}</div>
+                    <div style={{ fontSize:11, color: T.sub, marginTop:8 }}>
+                      구매요청서가 업데이트되었습니다.
+                    </div>
+                    <div style={{ display:"flex", gap:8, marginTop:14, justifyContent:"center" }}>
+                      <button
+                        onClick={() => setSelectedPrSupplier(null)}
+                        style={{
+                          padding:"8px 20px", borderRadius: T.r10,
+                          border:`1px solid ${T.border}`, background: T.card,
+                          color: T.sub, fontSize:11, fontWeight:600, cursor:"pointer",
+                          fontFamily:"inherit",
+                        }}
+                      >다른 업체 선택</button>
+                      <button
+                        onClick={() => {
+                          setPhase("chat"); setPrRightVisible(false);
+                          setMessages(prev => [...prev, {
+                            id: msgIdCounter++, role: "assistant",
+                            text: "구매요청서 작성과 공급업체 선택이 완료되었습니다.\n다른 질문이 있으시면 말씀해 주세요.",
+                          }]);
+                        }}
+                        style={{
+                          padding:"8px 20px", borderRadius: T.r10,
+                          border:"none", background: T.gradPrimary,
+                          color:"#fff", fontSize:11, fontWeight:700, cursor:"pointer",
+                          fontFamily:"inherit",
+                        }}
+                      >새 질문하기</button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* ── PR Filling: 진행률 + 섹션 아코디언 ── */}
+            {phase === "pr_filling" && (
+              <>
+                {/* 진행률 */}
+                <div style={{
+                  background: `linear-gradient(135deg, rgba(6,182,212,0.06) 0%, rgba(14,165,160,0.04) 100%)`,
+                  borderRadius: T.r16, padding:"16px 20px", marginBottom:16,
+                  border: `1px solid rgba(6,182,212,0.12)`,
+                }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+                    <span style={{ fontSize:12, fontWeight:700, color: T.text }}>구매요청서 완성도</span>
+                    <span style={{
+                      fontSize:11, fontWeight:700, padding:"4px 12px", borderRadius:20,
+                      background: prPct >= 80 ? T.greenLight : 'rgba(255,255,255,0.8)',
+                      color: prPct >= 80 ? T.greenDark : T.primary,
+                      border: `1px solid ${prPct >= 80 ? T.greenMid : 'rgba(6,182,212,0.15)'}`,
+                    }}>{prFilled} / {prTotal} · {prPct}%</span>
+                  </div>
+                  <div style={{ height:8, background:"rgba(255,255,255,0.7)", borderRadius:4, overflow:"hidden" }}>
+                    <div style={{
+                      height:"100%", width:`${prPct}%`, borderRadius:4,
+                      background: `linear-gradient(90deg, #06B6D4, #0EA5A0)`,
+                      transition:"width 0.6s ease",
+                    }} />
+                  </div>
+                </div>
+
+                {/* 섹션 아코디언 */}
+                {currentPrSections.map((sec, si) => {
+                  const sectionDone = sec.fields.every(f => prFields[f]?.value);
+                  return (
+                    <div key={si} style={{ marginBottom:10 }}>
+                      <div
+                        onClick={() => setOpenSec(p => ({...p,[`pr_${si}`]:!p[`pr_${si}`]}))}
+                        style={{
+                          background: 'rgba(255,255,255,0.7)', padding:"12px 16px",
+                          border: `1px solid rgba(6,182,212,0.08)`,
+                          borderRadius: openSec[`pr_${si}`] !== false ? `${T.r12}px ${T.r12}px 0 0` : T.r12,
+                          display:"flex", alignItems:"center", gap:10, cursor:"pointer",
+                          transition:"all 0.2s ease",
+                        }}
+                      >
+                        <span style={{
+                          width:24, height:24, borderRadius:"50%",
+                          display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
+                          background: sectionDone ? T.greenLight : T.redLight,
+                          color: sectionDone ? T.greenDark : T.red,
+                        }}>{sectionDone ? <IconCheck size={12} /> : <IconAlert size={12} />}</span>
+                        <span style={{ fontSize:12, fontWeight:700, flex:1, color: T.text }}>
+                          {SECTION_ICONS[sec.icon]} {sec.title}
+                        </span>
+                        {sectionDone
+                          ? <Chip>완료</Chip>
+                          : <Chip color={T.red} bg={T.redLight} border={T.redMid}>미완료</Chip>
+                        }
+                        <span style={{ color: T.muted }}><IconChevron open={openSec[`pr_${si}`] !== false} /></span>
+                      </div>
+                      {openSec[`pr_${si}`] !== false && (
+                        <div style={{
+                          background: 'rgba(255,255,255,0.65)', border:`1px solid rgba(6,182,212,0.08)`, borderTop:"none",
+                          borderRadius:`0 0 ${T.r12}px ${T.r12}px`, overflow:"hidden",
+                        }}>
+                          {sec.fields.map((fk, fi) => {
+                            const f = prFields[fk];
+                            if (!f) return null;
+                            const isNew = prJustFilled.has(fk);
+                            return (
+                              <div key={fk} style={{
+                                display:"flex", alignItems:"flex-start",
+                                borderBottom: fi < sec.fields.length-1 ? `1px solid ${T.borderLight}` : "none",
+                                animation: isNew ? "field-highlight 2.5s ease forwards" : "none",
+                                background: fi % 2 === 1 ? "rgba(6,182,212,0.02)" : "transparent",
+                              }}>
+                                <div style={{
+                                  width:136, padding:"10px 14px", flexShrink:0,
+                                  background:"rgba(6,182,212,0.03)", borderRight:`1px solid rgba(6,182,212,0.06)`,
+                                  fontSize:11, fontWeight:700, color: T.sub,
+                                  display:"flex", alignItems:"center", minHeight:40,
+                                }}>{f.label}</div>
+                                <div style={{
+                                  flex:1, padding:"10px 14px", fontSize:12,
+                                  lineHeight:1.7, minHeight:40, display:"flex", alignItems:"center",
+                                }}>
+                                  {f.value ? (
+                                    <span style={{ color: T.text, whiteSpace:"pre-wrap" }}>
+                                      {isNew && <span style={{
+                                        fontSize:9, marginRight:6, padding:"2px 6px",
+                                        background: T.tealLight, border:`1px solid ${T.tealMid}`,
+                                        borderRadius:4, color: T.tealDark, fontWeight:700,
+                                      }}>NEW</span>}
+                                      {f.value}
+                                    </span>
+                                  ) : <span style={{ color: T.muted, fontStyle:"italic", fontSize:11 }}>대화를 통해 자동 입력됩니다</span>}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ════ RIGHT: RFP 패널 ════ */}
       {rightVisible && (
@@ -1580,7 +2287,7 @@ export default function ChatPage() {
           </div>
           {phase === "filling" && PanelFilling()}
           {phase === "complete" && !sent && PanelComplete()}
-          {phase === "complete" && sent && PanelSuppliers()}
+          {phase === "complete" && sent && userRole !== "procurement" && PanelSuppliers()}
         </div>
       )}
 

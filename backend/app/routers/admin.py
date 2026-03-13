@@ -401,6 +401,58 @@ async def delete_rfp_template(template_id: int):
     return {"status": "deleted"}
 
 
+# ── PR(구매요청서) 관리 ──
+
+class PrStatusUpdate(BaseModel):
+    status: str
+
+
+@router.get("/pr-requests")
+async def list_pr_requests(status: str | None = None, limit: int = 50):
+    supabase = get_client()
+    query = supabase.table("pr_requests").select(
+        "id, session_id, pr_type, title, department, requester, fields, "
+        "selected_supplier_id, selected_supplier_name, status, created_at, updated_at"
+    )
+    if status:
+        query = query.eq("status", status)
+    result = query.order("created_at", desc=True).limit(limit).execute()
+    return {"pr_requests": result.data}
+
+
+@router.put("/pr-requests/{request_id}")
+async def update_pr_status(request_id: int, body: PrStatusUpdate):
+    supabase = get_client()
+    result = (
+        supabase.table("pr_requests")
+        .update({"status": body.status})
+        .eq("id", request_id)
+        .execute()
+    )
+    return {"status": "updated", "data": result.data}
+
+
+@router.delete("/pr-requests/{request_id}")
+async def delete_pr_request(request_id: int):
+    supabase = get_client()
+    supabase.table("pr_requests").delete().eq("id", request_id).execute()
+    return {"status": "deleted"}
+
+
+@router.get("/pr-requests/session/{session_id}")
+async def get_session_pr_requests(session_id: str):
+    """특정 세션의 PR 신청 이력을 반환"""
+    supabase = get_client()
+    result = (
+        supabase.table("pr_requests")
+        .select("*")
+        .eq("session_id", session_id)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return {"pr_requests": result.data}
+
+
 # ── 대시보드 ──
 _dash_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="dash")
 
@@ -424,12 +476,14 @@ async def dashboard():
     f_convs = _dash_pool.submit(count_table, "conversations")
     f_suppliers = _dash_pool.submit(count_table, "suppliers")
     f_rules = _dash_pool.submit(count_table, "constitution_rules")
+    f_pr = _dash_pool.submit(count_table, "pr_requests")
 
     result = {
         "knowledge_chunks": f_chunks.result(timeout=10).count or 0,
         "conversations": f_convs.result(timeout=10).count or 0,
         "suppliers": f_suppliers.result(timeout=10).count or 0,
         "constitution_rules": f_rules.result(timeout=10).count or 0,
+        "pr_requests": f_pr.result(timeout=10).count or 0,
     }
 
     # 캐시 갱신

@@ -80,6 +80,11 @@ class ChatRequest(BaseModel):
     phase: str = "chat"
     filled_fields: dict = {}
     rfp_type: str | None = "service_contract"
+    # PR (구매요청서) 관련
+    user_role: str | None = None        # "user" | "procurement"
+    pr_type: str | None = None           # PR 카테고리 키
+    pr_filled_fields: dict = {}          # PR 채워진 필드
+    role_turn_count: int = 0             # 역할 감지 턴 카운터
 
 
 # ──────────────────────────────────────────────
@@ -96,6 +101,9 @@ async def chat_stream(req: ChatRequest):
         phase=req.phase,
         filled_fields=req.filled_fields,
         rfp_type=req.rfp_type or "service_contract",
+        user_role=req.user_role,
+        role_turn_count=req.role_turn_count,
+        pr_type=req.pr_type,
     )
 
     orchestrator = _get_orchestrator()
@@ -127,18 +135,30 @@ async def chat_stream(req: ChatRequest):
 
 @router.post("")
 async def chat(req: ChatRequest):
+    # PR phase인 경우 pr_filled_fields 사용
+    is_pr_phase = req.phase.startswith("pr_")
+    filled = req.pr_filled_fields if is_pr_phase else req.filled_fields
+
     ctx = AgentContext(
         session_id=req.session_id,
         message=req.message,
         category=req.category,
         history=req.history,
         phase=req.phase,
-        filled_fields=req.filled_fields,
+        filled_fields=filled,
         rfp_type=req.rfp_type or "service_contract",
+        user_role=req.user_role,
+        role_turn_count=req.role_turn_count,
+        pr_type=req.pr_type,
     )
 
     orchestrator = _get_orchestrator()
-    result = await orchestrator.execute_sync(ctx)
+
+    # PR filling phase → execute_sync_pr 호출
+    if is_pr_phase:
+        result = await orchestrator.execute_sync_pr(ctx)
+    else:
+        result = await orchestrator.execute_sync(ctx)
 
     # 대화 이력 비동기 저장 (응답 블로킹 방지)
     _save_pool.submit(
@@ -146,6 +166,24 @@ async def chat(req: ChatRequest):
         req.session_id, req.message, result.get("answer", ""),
         req.category, result.get("rag_score", 0), req.phase, req.history,
     )
+
+    # PR 완료 시 pr_requests 테이블에 저장
+    if result.get("phase_trigger") == "pr_complete" and req.pr_filled_fields:
+        try:
+            supabase = get_client()
+            pr_result = supabase.table("pr_requests").insert({
+                "session_id": req.session_id,
+                "pr_type": req.pr_type or "_generic",
+                "fields": req.pr_filled_fields,
+                "status": "draft",
+            }).execute()
+            result["pr_saved"] = True
+            if pr_result.data:
+                result["pr_request_id"] = pr_result.data[0].get("id")
+            logger.info(f"[PR] Saved pr_request for session {req.session_id}")
+        except Exception as e:
+            logger.error(f"[PR] Failed to save pr_request: {e}")
+            result["pr_saved"] = False
 
     # RFP 완료 시 rfp_requests 테이블에 저장
     if result.get("phase_trigger") == "complete" and req.filled_fields:
@@ -166,3 +204,44 @@ async def chat(req: ChatRequest):
             logger.error(f"[RFP] Failed to save rfp_request: {e}")
 
     return result
+
+
+# ──────────────────────────────────────────────
+# PUT /chat/pr-supplier — PR에 공급업체 선택 반영
+# ──────────────────────────────────────────────
+
+class PrSupplierUpdate(BaseModel):
+    session_id: str
+    supplier_id: int | None = None
+    supplier_name: str
+
+
+@router.put("/pr-supplier")
+async def update_pr_supplier(req: PrSupplierUpdate):
+    """PR에 선택된 공급업체 반영."""
+    try:
+        supabase = get_client()
+        # 해당 세션의 최신 PR 조회
+        existing = (
+            supabase.table("pr_requests")
+            .select("id")
+            .eq("session_id", req.session_id)
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if not existing.data:
+            return {"status": "error", "detail": "PR not found"}
+
+        pr_id = existing.data[0]["id"]
+        supabase.table("pr_requests").update({
+            "selected_supplier_id": req.supplier_id,
+            "selected_supplier_name": req.supplier_name,
+            "status": "supplier_selected",
+        }).eq("id", pr_id).execute()
+
+        logger.info(f"[PR] Supplier selected: {req.supplier_name} for PR {pr_id}")
+        return {"status": "updated", "pr_id": pr_id}
+    except Exception as e:
+        logger.error(f"[PR] Failed to update supplier: {e}")
+        return {"status": "error", "detail": str(e)}

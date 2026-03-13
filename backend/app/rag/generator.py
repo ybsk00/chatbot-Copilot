@@ -60,6 +60,10 @@ PHASE_PROMPTS = {
 미입력 필드가 있으면 요청하세요. 한 섹션씩 진행. 채워진 필드는 건너뛰세요.
 현재 채워진 필드: {filled_keys}""",
     "complete": BASE_RULES + """[단계: RFP 완료] 완성을 축하하고 다음 단계(공급업체 선정, 견적 비교)를 안내하세요.""",
+    "pr_filling": BASE_RULES + """[단계: 구매요청서 작성] 섹션: {rfp_sections}
+미입력 필드가 있으면 요청하세요. 한 섹션씩 진행. 채워진 필드는 건너뛰세요.
+현재 채워진 필드: {filled_keys}""",
+    "pr_complete": BASE_RULES + """[단계: 구매요청서 완료] 구매요청서 작성을 축하하고, 공급업체 추천 목록을 확인하도록 안내하세요.""",
 }
 
 FILLING_INTENT_PROMPTS = {
@@ -68,6 +72,16 @@ FILLING_INTENT_PROMPTS = {
     "question": BASE_RULES + """[단계: RFP 중 질문] 섹션: {rfp_sections}
 300~500자. 질문 답변 후 "다음으로 (미입력 필드)를 입력해 주십시오."로 마무리. 현재 채워진 필드: {filled_keys}""",
     "rfp_question": BASE_RULES + """[단계: RFP 필드 개념] 섹션: {rfp_sections}
+200~400자. 해당 필드 설명 + 입력 예시 1~2개. "위 내용을 참고하여 입력해 주십시오."로 마무리. 현재 채워진 필드: {filled_keys}""",
+}
+
+# PR(구매요청서) 의도별 프롬프트
+PR_FILLING_INTENT_PROMPTS = {
+    "field_input": BASE_RULES + """[단계: 구매요청서 필드 확인] 섹션: {rfp_sections}
+100~200자. "확인했습니다"로 시작. 미입력 필드 요청. 현재 채워진 필드: {filled_keys}""",
+    "question": BASE_RULES + """[단계: 구매요청서 중 질문] 섹션: {rfp_sections}
+300~500자. 질문 답변 후 "다음으로 (미입력 필드)를 입력해 주십시오."로 마무리. 현재 채워진 필드: {filled_keys}""",
+    "rfp_question": BASE_RULES + """[단계: 구매요청서 필드 개념] 섹션: {rfp_sections}
 200~400자. 해당 필드 설명 + 입력 예시 1~2개. "위 내용을 참고하여 입력해 주십시오."로 마무리. 현재 채워진 필드: {filled_keys}""",
 }
 
@@ -115,15 +129,19 @@ def generate_answer(
         question=question,
     )
 
+    # PR filling phase + 의도 감지 시 의도별 프롬프트 사용
+    if phase == "pr_filling" and filling_intent and filling_intent in PR_FILLING_INTENT_PROMPTS:
+        system_prompt = PR_FILLING_INTENT_PROMPTS[filling_intent]
+        system_prompt = system_prompt.format(filled_keys=filled_keys or "없음", rfp_sections=rfp_sections)
     # filling phase + 의도 감지 시 의도별 프롬프트 사용
-    if phase == "filling" and filling_intent and filling_intent in FILLING_INTENT_PROMPTS:
+    elif phase == "filling" and filling_intent and filling_intent in FILLING_INTENT_PROMPTS:
         system_prompt = FILLING_INTENT_PROMPTS[filling_intent]
         system_prompt = system_prompt.format(filled_keys=filled_keys or "없음", rfp_sections=rfp_sections)
     elif phase == "chat" and cta_intent in CTA_PROMPTS:
         system_prompt = CTA_PROMPTS[cta_intent]
     else:
         system_prompt = PHASE_PROMPTS.get(phase, PHASE_PROMPTS["chat"])
-        if phase == "filling":
+        if phase in ("filling", "pr_filling"):
             system_prompt = system_prompt.format(filled_keys=filled_keys or "없음", rfp_sections=rfp_sections)
 
     # 헌법 규칙 + 화법 스크립트 동적 주입
@@ -132,12 +150,15 @@ def generate_answer(
     if script_text:
         system_prompt = system_prompt + "\n" + script_text
 
+    # PR/RFP filling field_input: 확인 응답 → 토큰 절약
+    max_tokens = 500 if phase in ("pr_filling", "filling") and filling_intent == "field_input" else 700
+
     response = _get_client().models.generate_content(
         model=MODELS["generation"],
         contents=prompt,
         config=types.GenerateContentConfig(
             system_instruction=system_prompt,
-            max_output_tokens=700,
+            max_output_tokens=max_tokens,
             temperature=0.5,
             thinking_config=types.ThinkingConfig(thinking_budget=0),
         ),
@@ -181,7 +202,7 @@ def generate_answer_stream(
         system_prompt = CTA_PROMPTS[cta_intent]
     else:
         system_prompt = PHASE_PROMPTS.get(phase, PHASE_PROMPTS["chat"])
-        if phase == "filling":
+        if phase in ("filling", "pr_filling"):
             system_prompt = system_prompt.format(filled_keys=filled_keys or "없음", rfp_sections=rfp_sections)
 
     # 헌법 규칙 + 화법 스크립트 동적 주입

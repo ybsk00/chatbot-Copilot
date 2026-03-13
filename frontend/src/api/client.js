@@ -1,19 +1,21 @@
 const API_URL = import.meta.env.VITE_API_URL || "https://ip-assist-backend-1058034030780.asia-northeast3.run.app";
 
 export const api = {
-  async chat(sessionId, message, category, history = [], phase = "chat", filledFields = {}, rfpType = "service_contract") {
+  async chat(sessionId, message, category, history = [], phase = "chat", filledFields = {}, rfpType = "service_contract", prType = null, prFilledFields = {}, userRole = null, roleTurnCount = 0) {
     const res = await fetch(`${API_URL}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json; charset=utf-8" },
       body: JSON.stringify({
         session_id: sessionId, message, category, history,
         phase, filled_fields: filledFields, rfp_type: rfpType,
+        pr_type: prType, pr_filled_fields: prFilledFields,
+        user_role: userRole, role_turn_count: roleTurnCount,
       }),
     });
     return res.json();
   },
 
-  async streamChat(sessionId, message, category, history, phase, filledFields, onToken, onMeta, onDone, onSuggestions, rfpType = "service_contract") {
+  async streamChat(sessionId, message, category, history, phase, filledFields, onToken, onMeta, onDone, onSuggestions, rfpType = "service_contract", userRole = null, roleTurnCount = 0, prType = null) {
     const res = await fetch(`${API_URL}/chat/stream`, {
       method: "POST",
       headers: { "Content-Type": "application/json; charset=utf-8" },
@@ -21,6 +23,7 @@ export const api = {
         session_id: sessionId, message, category, history,
         phase: phase || "chat", filled_fields: filledFields || {},
         rfp_type: rfpType,
+        user_role: userRole, role_turn_count: roleTurnCount, pr_type: prType,
       }),
     });
     const reader = res.body.getReader();
@@ -194,6 +197,25 @@ export const api = {
     return res.json();
   },
 
+  // ── PR 공급업체 선택 ──
+  async updatePrSupplier(sessionId, supplierId, supplierName) {
+    const res = await fetch(`${API_URL}/chat/pr-supplier`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify({ session_id: sessionId, supplier_id: supplierId, supplier_name: supplierName }),
+    });
+    return res.json();
+  },
+
+  // ── 구매담당자 PDF 업로드 ──
+  async uploadPr(formData) {
+    const res = await fetch(`${API_URL}/chat/upload-pr`, {
+      method: "POST",
+      body: formData,
+    });
+    return res.json();
+  },
+
   // ── RFP 양식 관리 ──
   async getRfpTemplates() {
     const res = await fetch(`${API_URL}/admin/rfp-templates`);
@@ -261,6 +283,29 @@ export const api = {
   },
   async deleteUser(id) {
     const res = await fetch(`${API_URL}/admin/users/${id}`, { method: "DELETE" });
+    return res.json();
+  },
+
+  // ── PR 관리 (관리자) ──
+  async getPrRequests(status) {
+    const params = status ? `?status=${status}` : "";
+    const res = await fetch(`${API_URL}/admin/pr-requests${params}`);
+    return res.json();
+  },
+  async updatePrStatus(id, status) {
+    const res = await fetch(`${API_URL}/admin/pr-requests/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify({ status }),
+    });
+    return res.json();
+  },
+  async deletePrRequest(id) {
+    const res = await fetch(`${API_URL}/admin/pr-requests/${id}`, { method: "DELETE" });
+    return res.json();
+  },
+  async getSessionPrRequests(sessionId) {
+    const res = await fetch(`${API_URL}/admin/pr-requests/session/${sessionId}`);
     return res.json();
   },
 

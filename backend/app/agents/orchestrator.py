@@ -299,7 +299,8 @@ class OrchestratorAgent(AgentBase):
                 "phase_trigger": None, "classification": None,
             })
             yield self._sse("token", {"content": freeform_reply})
-            yield self._sse("suggestions", {"items": ["RFP 작성하기"]})
+            freeform_cta = "구매요청서 작성하기" if ctx.user_role == "user" else "RFP 작성하기"
+            yield self._sse("suggestions", {"items": [freeform_cta]})
             yield self._sse("done", {})
             logger.info(f"[Orchestrator] Freeform detected: '{ctx.message}' → skip RAG")
             return
@@ -397,12 +398,15 @@ class OrchestratorAgent(AgentBase):
                 yield self._sse("token", {
                     "content": f"\n\n[안내] {ctx.post_check_violation}"
                 })
-        # 역할별 CTA 제안 추가
-        if ctx.cta_intent in ("hot", "warm") and ctx.user_role == "user":
-            if "구매요청서 작성하기" not in ctx.suggestions:
+        # 역할별 CTA: suggestion agent가 이미 추가하지만, 누락 시 보완
+        # 역할에 맞지 않는 CTA는 제거
+        if ctx.user_role == "user":
+            ctx.suggestions = [s for s in ctx.suggestions if s != "RFP 작성하기"]
+            if ctx.cta_intent in ("hot", "warm") and "구매요청서 작성하기" not in ctx.suggestions:
                 ctx.suggestions.append("구매요청서 작성하기")
-        elif ctx.cta_intent in ("hot", "warm") and ctx.user_role != "user":
-            if "RFP 작성하기" not in ctx.suggestions:
+        else:
+            ctx.suggestions = [s for s in ctx.suggestions if s != "구매요청서 작성하기"]
+            if ctx.cta_intent in ("hot", "warm") and "RFP 작성하기" not in ctx.suggestions:
                 ctx.suggestions.append("RFP 작성하기")
 
         yield self._sse("suggestions", {"items": ctx.suggestions})

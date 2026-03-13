@@ -7,14 +7,14 @@ from app.rag.generator import generate_suggestions
 from app.rag import prefetcher
 
 RFP_SUGGESTION = "RFP 작성하기"
+PR_SUGGESTION = "구매요청서 작성하기"
 
 
 class SuggestionAgent(AgentBase):
     """FAQ 추천 + LLM 후속질문 에이전트. 레이턴시 예산: <500ms
 
-    첫 턴: FAQ 기반 추천 + RFP 버튼
-    후속 턴: LLM 기반 후속 질문 생성 + RFP 버튼
-    RFP 버튼은 항상 마지막에 포함.
+    첫 턴: FAQ 기반 추천 + CTA 버튼 (역할별 분기)
+    후속 턴: LLM 기반 후속 질문 생성 + CTA 버튼
     """
     name = "suggestion"
     priority = AgentPriority.LOW
@@ -29,15 +29,22 @@ class SuggestionAgent(AgentBase):
             return True  # 검증 불가 → 통과
         return any(w in combined for w in words)
 
+    def _cta_button(self, ctx: AgentContext) -> str:
+        """역할에 따라 적절한 CTA 버튼 반환"""
+        if ctx.user_role == "user":
+            return PR_SUGGESTION
+        return RFP_SUGGESTION
+
     async def execute(self, ctx: AgentContext, executor: ThreadPoolExecutor) -> AgentResult:
         start = time.time()
+        cta = self._cta_button(ctx)
         try:
             user_msg_count = len(
                 [m for m in (ctx.history or []) if m.get("role") == "user"]
             )
 
             if user_msg_count == 0 and ctx.query_embedding:
-                # 첫 턴: FAQ 추천 + RFP
+                # 첫 턴: FAQ 추천 + CTA
                 used_ids = [
                     c.get("metadata", {}).get("chunk_id") or c.get("id")
                     for c in ctx.chunks
@@ -54,14 +61,15 @@ class SuggestionAgent(AgentBase):
                         answered_text=ctx.answer,
                     ),
                 )
-                # RFP 관련 항목은 별도 버튼으로 추가하므로 제거
+                # RFP/구매요청서 관련 항목은 별도 버튼으로 추가하므로 제거
                 faq_items = [
                     s for s in faq_items
                     if "RFP" not in s and "제안요청서" not in s
+                    and "구매요청서" not in s
                 ]
-                ctx.suggestions = faq_items[:2] + [RFP_SUGGESTION]
+                ctx.suggestions = faq_items[:2] + [cta]
             else:
-                # 후속 턴: LLM 기반 후속 질문 생성 + RFP
+                # 후속 턴: LLM 기반 후속 질문 생성 + CTA
                 if ctx.chunks and ctx.answer:
                     llm_suggestions = await self.run_in_thread(
                         executor,
@@ -74,11 +82,12 @@ class SuggestionAgent(AgentBase):
                     llm_suggestions = [
                         s for s in llm_suggestions
                         if "RFP" not in s and "제안요청서" not in s
+                        and "구매요청서" not in s
                         and self._is_relevant(s, ctx.chunks, ctx.answer)
                     ]
-                    ctx.suggestions = llm_suggestions[:2] + [RFP_SUGGESTION]
+                    ctx.suggestions = llm_suggestions[:2] + [cta]
                 else:
-                    ctx.suggestions = [RFP_SUGGESTION]
+                    ctx.suggestions = [cta]
 
             # 백그라운드 프리페치 (fire-and-forget)
             executor.submit(
@@ -89,5 +98,5 @@ class SuggestionAgent(AgentBase):
             return self._timed_result(start)
         except Exception as e:
             self.logger.warning(f"Suggestions failed: {e}")
-            ctx.suggestions = [RFP_SUGGESTION]
+            ctx.suggestions = [cta]
             return self._timed_result(start, success=False, error=str(e))

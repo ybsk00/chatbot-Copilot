@@ -2035,7 +2035,13 @@ export default function ChatPage() {
                               } catch (err) {
                                 console.warn("PR supplier update failed:", err);
                               }
-                            }}
+                              // 공급업체 선택과 동시에 PDF 자동 다운로드
+                              if (currentPrTemplate) {
+                                setTimeout(() => {
+                                  downloadPrPdf(prFields, currentPrSections, currentPrTemplate.label, s.name);
+                                }, 300);
+                              }
+                            }
                             style={{
                               width:"100%", padding:"8px", borderRadius: T.r10,
                               border:"none", background: T.gradPrimary,

@@ -398,16 +398,24 @@ class OrchestratorAgent(AgentBase):
                 yield self._sse("token", {
                     "content": f"\n\n[안내] {ctx.post_check_violation}"
                 })
-        # 역할별 CTA: suggestion agent가 이미 추가하지만, 누락 시 보완
-        # 역할에 맞지 않는 CTA는 제거
+        # 역할별 CTA 분기
         if ctx.user_role == "user":
+            # 사용자 → 구매요청서만
             ctx.suggestions = [s for s in ctx.suggestions if s != "RFP 작성하기"]
             if ctx.cta_intent in ("hot", "warm") and "구매요청서 작성하기" not in ctx.suggestions:
                 ctx.suggestions.append("구매요청서 작성하기")
-        else:
+        elif ctx.user_role == "procurement":
+            # 구매담당자 → RFP만
             ctx.suggestions = [s for s in ctx.suggestions if s != "구매요청서 작성하기"]
             if ctx.cta_intent in ("hot", "warm") and "RFP 작성하기" not in ctx.suggestions:
                 ctx.suggestions.append("RFP 작성하기")
+        else:
+            # 역할 미감지 → CTA hot/warm이면 둘 다 제공
+            if ctx.cta_intent in ("hot", "warm"):
+                if "구매요청서 작성하기" not in ctx.suggestions:
+                    ctx.suggestions.append("구매요청서 작성하기")
+                if "RFP 작성하기" not in ctx.suggestions:
+                    ctx.suggestions.append("RFP 작성하기")
 
         yield self._sse("suggestions", {"items": ctx.suggestions})
         yield self._sse("done", {})

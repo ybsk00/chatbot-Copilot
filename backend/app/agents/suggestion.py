@@ -29,15 +29,18 @@ class SuggestionAgent(AgentBase):
             return True  # 검증 불가 → 통과
         return any(w in combined for w in words)
 
-    def _cta_button(self, ctx: AgentContext) -> str:
-        """역할에 따라 적절한 CTA 버튼 반환"""
+    def _cta_buttons(self, ctx: AgentContext) -> list[str]:
+        """역할에 따라 적절한 CTA 버튼 목록 반환"""
         if ctx.user_role == "user":
-            return PR_SUGGESTION
-        return RFP_SUGGESTION
+            return [PR_SUGGESTION]
+        elif ctx.user_role == "procurement":
+            return [RFP_SUGGESTION]
+        # 미감지 → orchestrator가 최종 결정하므로 기본 RFP
+        return [RFP_SUGGESTION]
 
     async def execute(self, ctx: AgentContext, executor: ThreadPoolExecutor) -> AgentResult:
         start = time.time()
-        cta = self._cta_button(ctx)
+        cta_list = self._cta_buttons(ctx)
         try:
             user_msg_count = len(
                 [m for m in (ctx.history or []) if m.get("role") == "user"]
@@ -67,7 +70,7 @@ class SuggestionAgent(AgentBase):
                     if "RFP" not in s and "제안요청서" not in s
                     and "구매요청서" not in s
                 ]
-                ctx.suggestions = faq_items[:2] + [cta]
+                ctx.suggestions = faq_items[:2] + cta_list
             else:
                 # 후속 턴: LLM 기반 후속 질문 생성 + CTA
                 if ctx.chunks and ctx.answer:
@@ -85,9 +88,9 @@ class SuggestionAgent(AgentBase):
                         and "구매요청서" not in s
                         and self._is_relevant(s, ctx.chunks, ctx.answer)
                     ]
-                    ctx.suggestions = llm_suggestions[:2] + [cta]
+                    ctx.suggestions = llm_suggestions[:2] + cta_list
                 else:
-                    ctx.suggestions = [cta]
+                    ctx.suggestions = list(cta_list)
 
             # 백그라운드 프리페치 (fire-and-forget)
             executor.submit(
@@ -98,5 +101,5 @@ class SuggestionAgent(AgentBase):
             return self._timed_result(start)
         except Exception as e:
             self.logger.warning(f"Suggestions failed: {e}")
-            ctx.suggestions = [cta]
+            ctx.suggestions = list(cta_list)
             return self._timed_result(start, success=False, error=str(e))

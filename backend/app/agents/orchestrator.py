@@ -297,10 +297,16 @@ class OrchestratorAgent(AgentBase):
             yield self._sse("meta", {
                 "sources": [], "rag_score": 0,
                 "phase_trigger": None, "classification": None,
+                "user_role": ctx.user_role, "ask_role": ask_role,
             })
             yield self._sse("token", {"content": freeform_reply})
-            freeform_cta = "구매요청서 작성하기" if ctx.user_role == "user" else "RFP 작성하기"
-            yield self._sse("suggestions", {"items": [freeform_cta]})
+            if ctx.user_role == "user":
+                freeform_cta = ["구매요청서 작성하기"]
+            elif ctx.user_role == "procurement":
+                freeform_cta = ["RFP 작성하기"]
+            else:
+                freeform_cta = ["구매요청서 작성하기", "RFP 작성하기"]
+            yield self._sse("suggestions", {"items": freeform_cta})
             yield self._sse("done", {})
             logger.info(f"[Orchestrator] Freeform detected: '{ctx.message}' → skip RAG")
             return
@@ -324,11 +330,21 @@ class OrchestratorAgent(AgentBase):
 
         # ── GATE 3: 신뢰도 거부 ──
         if ctx.confidence_rejected:
+            # 역할별 CTA 결정
+            if ctx.user_role == "user":
+                rejected_cta = ["구매요청서 작성하기"]
+            elif ctx.user_role == "procurement":
+                rejected_cta = ["RFP 작성하기"]
+            else:
+                rejected_cta = ["구매요청서 작성하기", "RFP 작성하기"]
+
             yield self._sse("meta", {
                 "sources": [],
                 "rag_score": round(ctx.rag_score, 4),
                 "phase_trigger": None,
                 "classification": ctx.classification,
+                "user_role": ctx.user_role,
+                "ask_role": ask_role,
             })
             yield self._sse("token", {
                 "content": (
@@ -336,6 +352,7 @@ class OrchestratorAgent(AgentBase):
                     "질문을 더 구체적으로 해주시거나, 다른 주제로 질문해 주십시오."
                 )
             })
+            yield self._sse("suggestions", {"items": rejected_cta})
             yield self._sse("done", {})
             return
 

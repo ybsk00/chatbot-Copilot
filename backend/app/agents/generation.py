@@ -68,6 +68,7 @@ class GenerationAgent(AgentBase):
                         constitution_text=ctx.constitution_text,
                         script_text=ctx.script_text,
                         cta_intent=ctx.cta_intent,
+                        user_role=ctx.user_role,
                     ):
                         loop.call_soon_threadsafe(ctx.token_queue.put_nowait, token)
                 finally:
@@ -108,6 +109,7 @@ class GenerationAgent(AgentBase):
                     script_text=ctx.script_text,
                     filling_intent=ctx.filling_intent,
                     cta_intent=ctx.cta_intent,
+                    user_role=ctx.user_role,
                 )
             )
             ctx.answer = answer

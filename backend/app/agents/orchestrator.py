@@ -177,25 +177,42 @@ class OrchestratorAgent(AgentBase):
         "thanks": "감사합니다! 추가로 궁금하신 점이 있으시면 말씀해 주세요.",
         "default": "네, 무엇을 도와드릴까요?",
     }
+    _GREETING_RESPONSES_USER = {
+        "greeting": "안녕하세요! 구매를 도와드리는 IP Assist입니다. 어떤 물건이나 서비스가 필요하신가요?",
+        "thanks": "감사합니다! 다른 구매 관련 궁금한 점이 있으시면 편하게 말씀해 주세요.",
+        "default": "네, 어떤 구매를 도와드릴까요?",
+    }
+    _GREETING_RESPONSES_PROCUREMENT = {
+        "greeting": "안녕하세요. 구매업무 지원 어시스턴트입니다. 필요한 업무를 말씀해 주십시오.",
+        "thanks": "감사합니다. 추가 업무가 있으시면 말씀해 주십시오.",
+        "default": "네, 어떤 업무를 도와드릴까요?",
+    }
 
-    def _detect_freeform(self, message: str) -> str | None:
+    def _detect_freeform(self, message: str, user_role: str | None = None) -> str | None:
         """자유발화 감지 → RAG 스킵용 응답 반환 (0ms). None이면 일반 처리."""
         msg = message.strip()
         # 긴 메시지는 자유발화가 아님
         if len(msg) > 20:
             return None
         msg_lower = msg.lower()
+        # 역할별 응답 세트 선택
+        if user_role == "user":
+            responses = self._GREETING_RESPONSES_USER
+        elif user_role == "procurement":
+            responses = self._GREETING_RESPONSES_PROCUREMENT
+        else:
+            responses = self._GREETING_RESPONSES
         # 정확 매칭
         if msg in self._GREETING_EXACT:
-            return self._GREETING_RESPONSES["default"]
+            return responses["default"]
         # 패턴 매칭
         for p in self._GREETING_PATTERNS:
             if p in msg_lower:
                 if any(g in msg_lower for g in ("감사", "고마", "땡큐", "thank")):
-                    return self._GREETING_RESPONSES["thanks"]
+                    return responses["thanks"]
                 if any(g in msg_lower for g in ("안녕", "하이", "헬로", "hello", "hi", "반갑")):
-                    return self._GREETING_RESPONSES["greeting"]
-                return self._GREETING_RESPONSES["default"]
+                    return responses["greeting"]
+                return responses["default"]
         return None
 
     def _detect_phase_trigger(self, message: str, phase: str, user_role: str | None = None) -> str | None:
@@ -292,7 +309,7 @@ class OrchestratorAgent(AgentBase):
             return
 
         # ── GATE 3: 자유발화 감지 (~0ms, RAG 스킵) ──
-        freeform_reply = self._detect_freeform(ctx.message)
+        freeform_reply = self._detect_freeform(ctx.message, ctx.user_role)
         if freeform_reply:
             yield self._sse("meta", {
                 "sources": [], "rag_score": 0,
@@ -346,12 +363,22 @@ class OrchestratorAgent(AgentBase):
                 "user_role": ctx.user_role,
                 "ask_role": ask_role,
             })
-            yield self._sse("token", {
-                "content": (
+            if ctx.user_role == "user":
+                rejected_msg = (
+                    "죄송합니다. 해당 내용에 대한 자료를 찾지 못했습니다. "
+                    "구매하려는 품목이나 서비스를 좀 더 구체적으로 말씀해 주시면 도움을 드리겠습니다."
+                )
+            elif ctx.user_role == "procurement":
+                rejected_msg = (
+                    "해당 정보를 보유 자료에서 확인하지 못했습니다. "
+                    "검색 범위를 좁히거나 다른 키워드로 질문해 주십시오."
+                )
+            else:
+                rejected_msg = (
                     "죄송합니다. 현재 보유한 자료에서 관련 정보를 찾지 못했습니다. "
                     "질문을 더 구체적으로 해주시거나, 다른 주제로 질문해 주십시오."
                 )
-            })
+            yield self._sse("token", {"content": rejected_msg})
             yield self._sse("suggestions", {"items": rejected_cta})
             yield self._sse("done", {})
             return

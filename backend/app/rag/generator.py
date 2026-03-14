@@ -25,6 +25,30 @@ BASE_RULES = """당신은 간접구매 AI 코파일럿 'IP Assist'입니다.
 8. 사용자가 물은 구체적 주제에 집중하세요. 참조 문서에 관련 없는 내용(예: 바이럴 마케팅을 물었는데 유료 광고 설명)이 포함되어 있더라도 사용자의 질문 범위 밖이면 생략하세요.
 """
 
+# ── 역할별 대화 레이어 ──
+_ROLE_LAYER = {
+    "user": """[역할: 일반 구매 사용자 대응]
+당신은 구매를 원하는 사용자를 돕는 친절한 구매 안내 도우미입니다.
+- 톤: 따뜻하고 친절한 안내 톤. "~해 보시는 건 어떨까요?", "~을 추천드립니다" 등 제안형 표현 사용.
+- 전문 용어 사용을 최소화하고, 쉬운 말로 풀어서 설명하세요.
+- 가격 비교, 할인 조건, 추천 옵션 등 구매 의사결정에 도움이 되는 정보를 우선 제공하세요.
+- 구매 절차가 복잡할 수 있으니 단계별로 안내하세요.
+- 예시: "공기청정기 렌탈은 36개월 약정 시 월 3만원대부터 가능합니다. 대수에 따라 추가 할인도 받으실 수 있습니다."
+""",
+    "procurement": """[역할: 구매담당자 업무 지원]
+당신은 구매담당자의 업무를 지원하는 전문 어시스턴트입니다.
+- 톤: 간결하고 전문적인 업무 톤. 불필요한 수식어 없이 핵심 정보 위주로 전달하세요.
+- 구매 프로세스, 계약 조건, 평가 기준, 규정 등 실무적 관점에서 답변하세요.
+- 비용 구조, TCO 분석, 벤더 평가 기준, SLA 조건 등 전문적 내용을 상세히 다루세요.
+- RFP 작성, 입찰 공고, 견적 비교, 계약 검토 등 업무 프로세스 관련 가이드를 제공하세요.
+- 예시: "공기청정기 렌탈 TCO 비교 시 월 렌탈료 외에 필터 교체비, A/S 응답시간, 중도해지 위약금 조건을 반드시 포함하여 평가하시기 바랍니다."
+""",
+}
+
+def _get_role_layer(user_role: str | None) -> str:
+    """역할에 따른 대화 레이어 텍스트 반환."""
+    return _ROLE_LAYER.get(user_role, "")
+
 # ── CTA 의도별 추가 지시 (BASE_RULES에 추가되는 짧은 지시문) ──
 _CTA_INSTRUCTIONS = {
     "cold": """[모드: 정보 제공]
@@ -43,48 +67,54 @@ _CTA_INSTRUCTIONS = {
 - "~하시면 X% 절감됩니다" 같은 적극적 표현 사용. 소극적 나열 금지.""",
 }
 
-def _build_chat_prompt(cta_intent: str = "cold") -> str:
-    """CTA 의도에 따른 chat 시스템 프롬프트 생성."""
+def _build_chat_prompt(cta_intent: str = "cold", user_role: str | None = None) -> str:
+    """CTA 의도에 따른 chat 시스템 프롬프트 생성 (역할별 대화 레이어 포함)."""
     instruction = _CTA_INSTRUCTIONS.get(cta_intent, _CTA_INSTRUCTIONS["cold"])
-    return BASE_RULES + "\n" + instruction
+    role_layer = _get_role_layer(user_role)
+    return BASE_RULES + role_layer + "\n" + instruction
 
-CTA_PROMPTS = {
-    "cold": _build_chat_prompt("cold"),
-    "warm": _build_chat_prompt("warm"),
-    "hot": _build_chat_prompt("hot"),
-}
-
-PHASE_PROMPTS = {
-    "chat": CTA_PROMPTS["cold"],
-    "filling": BASE_RULES + """[단계: RFP 작성] 섹션: {rfp_sections}
+def _build_phase_prompt(phase: str, user_role: str | None = None) -> str:
+    """Phase별 시스템 프롬프트 생성 (역할별 대화 레이어 포함)."""
+    role_layer = _get_role_layer(user_role)
+    _PHASE_TEMPLATES = {
+        "filling": """[단계: RFP 작성] 섹션: {rfp_sections}
 미입력 필드가 있으면 요청하세요. 한 섹션씩 진행. 채워진 필드는 건너뛰세요.
 현재 채워진 필드: {filled_keys}""",
-    "complete": BASE_RULES + """[단계: RFP 완료] 완성을 축하하고 다음 단계(공급업체 선정, 견적 비교)를 안내하세요.""",
-    "pr_filling": BASE_RULES + """[단계: 구매요청서 작성] 섹션: {rfp_sections}
+        "complete": """[단계: RFP 완료] 완성을 축하하고 다음 단계(공급업체 선정, 견적 비교)를 안내하세요.""",
+        "pr_filling": """[단계: 구매요청서 작성] 섹션: {rfp_sections}
 미입력 필드가 있으면 요청하세요. 한 섹션씩 진행. 채워진 필드는 건너뛰세요.
 현재 채워진 필드: {filled_keys}""",
-    "pr_complete": BASE_RULES + """[단계: 구매요청서 완료] 구매요청서 작성을 축하하고, 공급업체 추천 목록을 확인하도록 안내하세요.""",
-}
+        "pr_complete": """[단계: 구매요청서 완료] 구매요청서 작성을 축하하고, 공급업체 추천 목록을 확인하도록 안내하세요.""",
+    }
+    template = _PHASE_TEMPLATES.get(phase, "")
+    return BASE_RULES + role_layer + template
 
-FILLING_INTENT_PROMPTS = {
-    "field_input": BASE_RULES + """[단계: RFP 필드 확인] 섹션: {rfp_sections}
+def _get_filling_prompt(intent: str, user_role: str | None = None) -> str:
+    """RFP filling 의도별 프롬프트 (역할 레이어 포함)."""
+    role_layer = _get_role_layer(user_role)
+    _TEMPLATES = {
+        "field_input": """[단계: RFP 필드 확인] 섹션: {rfp_sections}
 100~200자. "확인했습니다"로 시작. 미입력 필드 요청. 현재 채워진 필드: {filled_keys}""",
-    "question": BASE_RULES + """[단계: RFP 중 질문] 섹션: {rfp_sections}
+        "question": """[단계: RFP 중 질문] 섹션: {rfp_sections}
 300~500자. 질문 답변 후 "다음으로 (미입력 필드)를 입력해 주십시오."로 마무리. 현재 채워진 필드: {filled_keys}""",
-    "rfp_question": BASE_RULES + """[단계: RFP 필드 개념] 섹션: {rfp_sections}
+        "rfp_question": """[단계: RFP 필드 개념] 섹션: {rfp_sections}
 200~400자. 해당 필드 설명 + 입력 예시 1~2개. "위 내용을 참고하여 입력해 주십시오."로 마무리. 현재 채워진 필드: {filled_keys}""",
-}
+    }
+    return BASE_RULES + role_layer + _TEMPLATES.get(intent, _TEMPLATES["field_input"])
 
-# PR(구매요청서) 의도별 프롬프트
-PR_FILLING_INTENT_PROMPTS = {
-    "field_input": BASE_RULES + """[단계: 구매요청서 필드 확인] 섹션: {rfp_sections}
+def _get_pr_filling_prompt(intent: str, user_role: str | None = None) -> str:
+    """PR(구매요청서) filling 의도별 프롬프트 (역할 레이어 포함)."""
+    role_layer = _get_role_layer(user_role)
+    _TEMPLATES = {
+        "field_input": """[단계: 구매요청서 필드 확인] 섹션: {rfp_sections}
 100~200자. "확인했습니다"로 시작. 기본값이 미리 채워져 있을 수 있으므로, 사용자가 수정한 내용만 반영하세요.
 미입력 필드 요청. 현재 채워진 필드: {filled_keys}""",
-    "question": BASE_RULES + """[단계: 구매요청서 중 질문] 섹션: {rfp_sections}
+        "question": """[단계: 구매요청서 중 질문] 섹션: {rfp_sections}
 300~500자. 질문 답변 후 "다음으로 (미입력 필드)를 입력해 주십시오."로 마무리. 현재 채워진 필드: {filled_keys}""",
-    "rfp_question": BASE_RULES + """[단계: 구매요청서 필드 개념] 섹션: {rfp_sections}
+        "rfp_question": """[단계: 구매요청서 필드 개념] 섹션: {rfp_sections}
 200~400자. 해당 필드 설명 + 입력 예시 1~2개. "위 내용을 참고하여 입력해 주십시오."로 마무리. 현재 채워진 필드: {filled_keys}""",
-}
+    }
+    return BASE_RULES + role_layer + _TEMPLATES.get(intent, _TEMPLATES["field_input"])
 
 RAG_PROMPT = """아래 참조 문서를 기반으로 사용자 질문에 답변하세요.
 주의: "참조 문서에 따르면" 등 출처 언급 표현을 절대 사용하지 마세요. 정보를 직접 서술하세요.
@@ -112,8 +142,9 @@ def generate_answer(
     script_text: str = "",
     filling_intent: str | None = None,
     cta_intent: str = "cold",
+    user_role: str | None = None,
 ) -> tuple[str, float]:
-    """RAG 기반 답변 생성 (phase별 프롬프트 전환, CTA 의도별 역제안, 헌법+화법 동적 주입)"""
+    """RAG 기반 답변 생성 (phase별 프롬프트 전환, CTA 의도별 역제안, 역할별 대화 레이어, 헌법+화법 동적 주입)"""
     context = "\n\n---\n\n".join(
         f"[{c['doc_name']}]\n{c['content']}" for c in chunks
     )
@@ -131,17 +162,17 @@ def generate_answer(
     )
 
     # PR filling phase + 의도 감지 시 의도별 프롬프트 사용
-    if phase == "pr_filling" and filling_intent and filling_intent in PR_FILLING_INTENT_PROMPTS:
-        system_prompt = PR_FILLING_INTENT_PROMPTS[filling_intent]
+    if phase == "pr_filling" and filling_intent and filling_intent in ("field_input", "question", "rfp_question"):
+        system_prompt = _get_pr_filling_prompt(filling_intent, user_role)
         system_prompt = system_prompt.format(filled_keys=filled_keys or "없음", rfp_sections=rfp_sections)
     # filling phase + 의도 감지 시 의도별 프롬프트 사용
-    elif phase == "filling" and filling_intent and filling_intent in FILLING_INTENT_PROMPTS:
-        system_prompt = FILLING_INTENT_PROMPTS[filling_intent]
+    elif phase == "filling" and filling_intent and filling_intent in ("field_input", "question", "rfp_question"):
+        system_prompt = _get_filling_prompt(filling_intent, user_role)
         system_prompt = system_prompt.format(filled_keys=filled_keys or "없음", rfp_sections=rfp_sections)
-    elif phase == "chat" and cta_intent in CTA_PROMPTS:
-        system_prompt = CTA_PROMPTS[cta_intent]
+    elif phase == "chat":
+        system_prompt = _build_chat_prompt(cta_intent, user_role)
     else:
-        system_prompt = PHASE_PROMPTS.get(phase, PHASE_PROMPTS["chat"])
+        system_prompt = _build_phase_prompt(phase, user_role)
         if phase in ("filling", "pr_filling"):
             system_prompt = system_prompt.format(filled_keys=filled_keys or "없음", rfp_sections=rfp_sections)
 
@@ -180,8 +211,9 @@ def generate_answer_stream(
     constitution_text: str = "",
     script_text: str = "",
     cta_intent: str = "cold",
+    user_role: str | None = None,
 ):
-    """SSE용 토큰 스트리밍 제너레이터 (CTA 의도별 역제안 + 헌법+화법 동적 주입)"""
+    """SSE용 토큰 스트리밍 제너레이터 (CTA 의도별 역제안 + 역할별 대화 레이어 + 헌법+화법 동적 주입)"""
     context = "\n\n---\n\n".join(
         f"[{c['doc_name']}]\n{c['content']}" for c in chunks
     )
@@ -198,11 +230,11 @@ def generate_answer_stream(
         question=question,
     )
 
-    # CTA 의도별 프롬프트 선택
-    if phase == "chat" and cta_intent in CTA_PROMPTS:
-        system_prompt = CTA_PROMPTS[cta_intent]
+    # CTA 의도별 + 역할별 프롬프트 선택
+    if phase == "chat":
+        system_prompt = _build_chat_prompt(cta_intent, user_role)
     else:
-        system_prompt = PHASE_PROMPTS.get(phase, PHASE_PROMPTS["chat"])
+        system_prompt = _build_phase_prompt(phase, user_role)
         if phase in ("filling", "pr_filling"):
             system_prompt = system_prompt.format(filled_keys=filled_keys or "없음", rfp_sections=rfp_sections)
 

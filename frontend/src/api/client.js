@@ -242,6 +242,12 @@ export const api = {
     return res.json();
   },
 
+  // ── PR 양식 관리 ──
+  async getPrTemplates() {
+    const res = await fetch(`${API_URL}/admin/pr-templates`);
+    return res.json();
+  },
+
   // ── 공급업체 CRUD (기존 확장) ──
   async updateSupplier(id, data) {
     const res = await fetch(`${API_URL}/suppliers/${id}`, {

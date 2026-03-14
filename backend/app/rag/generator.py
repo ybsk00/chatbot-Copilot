@@ -78,7 +78,8 @@ FILLING_INTENT_PROMPTS = {
 # PR(구매요청서) 의도별 프롬프트
 PR_FILLING_INTENT_PROMPTS = {
     "field_input": BASE_RULES + """[단계: 구매요청서 필드 확인] 섹션: {rfp_sections}
-100~200자. "확인했습니다"로 시작. 미입력 필드 요청. 현재 채워진 필드: {filled_keys}""",
+100~200자. "확인했습니다"로 시작. 기본값이 미리 채워져 있을 수 있으므로, 사용자가 수정한 내용만 반영하세요.
+미입력 필드 요청. 현재 채워진 필드: {filled_keys}""",
     "question": BASE_RULES + """[단계: 구매요청서 중 질문] 섹션: {rfp_sections}
 300~500자. 질문 답변 후 "다음으로 (미입력 필드)를 입력해 주십시오."로 마무리. 현재 채워진 필드: {filled_keys}""",
     "rfp_question": BASE_RULES + """[단계: 구매요청서 필드 개념] 섹션: {rfp_sections}

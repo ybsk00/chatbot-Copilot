@@ -250,6 +250,7 @@ export default function ChatPage() {
   const [prSaved, setPrSaved] = useState(false);
   const [uploadedPrSuppliers, setUploadedPrSuppliers] = useState([]);  // PDF에서 추출된 공급업체
   const [prSupplierLoading, setPrSupplierLoading] = useState(false);
+  const [dbPrTemplates, setDbPrTemplates] = useState(null); // DB에서 로드된 PR 템플릿
   const msgEndRef  = useRef(null);
   const chatScrollRef = useRef(null);
   const fieldRefs  = useRef({});
@@ -262,7 +263,7 @@ export default function ChatPage() {
   const pct    = total > 0 ? Math.round(filled / total * 100) : 0;
 
   // PR 계산
-  const currentPrTemplate = prType ? PR_TEMPLATES[prType] : null;
+  const currentPrTemplate = prType ? getPrTemplate(prType) : null;
   const currentPrSections = currentPrTemplate?.sections || [];
   const prFilled = Object.values(prFields).filter(f => (f.value || "").trim()).length;
   const prTotal  = Object.keys(prFields).length;
@@ -273,6 +274,23 @@ export default function ChatPage() {
       chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
     }
   }, [messages, isTyping]);
+
+  // DB에서 PR 템플릿 로드
+  useEffect(() => {
+    api.getPrTemplates().then(res => {
+      if (res.templates && res.templates.length > 0) {
+        const map = {};
+        res.templates.forEach(t => { map[t.type_key] = t; });
+        setDbPrTemplates(map);
+      }
+    }).catch(() => {});
+  }, []);
+
+  // PR 템플릿 가져오기 (DB 우선, 폴백: 프론트 하드코딩)
+  const getPrTemplate = (typeKey) => {
+    if (dbPrTemplates && dbPrTemplates[typeKey]) return dbPrTemplates[typeKey];
+    return PR_TEMPLATES[typeKey] || null;
+  };
 
   // RFP 완료 시 신청 내역 조회
   useEffect(() => {
@@ -305,7 +323,7 @@ export default function ChatPage() {
         "교육 서비스": "서비스",
       };
       const dbCat = PR_TO_DB_CATEGORY[prCategory] || "일반 용역";
-      const schema = PR_TEMPLATES[prType];
+      const schema = getPrTemplate(prType);
       // PR 필드에서 키워드 추출
       const keywords = Object.values(prFields)
         .map(f => (f.value || "").trim())
@@ -373,6 +391,14 @@ export default function ChatPage() {
 
   };
 
+  // ── 패널 직접 편집 핸들러 ──
+  const handleFieldEdit = (fieldKey, value) => {
+    setFields(prev => ({ ...prev, [fieldKey]: { ...prev[fieldKey], value } }));
+  };
+  const handlePrFieldEdit = (fieldKey, value) => {
+    setPrFields(prev => ({ ...prev, [fieldKey]: { ...prev[fieldKey], value } }));
+  };
+
   const getPrFilledFields = () => {
     const result = {};
     Object.entries(prFields).forEach(([k, v]) => {
@@ -403,21 +429,23 @@ export default function ChatPage() {
   // PR 카테고리 선택
   const handlePrTypeSelect = (type) => {
     setPrType(type);
+    const tmpl = getPrTemplate(type);
+    if (!tmpl) return;
+
     const templateFields = {};
-    Object.entries(PR_TEMPLATES[type].fields).forEach(([k, v]) => {
-      templateFields[k] = { ...v };
+    Object.entries(tmpl.fields).forEach(([k, v]) => {
+      // DB에서 가져온 default 값으로 미리 채움
+      templateFields[k] = { ...v, value: v.default || "" };
     });
     setPrFields(templateFields);
     setPrRightVisible(true);
     setPhase("pr_filling");
 
-    const tmpl = PR_TEMPLATES[type];
-    const firstSection = tmpl.sections[0];
-    const firstFields = firstSection ? firstSection.fields.map(fk => tmpl.fields[fk]?.label).filter(Boolean).join(", ") : "";
+    const label = tmpl.name || tmpl.label;
     setMessages(prev => [
       ...prev,
-      { id: msgIdCounter++, role: "user", text: tmpl.label },
-      { id: msgIdCounter++, role: "assistant", text: `${tmpl.label} 구매요청서 작성을 시작하겠습니다.\n먼저 ${firstSection?.title || "기본 정보"}를 알려주십시오.\n${firstFields}이(가) 필요합니다.` }
+      { id: msgIdCounter++, role: "user", text: label },
+      { id: msgIdCounter++, role: "assistant", text: `${label} 구매요청서를 준비했습니다.\n기본값이 미리 입력되어 있습니다. 변경이 필요한 항목만 수정해 주세요.\n우측 패널에서 직접 수정하거나, 채팅으로 알려주셔도 됩니다.` }
     ]);
   };
 
@@ -666,7 +694,7 @@ export default function ChatPage() {
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>
               {keys.map(key => {
-                const tmpl = PR_TEMPLATES[key];
+                const tmpl = getPrTemplate(key);
                 if (!tmpl) return null;
                 return (
                   <button
@@ -689,7 +717,7 @@ export default function ChatPage() {
                       e.currentTarget.style.background = T.card;
                     }}
                   >
-                    {tmpl.label}
+                    {tmpl.label || tmpl.name}
                   </button>
                 );
               })}
@@ -730,7 +758,7 @@ export default function ChatPage() {
           }} />
         </div>
         {pct < 100 && <div style={{ marginTop:10, fontSize:11, color: T.red, display:"flex", alignItems:"center", gap:4 }}>
-          <IconAlert size={13} /> 미완료 항목이 있습니다. 왼쪽 채팅에서 정보를 입력해 주세요.
+          <IconAlert size={13} /> 미완료 항목이 있습니다. 직접 입력하거나 채팅으로 입력해 주세요.
         </div>}
       </div>
 
@@ -794,19 +822,28 @@ export default function ChatPage() {
                         display:"flex", alignItems:"center", minHeight:40,
                       }}>{f.label}</div>
                       <div style={{
-                        flex:1, padding:"10px 14px", fontSize:12,
-                        lineHeight:1.7, minHeight:40, display:"flex", alignItems:"center",
+                        flex:1, padding:"4px 8px", fontSize:12,
+                        lineHeight:1.7, minHeight:40, display:"flex", alignItems:"center", gap:4,
                       }}>
-                        {f.value ? (
-                          <span style={{ color: T.text, whiteSpace:"pre-wrap" }}>
-                            {isNew && <span style={{
-                              fontSize:9, marginRight:6, padding:"2px 6px",
-                              background: T.tealLight, border:`1px solid ${T.tealMid}`,
-                              borderRadius:4, color: T.tealDark, fontWeight:700,
-                            }}>NEW</span>}
-                            {f.value}
-                          </span>
-                        ) : <span style={{ color: T.muted, fontStyle:"italic", fontSize:11 }}>대화를 통해 자동 입력됩니다</span>}
+                        <input
+                          type="text"
+                          value={f.value || ""}
+                          placeholder="직접 입력 또는 채팅으로 입력"
+                          onChange={(e) => handleFieldEdit(fk, e.target.value)}
+                          style={{
+                            width:"100%", border:"none", outline:"none",
+                            background:"transparent", fontSize:12, color: T.text,
+                            padding:"6px 8px", borderRadius:4, fontFamily:"inherit",
+                            transition:"background 0.2s",
+                          }}
+                          onFocus={(e) => { e.target.style.background = "rgba(14,165,160,0.06)"; }}
+                          onBlur={(e) => { e.target.style.background = "transparent"; }}
+                        />
+                        {isNew && <span style={{
+                          fontSize:9, padding:"2px 6px", flexShrink:0,
+                          background: T.tealLight, border:`1px solid ${T.tealMid}`,
+                          borderRadius:4, color: T.tealDark, fontWeight:700,
+                        }}>NEW</span>}
                       </div>
                     </div>
                   );
@@ -2301,19 +2338,28 @@ export default function ChatPage() {
                                   display:"flex", alignItems:"center", minHeight:40,
                                 }}>{f.label}</div>
                                 <div style={{
-                                  flex:1, padding:"10px 14px", fontSize:12,
-                                  lineHeight:1.7, minHeight:40, display:"flex", alignItems:"center",
+                                  flex:1, padding:"4px 8px", fontSize:12,
+                                  lineHeight:1.7, minHeight:40, display:"flex", alignItems:"center", gap:4,
                                 }}>
-                                  {f.value ? (
-                                    <span style={{ color: T.text, whiteSpace:"pre-wrap" }}>
-                                      {isNew && <span style={{
-                                        fontSize:9, marginRight:6, padding:"2px 6px",
-                                        background: T.tealLight, border:`1px solid ${T.tealMid}`,
-                                        borderRadius:4, color: T.tealDark, fontWeight:700,
-                                      }}>NEW</span>}
-                                      {f.value}
-                                    </span>
-                                  ) : <span style={{ color: T.muted, fontStyle:"italic", fontSize:11 }}>대화를 통해 자동 입력됩니다</span>}
+                                  <input
+                                    type="text"
+                                    value={f.value || ""}
+                                    placeholder="직접 입력 또는 채팅으로 입력"
+                                    onChange={(e) => handlePrFieldEdit(fk, e.target.value)}
+                                    style={{
+                                      width:"100%", border:"none", outline:"none",
+                                      background:"transparent", fontSize:12, color: T.text,
+                                      padding:"6px 8px", borderRadius:4, fontFamily:"inherit",
+                                      transition:"background 0.2s",
+                                    }}
+                                    onFocus={(e) => { e.target.style.background = "rgba(6,182,212,0.06)"; }}
+                                    onBlur={(e) => { e.target.style.background = "transparent"; }}
+                                  />
+                                  {isNew && <span style={{
+                                    fontSize:9, padding:"2px 6px", flexShrink:0,
+                                    background: T.tealLight, border:`1px solid ${T.tealMid}`,
+                                    borderRadius:4, color: T.tealDark, fontWeight:700,
+                                  }}>NEW</span>}
                                 </div>
                               </div>
                             );

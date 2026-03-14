@@ -401,6 +401,43 @@ async def delete_rfp_template(template_id: int):
     return {"status": "deleted"}
 
 
+# ── PR 양식(템플릿) 관리 ──
+
+@router.get("/pr-templates")
+async def list_pr_templates():
+    supabase = get_client()
+    result = supabase.table("pr_templates").select("*").eq("is_active", True).order("id").execute()
+    return {"templates": result.data}
+
+
+@router.post("/pr-templates")
+async def create_pr_template(tmpl: RfpTemplateCreate):
+    supabase = get_client()
+    result = supabase.table("pr_templates").insert(tmpl.model_dump()).execute()
+    return {"status": "created", "data": result.data}
+
+
+@router.put("/pr-templates/{template_id}")
+async def update_pr_template(template_id: int, tmpl: RfpTemplateCreate):
+    supabase = get_client()
+    data = tmpl.model_dump()
+    data["updated_at"] = "now()"
+    result = (
+        supabase.table("pr_templates")
+        .update(data)
+        .eq("id", template_id)
+        .execute()
+    )
+    return {"status": "updated", "data": result.data}
+
+
+@router.delete("/pr-templates/{template_id}")
+async def delete_pr_template(template_id: int):
+    supabase = get_client()
+    supabase.table("pr_templates").delete().eq("id", template_id).execute()
+    return {"status": "deleted"}
+
+
 # ── PR(구매요청서) 관리 ──
 
 class PrStatusUpdate(BaseModel):

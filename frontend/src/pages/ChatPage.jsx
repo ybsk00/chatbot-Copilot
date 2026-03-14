@@ -3,6 +3,7 @@ import { api } from "../api/client";
 import { T } from "../styles/tokens";
 import { RFP_TEMPLATES } from "../data/rfpTemplates";
 import { PR_TEMPLATES, PR_CATEGORIES } from "../data/prTemplates";
+import { PR_TO_RFP_MAPPING } from "../data/fieldMapping";
 import { downloadRfpPdf } from "../utils/rfpExport";
 import { downloadPrPdf } from "../utils/prExport";
 // BackgroundBlobs 제거 — 업무마켓9 임베드 시 외부 배경 불필요
@@ -397,6 +398,36 @@ export default function ChatPage() {
   };
   const handlePrFieldEdit = (fieldKey, value) => {
     setPrFields(prev => ({ ...prev, [fieldKey]: { ...prev[fieldKey], value } }));
+  };
+
+  // ── PR → RFP 전환 ──
+  const convertPrToRfp = () => {
+    const mapping = PR_TO_RFP_MAPPING[prType];
+    if (!mapping) return;
+
+    const rfpTemplateFields = {};
+    Object.entries(RFP_TEMPLATES[mapping.rfpType].fields).forEach(([k, v]) => {
+      rfpTemplateFields[k] = { ...v };
+    });
+
+    // PR 값 → RFP 필드로 복사
+    Object.entries(mapping.fieldMap).forEach(([prKey, rfpKey]) => {
+      if (prFields[prKey]?.value && rfpTemplateFields[rfpKey]) {
+        rfpTemplateFields[rfpKey] = { ...rfpTemplateFields[rfpKey], value: prFields[prKey].value };
+      }
+    });
+
+    setRfpType(mapping.rfpType);
+    setFields(rfpTemplateFields);
+    setPhase("filling");
+    setRightVisible(true);
+    setPrRightVisible(false);
+
+    const rfpLabel = RFP_TEMPLATES[mapping.rfpType].label;
+    setMessages(prev => [
+      ...prev,
+      { id: msgIdCounter++, role: "assistant", text: `구매요청서 내용을 기반으로 ${rfpLabel} 제안요청서(RFP)를 준비했습니다.\n자동 매핑된 항목을 확인하시고, 추가 정보를 입력해 주세요.` }
+    ]);
   };
 
   const getPrFilledFields = () => {
@@ -2237,6 +2268,17 @@ export default function ChatPage() {
                           fontFamily:"inherit", display:"flex", alignItems:"center", gap:6,
                         }}
                       ><IconDownload size={14} /> PDF 다운로드</button>
+                      {PR_TO_RFP_MAPPING[prType] && (
+                        <button
+                          onClick={convertPrToRfp}
+                          style={{
+                            padding:"10px 22px", borderRadius: T.r10,
+                            border:`1px solid ${T.primary}`, background:"rgba(6,182,212,0.06)",
+                            color: T.primary, fontSize:12, fontWeight:700, cursor:"pointer",
+                            fontFamily:"inherit", display:"flex", alignItems:"center", gap:6,
+                          }}
+                        >RFP로 전환</button>
+                      )}
                       <button
                         onClick={() => {
                           setPhase("chat"); setPrRightVisible(false);

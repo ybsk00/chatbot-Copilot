@@ -712,6 +712,7 @@ export default function ChatPage() {
     "건물 관리": { emoji: "🏢", color: "#0EA5A0", bg: "#F0FAFA" },
     "마케팅": { emoji: "📢", color: "#FB923C", bg: "#FFF7ED" },
     "교육 서비스": { emoji: "📚", color: "#818CF8", bg: "#EEF2FF" },
+    "시장정보": { emoji: "📊", color: "#F472B6", bg: "#FDF2F8" },
   };
 
   const renderPrTypeSelector = () => (

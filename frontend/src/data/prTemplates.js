@@ -801,6 +801,36 @@ export const PR_TEMPLATES = {
       { title: "3. 상세 요건",   fields: ["p8","p9","p10","p11"],       icon: "mail" },
     ],
   },
+  electronic_market_info: {
+    label: "전자시장정보 구독 서비스", desc: "시장 조사·분석 정보 구독 서비스", icon: "electronic_market_info",
+    fields: {
+      r1: { label: "발주기관명", value: "", default: "" },
+      r2: { label: "요청부서", value: "", default: "" },
+      r3: { label: "요청자", value: "", default: "" },
+      r4: { label: "연락처", value: "", default: "" },
+      r5: { label: "이메일", value: "", default: "" },
+      p1: { label: "서비스 제공업체", value: "", default: "NICE평가정보" },
+      p2: { label: "서비스 유형", value: "", default: "기업 신용정보 + 시장분석 리포트 통합 구독" },
+      p3: { label: "구독 대상 부서/인원", value: "", default: "구매팀 10명 + 경영기획팀 5명 (총 15계정)" },
+      p4: { label: "정보 제공 범위", value: "", default: "국내 기업 신용등급, 재무제표, 산업 동향 리포트" },
+      p5: { label: "데이터 갱신 주기", value: "", default: "실시간 신용정보 + 월간 산업 리포트" },
+      p6: { label: "구독 기간", value: "", default: "1년 (12개월) 연간 구독" },
+      p7: { label: "접속 방식", value: "", default: "웹 포털 + API 연동 (사내 ERP 연계)" },
+      p8: { label: "동시 접속자 수", value: "", default: "최대 10명 동시 접속" },
+      p9: { label: "데이터 제공 형태", value: "", default: "웹 대시보드 + PDF 리포트 + Excel 다운로드" },
+      p10: { label: "맞춤 리포트 제공 여부", value: "", default: "분기별 맞춤 산업 분석 리포트 1건 포함" },
+      p11: { label: "교육·컨설팅 지원", value: "", default: "초기 사용 교육 1회 + 연간 활용 컨설팅 2회" },
+      p12: { label: "보안 요건", value: "", default: "IP 접근 제한 + 2단계 인증 필수" },
+      p13: { label: "예산 범위", value: "", default: "연간 구독료 기준 (VAT 별도)" },
+      p14: { label: "결제 방식", value: "", default: "연간 일시불 / 세금계산서 발행" },
+    },
+    sections: [
+      { title: "0. 요청자 정보",       fields: ["r1","r2","r3","r4","r5"],               icon: "org" },
+      { title: "1. 서비스 기본 정보",   fields: ["p1","p2","p3","p4","p5","p6"],           icon: "gear" },
+      { title: "2. 접속 및 제공 방식",  fields: ["p7","p8","p9","p10"],                    icon: "mail" },
+      { title: "3. 부가 서비스·비용",   fields: ["p11","p12","p13","p14"],                 icon: "gear" },
+    ],
+  },
 };
 
 // ═══════════════════════════════════════════
@@ -827,5 +857,8 @@ export const PR_CATEGORIES = {
     "mandatory_education",
     "language_education",
     "professional_education",
+  ],
+  "시장정보": [
+    "electronic_market_info",
   ],
 };

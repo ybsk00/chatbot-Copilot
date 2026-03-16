@@ -35,8 +35,8 @@ class SuggestionAgent(AgentBase):
             return [PR_SUGGESTION]
         elif ctx.user_role == "procurement":
             return [RFP_SUGGESTION]
-        # 미감지 → orchestrator가 최종 결정하므로 기본 RFP
-        return [RFP_SUGGESTION]
+        # 미감지 → 둘 다 제공
+        return [PR_SUGGESTION, RFP_SUGGESTION]
 
     async def execute(self, ctx: AgentContext, executor: ThreadPoolExecutor) -> AgentResult:
         start = time.time()

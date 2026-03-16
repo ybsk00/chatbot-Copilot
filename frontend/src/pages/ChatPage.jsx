@@ -1819,7 +1819,7 @@ export default function ChatPage() {
         }}>
           <div style={{ padding:"12px 16px 10px", display:"flex", gap:10, alignItems:"center" }}>
             {/* 구매담당자 PDF 업로드 버튼 */}
-            {userRole === "procurement" && phase === "chat" && (
+            {userRole === "procurement" && (phase === "chat" || phase === "filling") && (
               <>
                 <input
                   type="file" accept=".pdf"

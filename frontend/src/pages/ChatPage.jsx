@@ -282,6 +282,20 @@ export default function ChatPage() {
     }
   }, [messages, isTyping]);
 
+  // PR 패널 직접 편집 시 100% 도달하면 자동 완료 전환
+  useEffect(() => {
+    if (phase === "pr_filling" && prPct >= 100 && prTotal > 0) {
+      setTimeout(() => {
+        setPhase("pr_complete");
+        setPrRightVisible(true);
+        setMessages(prev => [...prev, {
+          id: msgIdCounter++, role: "assistant",
+          text: "구매요청서가 완성되었습니다! 내용을 확인하시고 다운로드해 주세요.",
+        }]);
+      }, 500);
+    }
+  }, [prPct, phase, prTotal]);
+
   // DB에서 PR 템플릿 로드
   useEffect(() => {
     api.getPrTemplates().then(res => {

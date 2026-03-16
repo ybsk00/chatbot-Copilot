@@ -1841,10 +1841,36 @@ export default function ChatPage() {
                           id: msgIdCounter++, role: "assistant",
                           text: `PDF 분석 실패: ${res.error}`,
                         }]);
-                      } else {
-                        // 추출된 필드로 RFP 자동 채움
+                      } else if (phase === "filling" && rfpType) {
+                        // RFP filling 중 PDF 업로드 → PR 필드를 RFP 필드로 자동 매핑
+                        const prType_ = res.pr_type || "_generic";
+                        const mapping = PR_TO_RFP_MAPPING[prType_];
                         const extractedFields = res.extracted_fields || {};
-                        // 공급업체 정보 저장
+                        if (mapping) {
+                          const rfpFills = {};
+                          // PR 필드 → RFP 필드 매핑 적용
+                          Object.entries(mapping.fieldMap).forEach(([prKey, rfpKey]) => {
+                            if (extractedFields[prKey]) {
+                              rfpFills[rfpKey] = extractedFields[prKey];
+                            }
+                          });
+                          // 요청자 정보 직접 매핑 (title, department, requester)
+                          if (res.department) rfpFills.s2 = res.department;
+                          if (res.requester) rfpFills.s3 = res.requester;
+                          if (res.title) rfpFills.s6 = rfpFills.s6 || res.title;
+                          // RFP 필드에 적용
+                          const filledCount = Object.keys(rfpFills).length;
+                          if (filledCount > 0) {
+                            applyFills(rfpFills);
+                          }
+                          setMessages(prev => [...prev, {
+                            id: msgIdCounter++, role: "assistant",
+                            text: `구매요청서 PDF를 분석하여 RFP에 ${filledCount}개 항목을 자동 반영했습니다.\n\n**유형:** ${res.label || "일반"}\n${res.selected_supplier ? `**공급업체:** ${res.selected_supplier}\n` : ""}\n우측 패널에서 내용을 확인하고 수정해 주세요.`,
+                          }]);
+                        }
+                      } else {
+                        // chat phase: 기존 동작 (분석 결과 표시)
+                        const extractedFields = res.extracted_fields || {};
                         if (res.selected_supplier) {
                           const suppliers = res.selected_supplier.split(/[,，、]/).map(s => s.trim()).filter(Boolean);
                           setUploadedPrSuppliers(suppliers);

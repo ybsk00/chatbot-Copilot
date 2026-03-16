@@ -282,19 +282,15 @@ export default function ChatPage() {
     }
   }, [messages, isTyping]);
 
-  // PR 패널 직접 편집 시 100% 도달하면 자동 완료 전환
-  useEffect(() => {
-    if (phase === "pr_filling" && prPct >= 100 && prTotal > 0) {
-      setTimeout(() => {
-        setPhase("pr_complete");
-        setPrRightVisible(true);
-        setMessages(prev => [...prev, {
-          id: msgIdCounter++, role: "assistant",
-          text: "구매요청서가 완성되었습니다! 내용을 확인하시고 다운로드해 주세요.",
-        }]);
-      }, 500);
-    }
-  }, [prPct, phase, prTotal]);
+  // PR 패널 "작성 완료" 버튼 핸들러
+  const handlePrManualComplete = () => {
+    setPhase("pr_complete");
+    setPrRightVisible(true);
+    setMessages(prev => [...prev, {
+      id: msgIdCounter++, role: "assistant",
+      text: "구매요청서가 완성되었습니다! 내용을 확인하시고 다운로드해 주세요.",
+    }]);
+  };
 
   // DB에서 PR 템플릿 로드
   useEffect(() => {
@@ -2269,7 +2265,7 @@ export default function ChatPage() {
                     <div style={{ fontSize:11, color: T.sub, marginTop:10 }}>
                       구매담당자가 관리 페이지에서 확인할 수 있습니다.
                     </div>
-                    <div style={{ display:"flex", gap:8, marginTop:16, justifyContent:"center" }}>
+                    <div style={{ display:"flex", gap:8, marginTop:16, justifyContent:"center", flexWrap:"nowrap" }}>
                       <button
                         onClick={() => {
                           if (currentPrTemplate) {
@@ -2278,22 +2274,24 @@ export default function ChatPage() {
                           }
                         }}
                         style={{
-                          padding:"10px 22px", borderRadius: T.r10,
+                          padding:"10px 16px", borderRadius: T.r10,
                           border:`1px solid ${T.primary}`, background:"rgba(6,182,212,0.06)",
                           color: T.primary, fontSize:12, fontWeight:700, cursor:"pointer",
-                          fontFamily:"inherit", display:"flex", alignItems:"center", gap:6,
+                          fontFamily:"inherit", display:"flex", alignItems:"center", gap:4,
+                          whiteSpace:"nowrap",
                         }}
-                      ><IconDownload size={14} /> PDF 다운로드</button>
+                      ><IconDownload size={14} />PDF</button>
                       {PR_TO_RFP_MAPPING[prType] && (
                         <button
                           onClick={convertPrToRfp}
                           style={{
-                            padding:"10px 22px", borderRadius: T.r10,
+                            padding:"10px 16px", borderRadius: T.r10,
                             border:`1px solid ${T.primary}`, background:"rgba(6,182,212,0.06)",
                             color: T.primary, fontSize:12, fontWeight:700, cursor:"pointer",
-                            fontFamily:"inherit", display:"flex", alignItems:"center", gap:6,
+                            fontFamily:"inherit", display:"flex", alignItems:"center", gap:4,
+                            whiteSpace:"nowrap",
                           }}
-                        >RFP로 전환</button>
+                        >RFP 전환</button>
                       )}
                       <button
                         onClick={() => {
@@ -2304,12 +2302,12 @@ export default function ChatPage() {
                           }]);
                         }}
                         style={{
-                          padding:"10px 22px", borderRadius: T.r10,
+                          padding:"10px 16px", borderRadius: T.r10,
                           border:"none", background: T.gradPrimary,
                           color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer",
-                          fontFamily:"inherit",
+                          fontFamily:"inherit", whiteSpace:"nowrap",
                         }}
-                      >새 질문하기</button>
+                      >새 질문</button>
                     </div>
                   </div>
                 )}
@@ -2427,6 +2425,22 @@ export default function ChatPage() {
                     </div>
                   );
                 })}
+
+                {/* 작성 완료 버튼 */}
+                <button
+                  onClick={handlePrManualComplete}
+                  disabled={prPct < 100}
+                  style={{
+                    width:"100%", marginTop:16, padding:"14px 0", borderRadius: T.r12,
+                    border:"none", cursor: prPct >= 100 ? "pointer" : "not-allowed",
+                    background: prPct >= 100 ? T.gradPrimary : "rgba(0,0,0,0.08)",
+                    color: prPct >= 100 ? "#fff" : T.muted,
+                    fontSize:14, fontWeight:700, fontFamily:"inherit",
+                    transition:"all 0.3s ease",
+                  }}
+                >
+                  {prPct >= 100 ? "✓ 작성 완료" : `작성 완료 (${prPct}%)`}
+                </button>
               </>
             )}
           </div>

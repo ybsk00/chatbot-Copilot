@@ -219,13 +219,12 @@ class OrchestratorAgent(AgentBase):
         """키워드 기반 phase 전환 감지 (0ms)."""
         msg = message.strip()
         if phase in ("chat", "asked", "pr_asked"):
-            # PR 동의 감지 (사용자 역할일 때)
-            if user_role == "user" or phase == "pr_asked":
-                if any(kw in msg for kw in PR_AGREE_KEYWORDS):
-                    return "pr_agreed"
-                # pr_asked 상태에서 짧은 동의 응답
-                if phase == "pr_asked" and any(kw in msg for kw in RFP_AGREE_KEYWORDS):
-                    return "pr_agreed"
+            # PR 동의 감지 — PR 키워드는 충분히 구체적이므로 역할 무관하게 먼저 체크
+            if any(kw in msg for kw in PR_AGREE_KEYWORDS):
+                return "pr_agreed"
+            # pr_asked 상태에서 짧은 동의 응답
+            if phase == "pr_asked" and any(kw in msg for kw in RFP_AGREE_KEYWORDS):
+                return "pr_agreed"
 
             # 1. 기존 동의 키워드 (짧은 응답만 — 긴 문장은 일반 질문일 가능성)
             if any(kw in msg for kw in RFP_AGREE_KEYWORDS):
@@ -237,8 +236,6 @@ class OrchestratorAgent(AgentBase):
                 elif is_long and not any(kw in msg for kw in ("RFP", "rfp", "제안요청서", "작성해", "작성할", "작성하")):
                     pass  # 긴 문장인데 RFP/작성 언급 없음 → 일반 질문
                 else:
-                    if user_role == "user":
-                        return "pr_agreed"
                     return "rfp_agreed"
             # 2. RFP 직접 요청 ("rfp 작성해줘", "rfp 할게" 등)
             msg_lower = msg.lower()

@@ -2428,8 +2428,7 @@ export default function ChatPage() {
 
                 {/* 작성 완료 버튼 */}
                 <button
-                  onClick={handlePrManualComplete}
-                  disabled={prPct < 100}
+                  onMouseDown={(e) => { e.preventDefault(); if (prPct >= 100) handlePrManualComplete(); }}
                   style={{
                     width:"100%", marginTop:16, padding:"14px 0", borderRadius: T.r12,
                     border:"none", cursor: prPct >= 100 ? "pointer" : "not-allowed",

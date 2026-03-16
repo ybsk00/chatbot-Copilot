@@ -257,6 +257,12 @@ export default function ChatPage() {
   const fieldRefs  = useRef({});
   const inputRef   = useRef(null);
 
+  // PR 템플릿 가져오기 (DB 우선, 폴백: 프론트 하드코딩) — 아래 계산에서 사용하므로 먼저 선언
+  const getPrTemplate = (typeKey) => {
+    if (dbPrTemplates && dbPrTemplates[typeKey]) return dbPrTemplates[typeKey];
+    return PR_TEMPLATES[typeKey] || null;
+  };
+
   const currentTemplate = rfpType ? RFP_TEMPLATES[rfpType] : null;
   const currentSections = currentTemplate?.sections || [];
   const filled = Object.values(fields).filter(f => (f.value || "").trim()).length;
@@ -287,11 +293,6 @@ export default function ChatPage() {
     }).catch(() => {});
   }, []);
 
-  // PR 템플릿 가져오기 (DB 우선, 폴백: 프론트 하드코딩)
-  const getPrTemplate = (typeKey) => {
-    if (dbPrTemplates && dbPrTemplates[typeKey]) return dbPrTemplates[typeKey];
-    return PR_TEMPLATES[typeKey] || null;
-  };
 
   // RFP 완료 시 신청 내역 조회
   useEffect(() => {

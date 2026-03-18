@@ -284,8 +284,9 @@ def _rrf_fuse(
 # ── 하이브리드 검색 (병렬 FAQ + BM25 + Vector → RRF 통합) ──
 
 def hybrid_search(query: str, category: str | None = None, taxonomy_major: str | None = None, top_k: int = RAG_TOP_K, min_similarity: float = VECTOR_MIN_SIMILARITY) -> tuple[list[dict], list[float]]:
-    """병렬 검색 + RRF 리랭킹
-    FAQ/BM25/Vector를 동시 실행 → RRF로 통합 점수 계산 → 상위 K개 반환
+    """하이브리드 검색 — 품목체계 RAG 1순위 + FAQ 폴백
+    1순위: knowledge_chunks (0318 품목체계 구조화 청크) — Vector + BM25
+    폴백: knowledge_faq (기존 FAQ) — 1순위 결과가 부족할 때만
     Returns: (chunks, query_embedding)"""
     import time
     t0 = time.time()
@@ -294,14 +295,9 @@ def hybrid_search(query: str, category: str | None = None, taxonomy_major: str |
     query_embedding = embed_query(query)
     t_embed = time.time()
 
-    # 병렬 검색 실행
-    faq_chunks = []
+    # ── 1순위: 품목체계 RAG (Vector + BM25 병렬) ──
     bm25_chunks = []
     vector_chunks = []
-
-    def _do_faq():
-        results = faq_search(query_embedding, taxonomy_major, category, top_k=5, min_similarity=0.55)
-        return _format_faq_as_chunks(results) if results else []
 
     def _do_bm25():
         return bm25_keyword_search(query, category, top_k=10)
@@ -309,9 +305,8 @@ def hybrid_search(query: str, category: str | None = None, taxonomy_major: str |
     def _do_vector():
         return vector_search_with_embedding(query_embedding, category, top_k=10, min_similarity=min_similarity)
 
-    with ThreadPoolExecutor(max_workers=3) as executor:
+    with ThreadPoolExecutor(max_workers=2) as executor:
         futures = {
-            executor.submit(_do_faq): "faq",
             executor.submit(_do_bm25): "bm25",
             executor.submit(_do_vector): "vector",
         }
@@ -319,31 +314,51 @@ def hybrid_search(query: str, category: str | None = None, taxonomy_major: str |
             source = futures[future]
             try:
                 result = future.result()
-                if source == "faq":
-                    faq_chunks = result
-                elif source == "bm25":
+                if source == "bm25":
                     bm25_chunks = result
                 else:
                     vector_chunks = result
             except Exception as e:
-                logger.warning(f"RRF {source} search failed: {e}")
+                logger.warning(f"RAG {source} search failed: {e}")
 
-    t_search = time.time()
+    t_primary = time.time()
 
-    # RRF 통합
-    fused = _rrf_fuse(faq_chunks, bm25_chunks, vector_chunks, top_k=RRF_TOP_K)
+    # 1순위 RRF (FAQ 없이 BM25 + Vector만)
+    primary_fused = _rrf_fuse([], bm25_chunks, vector_chunks, top_k=RRF_TOP_K)
+
+    # ── 2순위 폴백: FAQ (1순위 결과가 부족할 때) ──
+    faq_chunks = []
+    # 1순위 결과가 top_k 미만이거나 최상위 유사도가 낮으면 FAQ 폴백
+    primary_max_sim = max((c.get("similarity", 0) for c in primary_fused), default=0)
+    needs_faq_fallback = len(primary_fused) < top_k or primary_max_sim < 0.72
+
+    if needs_faq_fallback:
+        try:
+            faq_results = faq_search(query_embedding, taxonomy_major, category, top_k=5, min_similarity=0.55)
+            faq_chunks = _format_faq_as_chunks(faq_results) if faq_results else []
+        except Exception as e:
+            logger.warning(f"FAQ fallback search failed: {e}")
+
+    t_fallback = time.time()
+
+    # 최종 RRF 통합 (1순위 + FAQ 폴백)
+    if faq_chunks:
+        fused = _rrf_fuse(faq_chunks, bm25_chunks, vector_chunks, top_k=RRF_TOP_K)
+    else:
+        fused = primary_fused
 
     t_fuse = time.time()
     logger.info(
-        f"RRF search: faq={len(faq_chunks)} bm25={len(bm25_chunks)} vec={len(vector_chunks)} "
+        f"hybrid_search: bm25={len(bm25_chunks)} vec={len(vector_chunks)} "
+        f"faq_fallback={len(faq_chunks)}{'(triggered)' if needs_faq_fallback else '(skipped)'} "
         f"→ fused={len(fused)} | embed={int((t_embed-t0)*1000)}ms "
-        f"search={int((t_search-t_embed)*1000)}ms fuse={int((t_fuse-t_search)*1000)}ms "
+        f"primary={int((t_primary-t_embed)*1000)}ms "
+        f"fallback={int((t_fallback-t_primary)*1000)}ms "
         f"total={int((t_fuse-t0)*1000)}ms"
     )
 
-    # RRF 결과가 없으면 빈 배열 반환
     if not fused:
-        logger.info("RRF: no results from any source")
+        logger.info("hybrid_search: no results from any source")
         return [], query_embedding
 
     return fused[:top_k], query_embedding

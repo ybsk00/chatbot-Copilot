@@ -328,18 +328,11 @@ export default function ChatPage() {
   useEffect(() => {
     if (phase === "pr_complete" && userRole === "user" && prType) {
       setPrSupplierLoading(true);
-      // PR 카테고리 → 대분류 역매핑
-      let prCategory = "";
+      // PR 카테고리 → L1 대분류 역매핑 (suppliers.category = L1 이름)
+      let dbCat = "";
       for (const [cat, keys] of Object.entries(PR_CATEGORIES)) {
-        if (keys.includes(prType)) { prCategory = cat; break; }
+        if (keys.includes(prType)) { dbCat = cat; break; }
       }
-      // PR 대분류 → DB 공급업체 카테고리 매핑
-      const PR_TO_DB_CATEGORY = {
-        "건물 관리": "일반 용역",
-        "마케팅": "서비스",
-        "교육 서비스": "서비스",
-      };
-      const dbCat = PR_TO_DB_CATEGORY[prCategory] || "일반 용역";
       const schema = getPrTemplate(prType);
       // PR 필드에서 키워드 추출
       const keywords = Object.values(prFields)
@@ -1218,39 +1211,21 @@ export default function ChatPage() {
   // ══ 오른쪽 패널: 추천 업체 (DB + 업무마켓9 통합) ══
   const [dbSuppliers, setDbSuppliers] = useState([]);
 
-  // RFP 유형 → DB 카테고리 매핑
-  const RFP_TO_DB_CATEGORY = {
-    purchase: "일반 구매",
-    service_contract: "일반 용역",
-    service: "서비스",
-    rental: "렌탈·리스",
-    construction: "공사",
-    consulting: "컨설팅",
-    purchase_maintenance: "구매+유지보수",
-    rental_maintenance: "렌탈+유지보수",
-    purchase_lease: "구매·리스",
-  };
-
   // RFP 완료 시 키워드 기반 공급업체 검색
   useEffect(() => {
     if (phase === "complete" && emailSent && rfpType) {
-      const dbCat = RFP_TO_DB_CATEGORY[rfpType];
-      if (dbCat) {
-        // fields에서 서비스명/품목명/사업명 등 키워드 추출
-        const keywordFields = ["s6", "s7", "s10", "s11"];
-        const keywords = keywordFields
-          .map(k => (fields[k]?.value || "").trim())
-          .filter(Boolean)
-          .join(",");
+      // fields에서 서비스명/품목명/사업명 등 키워드 추출
+      const keywordFields = ["s6", "s7", "s10", "s11"];
+      const keywords = keywordFields
+        .map(k => (fields[k]?.value || "").trim())
+        .filter(Boolean)
+        .join(",");
 
-        api.searchSuppliers(dbCat, keywords).then(res => {
+      if (keywords) {
+        // 키워드로 전체 공급업체 검색 (카테고리 필터 없이)
+        api.searchSuppliers("", keywords).then(res => {
           setDbSuppliers(res.suppliers || []);
-        }).catch(() => {
-          // 폴백: 키워드 없이 카테고리만
-          api.getSuppliers(dbCat).then(res => {
-            setDbSuppliers(res.suppliers || []);
-          }).catch(() => setDbSuppliers([]));
-        });
+        }).catch(() => setDbSuppliers([]));
       }
     }
   }, [phase, emailSent, rfpType]);

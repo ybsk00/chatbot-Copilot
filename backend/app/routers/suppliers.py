@@ -31,21 +31,18 @@ async def list_suppliers(category: str | None = None, sub_category: str | None =
 
 
 @router.get("/search")
-async def search_suppliers(category: str, keywords: str = ""):
-    """키워드 기반 공급업체 검색 — tags/sub_category 매칭"""
+async def search_suppliers(category: str = "", keywords: str = ""):
+    """키워드 기반 공급업체 검색 — tags/sub_category/name 매칭
+    category가 비어있으면 전체 검색, 있으면 해당 카테고리 필터"""
     supabase = get_client()
-    result = (
-        supabase.table("suppliers")
-        .select("*")
-        .eq("category", category)
-        .eq("status", "active")
-        .order("score", desc=True)
-        .execute()
-    )
+    query = supabase.table("suppliers").select("*")
+    if category and category.strip():
+        query = query.eq("category", category)
+    result = query.execute()
     suppliers = result.data or []
 
     if not keywords.strip():
-        return {"suppliers": suppliers}
+        return {"suppliers": suppliers[:30]}
 
     kws = [k.strip() for k in keywords.split(",") if k.strip()]
 
@@ -53,18 +50,24 @@ async def search_suppliers(category: str, keywords: str = ""):
         score = 0
         sub = (s.get("sub_category") or "").lower()
         tags_str = " ".join(s.get("tags") or []).lower()
+        name_lower = s.get("name", "").lower()
+        cat_lower = (s.get("category") or "").lower()
         for kw in kws:
             kw_lower = kw.lower()
+            if kw_lower in name_lower:
+                score += 4
             if kw_lower in sub:
                 score += 3
             if kw_lower in tags_str:
                 score += 2
-            if kw_lower in s.get("name", "").lower():
+            if kw_lower in cat_lower:
                 score += 1
         return score
 
+    # 관련도 > 0인 것만 반환, 최대 20개
     ranked = sorted(suppliers, key=lambda s: (-relevance(s), -s.get("score", 0)))
-    return {"suppliers": ranked}
+    ranked = [s for s in ranked if relevance(s) > 0]
+    return {"suppliers": ranked[:20]}
 
 
 @router.post("")

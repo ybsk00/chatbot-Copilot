@@ -158,6 +158,61 @@ CLASSIFY_PROMPT = """사용자의 간접구매 질문을 아래 분류체계에 
 
 
 # ── 렌탈/리스 키워드 오버라이드 ──
+# ═══════════════════════════════════════════
+# 하위호환: TAXONOMY dict (orchestrator.py에서 참조)
+# taxonomy_v2 DB에서 동적 생성
+# ═══════════════════════════════════════════
+def _build_legacy_taxonomy() -> dict:
+    """기존 TAXONOMY dict 형태로 변환 (하위호환)"""
+    cache = _load_taxonomy()
+    taxonomy = {}
+    for l1_code, l1_name in cache["l1_map"].items():
+        middles = []
+        for l2_code, l2_info in cache["l2_map"].items():
+            if l2_info.get("parent_code") == l1_code:
+                l3_names = [r["name"] for r in cache["l3_list"] if r.get("parent_code") == l2_code]
+                if l3_names:
+                    hint = "/".join(l3_names[:4])
+                    middles.append(f"{l2_info['name']}({hint})")
+                else:
+                    middles.append(l2_info["name"])
+        taxonomy[l1_name] = middles
+    return taxonomy
+
+
+class _LazyTaxonomy:
+    """서버 시작 시 DB 연결 전에 import되어도 오류 없도록 lazy 로딩"""
+    _data = None
+
+    def items(self):
+        if self._data is None:
+            self._data = _build_legacy_taxonomy()
+        return self._data.items()
+
+    def __contains__(self, item):
+        if self._data is None:
+            self._data = _build_legacy_taxonomy()
+        return item in self._data
+
+    def get(self, key, default=None):
+        if self._data is None:
+            self._data = _build_legacy_taxonomy()
+        return self._data.get(key, default)
+
+    def __getitem__(self, key):
+        if self._data is None:
+            self._data = _build_legacy_taxonomy()
+        return self._data[key]
+
+    def keys(self):
+        if self._data is None:
+            self._data = _build_legacy_taxonomy()
+        return self._data.keys()
+
+
+TAXONOMY = _LazyTaxonomy()
+
+
 RENTAL_KEYWORDS = ["렌탈", "렌트", "리스", "임대", "대여"]
 MAINTENANCE_KEYWORDS = ["유지보수", "A/S", "정기점검", "필터교체", "소모품"]
 

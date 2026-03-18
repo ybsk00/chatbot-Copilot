@@ -438,6 +438,60 @@ async def delete_pr_template(template_id: int):
     return {"status": "deleted"}
 
 
+# ── 차세대 분류체계 (taxonomy_v2) ──
+
+@router.get("/taxonomy-v2/tree")
+async def get_taxonomy_tree():
+    """L1 > L2 > L3 트리 구조 반환 (프론트엔드 카테고리 선택기용)"""
+    supabase = get_client()
+    rows = supabase.table("taxonomy_v2").select("*").eq("is_active", True).order("code").execute().data
+
+    l1_list = [r for r in rows if r["level"] == 1]
+    l2_list = [r for r in rows if r["level"] == 2]
+    l3_list = [r for r in rows if r["level"] == 3]
+
+    tree = []
+    for l1 in l1_list:
+        l2_children = []
+        for l2 in l2_list:
+            if l2.get("parent_code") == l1["code"]:
+                l3_children = [
+                    {
+                        "code": l3["code"],
+                        "name": l3["name"],
+                        "description": l3.get("description"),
+                        "keywords": l3.get("keywords", []),
+                        "purchase_strategy": l3.get("purchase_strategy"),
+                        "expense_type": l3.get("expense_type"),
+                        "pr_template_key": l3.get("pr_template_key"),
+                        "rfp_type": l3.get("rfp_type"),
+                    }
+                    for l3 in l3_list if l3.get("parent_code") == l2["code"]
+                ]
+                l2_children.append({
+                    "code": l2["code"],
+                    "name": l2["name"],
+                    "pr_template_key": l2.get("pr_template_key"),
+                    "rfp_type": l2.get("rfp_type"),
+                    "children": l3_children,
+                })
+        tree.append({
+            "code": l1["code"],
+            "name": l1["name"],
+            "children": l2_children,
+        })
+
+    return tree
+
+
+@router.get("/taxonomy-v2")
+async def get_taxonomy_flat():
+    """taxonomy_v2 전체 플랫 리스트"""
+    supabase = get_client()
+    rows = supabase.table("taxonomy_v2").select("*").eq("is_active", True).order("code").execute().data
+    return rows
+
+
 # ── PR(구매요청서) 관리 ──
 
 class PrStatusUpdate(BaseModel):

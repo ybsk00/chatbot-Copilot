@@ -269,12 +269,16 @@ export default function ChatPage() {
   const total  = Object.keys(fields).length;
   const pct    = total > 0 ? Math.round(filled / total * 100) : 0;
 
-  // PR 계산
+  // PR 계산 — 필수 필드 기준 (required: true인 필드만)
   const currentPrTemplate = prType ? getPrTemplate(prType) : null;
   const currentPrSections = currentPrTemplate?.sections || [];
+  const prRequiredFields = Object.entries(prFields).filter(([, f]) => f.required !== false);
+  const prOptionalFields = Object.entries(prFields).filter(([, f]) => f.required === false);
+  const prRequiredFilled = prRequiredFields.filter(([, f]) => (f.value || "").trim()).length;
+  const prRequiredTotal  = prRequiredFields.length;
   const prFilled = Object.values(prFields).filter(f => (f.value || "").trim()).length;
   const prTotal  = Object.keys(prFields).length;
-  const prPct    = prTotal > 0 ? Math.round(prFilled / prTotal * 100) : 0;
+  const prPct    = prRequiredTotal > 0 ? Math.round(prRequiredFilled / prRequiredTotal * 100) : 0;
 
   useEffect(() => {
     if (chatScrollRef.current) {
@@ -718,12 +722,19 @@ export default function ChatPage() {
     </div>
   );
 
-  // ═══ PR 카테고리 선택 카드 (대분류별 그룹) ═══
+  // ═══ PR 카테고리 선택 카드 (차세대 품목체계 L1 11개 대분류) ═══
   const PR_CATEGORY_ICONS = {
-    "건물 관리": { emoji: "🏢", color: "#0EA5A0", bg: "#F0FAFA" },
-    "마케팅": { emoji: "📢", color: "#FB923C", bg: "#FFF7ED" },
-    "교육 서비스": { emoji: "📚", color: "#818CF8", bg: "#EEF2FF" },
-    "시장정보": { emoji: "📊", color: "#F472B6", bg: "#FDF2F8" },
+    "사무·총무":       { emoji: "📎", color: "#6B7280", bg: "#F3F4F6" },
+    "인사·복리후생":    { emoji: "👥", color: "#8B5CF6", bg: "#F5F3FF" },
+    "시설·건물관리":    { emoji: "🏢", color: "#0EA5A0", bg: "#F0FAFA" },
+    "차량·출장":       { emoji: "✈️", color: "#3B82F6", bg: "#EFF6FF" },
+    "보험 서비스":     { emoji: "🛡️", color: "#10B981", bg: "#ECFDF5" },
+    "전문용역·컨설팅":  { emoji: "💼", color: "#F59E0B", bg: "#FFFBEB" },
+    "마케팅":         { emoji: "📢", color: "#FB923C", bg: "#FFF7ED" },
+    "IT/ICT":        { emoji: "💻", color: "#6366F1", bg: "#EEF2FF" },
+    "물류":           { emoji: "🚚", color: "#14B8A6", bg: "#F0FDFA" },
+    "생산관리":        { emoji: "🏭", color: "#EF4444", bg: "#FEF2F2" },
+    "연구개발":        { emoji: "🔬", color: "#A855F7", bg: "#FAF5FF" },
   };
 
   const renderPrTypeSelector = () => (
@@ -2349,22 +2360,27 @@ export default function ChatPage() {
                   borderRadius: T.r16, padding:"16px 20px", marginBottom:16,
                   border: `1px solid rgba(6,182,212,0.12)`,
                 }}>
-                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
                     <span style={{ fontSize:12, fontWeight:700, color: T.text }}>구매요청서 완성도</span>
                     <span style={{
                       fontSize:11, fontWeight:700, padding:"4px 12px", borderRadius:20,
-                      background: prPct >= 80 ? T.greenLight : 'rgba(255,255,255,0.8)',
-                      color: prPct >= 80 ? T.greenDark : T.primary,
-                      border: `1px solid ${prPct >= 80 ? T.greenMid : 'rgba(6,182,212,0.15)'}`,
-                    }}>{prFilled} / {prTotal} · {prPct}%</span>
+                      background: prPct >= 100 ? T.greenLight : 'rgba(255,255,255,0.8)',
+                      color: prPct >= 100 ? T.greenDark : T.primary,
+                      border: `1px solid ${prPct >= 100 ? T.greenMid : 'rgba(6,182,212,0.15)'}`,
+                    }}>필수 {prRequiredFilled}/{prRequiredTotal} · {prPct}%</span>
                   </div>
-                  <div style={{ height:8, background:"rgba(255,255,255,0.7)", borderRadius:4, overflow:"hidden" }}>
+                  <div style={{ height:8, background:"rgba(255,255,255,0.7)", borderRadius:4, overflow:"hidden", marginBottom:4 }}>
                     <div style={{
                       height:"100%", width:`${prPct}%`, borderRadius:4,
-                      background: `linear-gradient(90deg, #06B6D4, #0EA5A0)`,
+                      background: prPct >= 100 ? `linear-gradient(90deg, #10B981, #059669)` : `linear-gradient(90deg, #06B6D4, #0EA5A0)`,
                       transition:"width 0.6s ease",
                     }} />
                   </div>
+                  {prOptionalFields.length > 0 && (
+                    <div style={{ fontSize:10, color: T.muted, textAlign:"right" }}>
+                      선택 {prOptionalFields.filter(([,f]) => (f.value||"").trim()).length}/{prOptionalFields.length}
+                    </div>
+                  )}
                 </div>
 
                 {/* 섹션 아코디언 */}

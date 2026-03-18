@@ -248,6 +248,12 @@ export const api = {
     return res.json();
   },
 
+  // ── 차세대 분류체계 (taxonomy_v2) ──
+  async getTaxonomyTree() {
+    const res = await fetch(`${API_URL}/admin/taxonomy-v2/tree`);
+    return res.json();
+  },
+
   // ── 공급업체 CRUD (기존 확장) ──
   async updateSupplier(id, data) {
     const res = await fetch(`${API_URL}/suppliers/${id}`, {

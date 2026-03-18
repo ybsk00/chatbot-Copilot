@@ -237,4 +237,224 @@ export const PR_TO_RFP_MAPPING = {
       p2: "s7",   // 구매 목적 → 구매 목적 (보충)
     },
   },
+
+  // ═══════════════════════════════════════════
+  // 차세대 품목체계 PR 그룹 (23개) → RFP 매핑
+  // ═══════════════════════════════════════════
+
+  // ── 물품구매 → purchase ──
+  goods_purchase: {
+    rfpType: "purchase",
+    fieldMap: {
+      ...COMMON_MAP_BY_RFP.purchase,
+      p1: "s6",   // 품목 카테고리 → 구매 품목
+      p3: "s10",  // 상세 품목 리스트 → 요구 사양
+    },
+  },
+
+  // ── 렌탈·리스 → rental ──
+  rental_lease: {
+    rfpType: "rental",
+    fieldMap: {
+      ...COMMON_MAP_BY_RFP.rental,
+      p1: "s6",   // 렌탈 품목 → 사업명 (보충)
+      p5: "s11",  // 기기 사양 → 요구 사양 (보충)
+    },
+  },
+
+  // ── 인쇄·제작 → service_contract ──
+  print_production: {
+    rfpType: "service_contract",
+    fieldMap: {
+      ...COMMON_MAP_BY_RFP.service_contract,
+      p1: "s6",   // 제작물 유형 → 사업명 (보충)
+    },
+  },
+
+  // ── 용역·아웃소싱 → service_contract ──
+  service_outsourcing: {
+    rfpType: "service_contract",
+    fieldMap: {
+      ...COMMON_MAP_BY_RFP.service_contract,
+      p1: "s6",   // 용역 유형 → 사업명 (보충)
+      p3: "s10",  // 투입 인원 → 대상인원
+    },
+  },
+
+  // ── 전문 컨설팅 → consulting ──
+  consulting: {
+    rfpType: "consulting",
+    fieldMap: {
+      ...COMMON_MAP_BY_RFP.consulting,
+      p1: "s6",   // 컨설팅 분야 → 사업명 (보충)
+      p3: "s10",  // 컨설팅 범위 → 컨설팅 범위
+    },
+  },
+
+  // ── 교육·훈련 → service_contract ──
+  education_training: {
+    rfpType: "service_contract",
+    fieldMap: {
+      ...COMMON_MAP_BY_RFP.service_contract,
+      p1: "s6",   // 교육 유형 → 사업명 (보충)
+      p3: "s10",  // 교육 대상 인원 → 대상인원
+    },
+  },
+
+  // ── 복지 서비스 → service ──
+  welfare_service: {
+    rfpType: "service",
+    fieldMap: {
+      ...COMMON_MAP_BY_RFP.service,
+      p1: "s6",   // 복지 서비스 유형 → 서비스명
+      p3: "s9",   // 대상 인원 → 대상 규모
+    },
+  },
+
+  // ── 시설 공사 → construction ──
+  construction: {
+    rfpType: "construction",
+    fieldMap: {
+      ...COMMON_MAP_BY_RFP.construction,
+      p1: "s6",   // 공사 유형 → 공사명 (보충)
+      p2: "s9",   // 공사 장소 → 공사 규모 (보충)
+    },
+  },
+
+  // ── 보험 → service ──
+  insurance: {
+    rfpType: "service",
+    fieldMap: {
+      ...COMMON_MAP_BY_RFP.service,
+      p1: "s6",   // 보험 유형 → 서비스명
+      p4: "s10",  // 담보 범위 → 서비스 범위
+    },
+  },
+
+  // ── 광고·매체 → service_contract ──
+  advertising_media: {
+    rfpType: "service_contract",
+    fieldMap: {
+      ...COMMON_MAP_BY_RFP.service_contract,
+      p1: "s6",   // 광고 유형 → 사업명
+      p7: "s14",  // KPI 목표 → SLA 기준
+    },
+  },
+
+  // ── 이벤트·행사 → service_contract ──
+  event_exhibition: {
+    rfpType: "service_contract",
+    fieldMap: {
+      ...COMMON_MAP_BY_RFP.service_contract,
+      p1: "s6",   // 행사 유형 → 사업명
+      p4: "s10",  // 참석자 수 → 대상인원
+    },
+  },
+
+  // ── 출장 서비스 → service ──
+  business_travel: {
+    rfpType: "service",
+    fieldMap: {
+      ...COMMON_MAP_BY_RFP.service,
+      p1: "s6",   // 출장 서비스 범위 → 서비스명
+    },
+  },
+
+  // ── IT 하드웨어 → purchase_maintenance ──
+  it_hardware: {
+    rfpType: "purchase_maintenance",
+    fieldMap: {
+      ...COMMON_MAP_BY_RFP.purchase_maintenance,
+      p1: "s6",   // 장비 유형 → 구매 품목
+      p3: "s10",  // 수량 및 사양 → 요구 사양
+    },
+  },
+
+  // ── IT SW·클라우드 → purchase_lease ──
+  it_software_cloud: {
+    rfpType: "purchase_lease",
+    fieldMap: {
+      ...COMMON_MAP_BY_RFP.purchase_lease,
+      p1: "s6",   // 소프트웨어명 → 대상 장비
+      p3: "s9",   // 사용자 수 → 수량
+    },
+  },
+
+  // ── IT 개발·운영 → service_contract ──
+  it_development: {
+    rfpType: "service_contract",
+    fieldMap: {
+      ...COMMON_MAP_BY_RFP.service_contract,
+      p1: "s6",   // 프로젝트 유형 → 사업명
+      p3: "s11",  // 개발 범위 → 서비스 범위
+    },
+  },
+
+  // ── 물류 운송 → service_contract ──
+  logistics_transport: {
+    rfpType: "service_contract",
+    fieldMap: {
+      ...COMMON_MAP_BY_RFP.service_contract,
+      p1: "s6",   // 운송 유형 → 사업명
+      p3: "s11",  // 출발지→도착지 → 서비스 범위
+    },
+  },
+
+  // ── 물류 창고·풀필먼트 → service_contract ──
+  logistics_warehouse: {
+    rfpType: "service_contract",
+    fieldMap: {
+      ...COMMON_MAP_BY_RFP.service_contract,
+      p1: "s6",   // 서비스 유형 → 사업명
+      p3: "s10",  // 보관 면적 → 대상인원(규모)
+    },
+  },
+
+  // ── R&D 용역·장비 → service_contract ──
+  rd_service: {
+    rfpType: "service_contract",
+    fieldMap: {
+      ...COMMON_MAP_BY_RFP.service_contract,
+      p1: "s6",   // R&D 유형 → 사업명
+      p3: "s11",  // 개발 범위 → 서비스 범위
+    },
+  },
+
+  // ── 인증·시험·IP → consulting ──
+  certification_test: {
+    rfpType: "consulting",
+    fieldMap: {
+      ...COMMON_MAP_BY_RFP.consulting,
+      p1: "s6",   // 서비스 유형 → 사업명
+      p3: "s10",  // 대상 제품 → 컨설팅 범위
+    },
+  },
+
+  // ── 생산·안전·폐기 → purchase_maintenance ──
+  production_safety: {
+    rfpType: "purchase_maintenance",
+    fieldMap: {
+      ...COMMON_MAP_BY_RFP.purchase_maintenance,
+      p1: "s6",   // 서비스 유형 → 구매 품목
+      p3: "s10",  // 대상 설비 → 요구 사양
+    },
+  },
+
+  // ── 유틸리티·에너지 → service ──
+  utility_energy: {
+    rfpType: "service",
+    fieldMap: {
+      ...COMMON_MAP_BY_RFP.service,
+      p1: "s6",   // 에너지 유형 → 서비스명
+    },
+  },
+
+  // ── 사무보조 서비스 → service ──
+  office_support: {
+    rfpType: "service",
+    fieldMap: {
+      ...COMMON_MAP_BY_RFP.service,
+      p1: "s6",   // 서비스 유형 → 서비스명
+    },
+  },
 };

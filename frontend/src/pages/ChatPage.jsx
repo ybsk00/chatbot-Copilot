@@ -227,6 +227,7 @@ export default function ChatPage() {
   const [downloaded, setDownloaded]     = useState(false);
   const [sent, setSent]                 = useState(false);
   const [openSec, setOpenSec]           = useState({0:true,1:true,2:true,3:true,4:true,5:true});
+  const [prTab, setPrTab]               = useState(0); // PR 3탭: 0=기본정보, 1=상세요건, 2=계약조건
   const [rightVisible, setRightVisible] = useState(false);
   const [sessionId]                     = useState(() => crypto.randomUUID());
   const [inputFocused, setInputFocused] = useState(false);
@@ -2351,13 +2352,24 @@ export default function ChatPage() {
               </>
             )}
 
-            {/* ── PR Filling: 진행률 + 섹션 아코디언 ── */}
-            {phase === "pr_filling" && (
+            {/* ── PR Filling: 진행률 + 3탭 구조 ── */}
+            {phase === "pr_filling" && (() => {
+              // 3탭 필드 그룹핑: 기본정보(c1~c10) / 상세요건(c11~c14 + p*) / 계약조건(c15~c20)
+              const basicFields = Object.entries(prFields).filter(([k]) => /^c([1-9]|10)$/.test(k));
+              const detailFields = Object.entries(prFields).filter(([k]) => /^c1[1-4]$/.test(k) || k.startsWith("p"));
+              const contractFields = Object.entries(prFields).filter(([k]) => /^c1[5-9]$|^c20$/.test(k));
+              const tabGroups = [
+                { key: "basic", label: "기본 정보", icon: "📋", fields: basicFields },
+                { key: "detail", label: "상세 요건", icon: "📦", fields: detailFields },
+                { key: "contract", label: "계약 조건", icon: "💰", fields: contractFields },
+              ];
+              const currentTabFields = tabGroups[prTab]?.fields || [];
+              return (
               <>
                 {/* 진행률 */}
                 <div style={{
                   background: `linear-gradient(135deg, rgba(6,182,212,0.06) 0%, rgba(14,165,160,0.04) 100%)`,
-                  borderRadius: T.r16, padding:"16px 20px", marginBottom:16,
+                  borderRadius: T.r16, padding:"14px 18px", marginBottom:14,
                   border: `1px solid rgba(6,182,212,0.12)`,
                 }}>
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
@@ -2369,121 +2381,144 @@ export default function ChatPage() {
                       border: `1px solid ${prPct >= 100 ? T.greenMid : 'rgba(6,182,212,0.15)'}`,
                     }}>필수 {prRequiredFilled}/{prRequiredTotal} · {prPct}%</span>
                   </div>
-                  <div style={{ height:8, background:"rgba(255,255,255,0.7)", borderRadius:4, overflow:"hidden", marginBottom:4 }}>
+                  <div style={{ height:6, background:"rgba(255,255,255,0.7)", borderRadius:3, overflow:"hidden" }}>
                     <div style={{
-                      height:"100%", width:`${prPct}%`, borderRadius:4,
+                      height:"100%", width:`${prPct}%`, borderRadius:3,
                       background: prPct >= 100 ? `linear-gradient(90deg, #10B981, #059669)` : `linear-gradient(90deg, #06B6D4, #0EA5A0)`,
                       transition:"width 0.6s ease",
                     }} />
                   </div>
-                  {prOptionalFields.length > 0 && (
-                    <div style={{ fontSize:10, color: T.muted, textAlign:"right" }}>
-                      선택 {prOptionalFields.filter(([,f]) => (f.value||"").trim()).length}/{prOptionalFields.length}
-                    </div>
-                  )}
                 </div>
 
-                {/* 섹션 아코디언 */}
-                {currentPrSections.map((sec, si) => {
-                  const sectionDone = sec.fields.every(f => prFields[f]?.value);
-                  return (
-                    <div key={si} style={{ marginBottom:10 }}>
-                      <div
-                        onClick={() => setOpenSec(p => ({...p,[`pr_${si}`]:!p[`pr_${si}`]}))}
+                {/* 3탭 네비게이션 */}
+                <div style={{ display:"flex", gap:6, marginBottom:14 }}>
+                  {tabGroups.map((tab, ti) => {
+                    const tabFilled = tab.fields.filter(([,f]) => (f.value||"").trim()).length;
+                    const tabTotal = tab.fields.length;
+                    const tabDone = tabFilled === tabTotal && tabTotal > 0;
+                    const isActive = prTab === ti;
+                    return (
+                      <button
+                        key={tab.key}
+                        onMouseDown={(e) => { e.preventDefault(); setPrTab(ti); }}
                         style={{
-                          background: 'rgba(255,255,255,0.7)', padding:"12px 16px",
-                          border: `1px solid rgba(6,182,212,0.08)`,
-                          borderRadius: openSec[`pr_${si}`] !== false ? `${T.r12}px ${T.r12}px 0 0` : T.r12,
-                          display:"flex", alignItems:"center", gap:10, cursor:"pointer",
-                          transition:"all 0.2s ease",
+                          flex:1, padding:"10px 4px", borderRadius: T.r10,
+                          border: isActive ? `2px solid ${T.primary}` : `1.5px solid ${T.border}`,
+                          background: isActive ? "rgba(6,182,212,0.06)" : T.card,
+                          cursor:"pointer", fontFamily:"inherit", textAlign:"center",
+                          transition:"all 0.15s",
                         }}
                       >
-                        <span style={{
-                          width:24, height:24, borderRadius:"50%",
-                          display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
-                          background: sectionDone ? T.greenLight : T.redLight,
-                          color: sectionDone ? T.greenDark : T.red,
-                        }}>{sectionDone ? <IconCheck size={12} /> : <IconAlert size={12} />}</span>
-                        <span style={{ fontSize:12, fontWeight:700, flex:1, color: T.text }}>
-                          {SECTION_ICONS[sec.icon]} {sec.title}
-                        </span>
-                        {sectionDone
-                          ? <Chip>완료</Chip>
-                          : <Chip color={T.red} bg={T.redLight} border={T.redMid}>미완료</Chip>
-                        }
-                        <span style={{ color: T.muted }}><IconChevron open={openSec[`pr_${si}`] !== false} /></span>
-                      </div>
-                      {openSec[`pr_${si}`] !== false && (
-                        <div style={{
-                          background: 'rgba(255,255,255,0.65)', border:`1px solid rgba(6,182,212,0.08)`, borderTop:"none",
-                          borderRadius:`0 0 ${T.r12}px ${T.r12}px`, overflow:"hidden",
-                        }}>
-                          {sec.fields.map((fk, fi) => {
-                            const f = prFields[fk];
-                            if (!f) return null;
-                            const isNew = prJustFilled.has(fk);
-                            return (
-                              <div key={fk} style={{
-                                display:"flex", alignItems:"flex-start",
-                                borderBottom: fi < sec.fields.length-1 ? `1px solid ${T.borderLight}` : "none",
-                                animation: isNew ? "field-highlight 2.5s ease forwards" : "none",
-                                background: fi % 2 === 1 ? "rgba(6,182,212,0.02)" : "transparent",
-                              }}>
-                                <div style={{
-                                  width:136, padding:"10px 14px", flexShrink:0,
-                                  background:"rgba(6,182,212,0.03)", borderRight:`1px solid rgba(6,182,212,0.06)`,
-                                  fontSize:11, fontWeight:700, color: T.sub,
-                                  display:"flex", alignItems:"center", minHeight:40,
-                                }}>{f.label}</div>
-                                <div style={{
-                                  flex:1, padding:"4px 8px", fontSize:12,
-                                  lineHeight:1.7, minHeight:40, display:"flex", alignItems:"center", gap:4,
-                                }}>
-                                  <input
-                                    type="text"
-                                    value={f.value || ""}
-                                    placeholder="직접 입력 또는 채팅으로 입력"
-                                    onChange={(e) => handlePrFieldEdit(fk, e.target.value)}
-                                    style={{
-                                      width:"100%", border:"none", outline:"none",
-                                      background:"transparent", fontSize:12, color: T.text,
-                                      padding:"6px 8px", borderRadius:4, fontFamily:"inherit",
-                                      transition:"background 0.2s",
-                                    }}
-                                    onFocus={(e) => { e.target.style.background = "rgba(6,182,212,0.06)"; }}
-                                    onBlur={(e) => { e.target.style.background = "transparent"; }}
-                                  />
-                                  {isNew && <span style={{
-                                    fontSize:9, padding:"2px 6px", flexShrink:0,
-                                    background: T.tealLight, border:`1px solid ${T.tealMid}`,
-                                    borderRadius:4, color: T.tealDark, fontWeight:700,
-                                  }}>NEW</span>}
-                                </div>
-                              </div>
-                            );
-                          })}
+                        <div style={{ fontSize:14, marginBottom:2 }}>{tab.icon}</div>
+                        <div style={{ fontSize:10, fontWeight:700, color: isActive ? T.primary : T.text, marginBottom:2 }}>
+                          {tab.label}
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
+                        <div style={{
+                          fontSize:9, fontWeight:600,
+                          color: tabDone ? T.greenDark : T.muted,
+                        }}>
+                          {tabDone ? "✓ 완료" : `${tabFilled}/${tabTotal}`}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
 
-                {/* 작성 완료 버튼 */}
-                <button
-                  onMouseDown={(e) => { e.preventDefault(); if (prPct >= 100) handlePrManualComplete(); }}
-                  style={{
-                    width:"100%", marginTop:16, padding:"14px 0", borderRadius: T.r12,
-                    border:"none", cursor: prPct >= 100 ? "pointer" : "not-allowed",
-                    background: prPct >= 100 ? T.gradPrimary : "rgba(0,0,0,0.08)",
-                    color: prPct >= 100 ? "#fff" : T.muted,
-                    fontSize:14, fontWeight:700, fontFamily:"inherit",
-                    transition:"all 0.3s ease",
-                  }}
-                >
-                  {prPct >= 100 ? "✓ 작성 완료" : `작성 완료 (${prPct}%)`}
-                </button>
+                {/* 현재 탭 필드 목록 */}
+                <div style={{
+                  background: 'rgba(255,255,255,0.65)',
+                  border: `1px solid rgba(6,182,212,0.08)`,
+                  borderRadius: T.r12, overflow:"hidden", marginBottom:12,
+                }}>
+                  {currentTabFields.map(([fk, f], fi) => {
+                    if (!f) return null;
+                    const isNew = prJustFilled.has(fk);
+                    const isRequired = f.required !== false;
+                    return (
+                      <div key={fk} style={{
+                        display:"flex", alignItems:"flex-start",
+                        borderBottom: fi < currentTabFields.length-1 ? `1px solid ${T.borderLight}` : "none",
+                        animation: isNew ? "field-highlight 2.5s ease forwards" : "none",
+                        background: fi % 2 === 1 ? "rgba(6,182,212,0.02)" : "transparent",
+                      }}>
+                        <div style={{
+                          width:126, padding:"10px 12px", flexShrink:0,
+                          background:"rgba(6,182,212,0.03)", borderRight:`1px solid rgba(6,182,212,0.06)`,
+                          fontSize:11, fontWeight:700, color: T.sub,
+                          display:"flex", alignItems:"center", minHeight:40, gap:3,
+                        }}>
+                          {isRequired && <span style={{ color: T.red, fontSize:10 }}>*</span>}
+                          {f.label}
+                        </div>
+                        <div style={{
+                          flex:1, padding:"4px 8px", fontSize:12,
+                          lineHeight:1.7, minHeight:40, display:"flex", alignItems:"center", gap:4,
+                        }}>
+                          <input
+                            type="text"
+                            value={f.value || ""}
+                            placeholder="직접 입력 또는 채팅으로 입력"
+                            onChange={(e) => handlePrFieldEdit(fk, e.target.value)}
+                            style={{
+                              width:"100%", border:"none", outline:"none",
+                              background:"transparent", fontSize:12, color: T.text,
+                              padding:"6px 8px", borderRadius:4, fontFamily:"inherit",
+                              transition:"background 0.2s",
+                            }}
+                            onFocus={(e) => { e.target.style.background = "rgba(6,182,212,0.06)"; }}
+                            onBlur={(e) => { e.target.style.background = "transparent"; }}
+                          />
+                          {isNew && <span style={{
+                            fontSize:9, padding:"2px 6px", flexShrink:0,
+                            background: T.tealLight, border:`1px solid ${T.tealMid}`,
+                            borderRadius:4, color: T.tealDark, fontWeight:700,
+                          }}>NEW</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* 이전/다음 + 완료 버튼 */}
+                <div style={{ display:"flex", gap:8, marginTop:4 }}>
+                  {prTab > 0 && (
+                    <button
+                      onMouseDown={(e) => { e.preventDefault(); setPrTab(prTab - 1); }}
+                      style={{
+                        flex:1, padding:"11px 0", borderRadius: T.r10,
+                        border:`1.5px solid ${T.border}`, background: T.card,
+                        color: T.text, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
+                      }}
+                    >◀ {tabGroups[prTab-1]?.label}</button>
+                  )}
+                  {prTab < 2 ? (
+                    <button
+                      onMouseDown={(e) => { e.preventDefault(); setPrTab(prTab + 1); }}
+                      style={{
+                        flex:1, padding:"11px 0", borderRadius: T.r10,
+                        border:"none", background: T.gradPrimary,
+                        color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
+                      }}
+                    >{tabGroups[prTab+1]?.label} ▶</button>
+                  ) : (
+                    <button
+                      onMouseDown={(e) => { e.preventDefault(); if (prPct >= 100) handlePrManualComplete(); }}
+                      style={{
+                        flex:1, padding:"11px 0", borderRadius: T.r10,
+                        border:"none", cursor: prPct >= 100 ? "pointer" : "not-allowed",
+                        background: prPct >= 100 ? T.gradPrimary : "rgba(0,0,0,0.08)",
+                        color: prPct >= 100 ? "#fff" : T.muted,
+                        fontSize:12, fontWeight:700, fontFamily:"inherit",
+                        transition:"all 0.3s ease",
+                      }}
+                    >
+                      {prPct >= 100 ? "✓ 작성 완료" : `작성 완료 (${prPct}%)`}
+                    </button>
+                  )}
+                </div>
               </>
-            )}
+              );
+            })()}
           </div>
         </div>
       )}

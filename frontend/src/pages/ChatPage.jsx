@@ -528,9 +528,10 @@ export default function ChatPage() {
     if (!tmpl) return;
 
     const templateFields = {};
+    // c10(대상 규모/수량)은 탭 선택으로 받아야 하므로 기본값 자동 채움 제외
+    const NO_AUTO_FILL = new Set(["c10"]);
     Object.entries(tmpl.fields).forEach(([k, v]) => {
-      // DB에서 가져온 default 값으로 미리 채움
-      templateFields[k] = { ...v, value: v.default || "" };
+      templateFields[k] = { ...v, value: NO_AUTO_FILL.has(k) ? "" : (v.default || "") };
     });
     setPrFields(templateFields);
     setPrRightVisible(false);   // 패널 즉시 열지 않음 — 필수값 채운 뒤 자동 오픈
@@ -851,41 +852,83 @@ export default function ChatPage() {
 
   // ── PR 필드별 선택 옵션 생성 (퀵필 카드 + 패널 모두 사용) ──
   const getPrFieldOptions = (key, f) => {
-    const opts = [];
-    if (f.default && !(f.value || "").trim()) opts.push(f.default);
-    // 계약 기간
-    if (key === "c9" || f.label?.includes("기간")) {
-      ["1년", "2년", "3년 약정 (36개월)", "5년", "단기 (6개월)"].forEach(e => { if (!opts.includes(e)) opts.push(e); });
+    const label = (f.label || "").toLowerCase();
+    // c1~c5 요청자 정보: 탭 불필요
+    if (["c1","c2","c3","c4","c5"].includes(key)) return [];
+
+    // ── 공통 필드 (c6~c20) ──
+    // c6 서비스/품목명
+    if (key === "c6") return f.default ? [f.default] : [];
+    // c7 구매/계약 목적
+    if (key === "c7") return f.default ? [f.default] : [];
+    // c8 계약 유형
+    if (key === "c8")
+      return ["순수 렌탈 (반납)", "리스 (인수 옵션)", "단가 계약", "연간 구독/위탁"];
+    // c9 계약 기간
+    if (key === "c9")
+      return ["12개월", "24개월", "36개월", "48개월"];
+    // c10 대상 규모/수량 — 디폴트 자동입력 금지
+    if (key === "c10")
+      return ["5대 미만", "10대 미만", "20대 미만", "기타"];
+    // c11 서비스 범위/요구 사양
+    if (key === "c11") return f.default ? [f.default] : [];
+    // c12 제공/수행 방식
+    if (key === "c12") return f.default ? [f.default] : [];
+    // c13 품질/SLA 기준
+    if (key === "c13")
+      return ["24시간 내 대응", "99.9% 가용성", "월간 리포트 제공"];
+    // c14 보안/법적 요건
+    if (key === "c14")
+      return ["개인정보보호법 준수", "보안서약서 징구", "해당 없음"];
+    // c15 단가 산정 방식
+    if (key === "c15")
+      return ["월 정액제", "건당 단가", "인건비 기반", "실비 정산"];
+    // c16 구간 할인
+    if (key === "c16")
+      return ["수량 할인 적용", "연간 계약 할인", "해당 없음"];
+    // c17 결제 주기
+    if (key === "c17")
+      return ["월별 후불", "분기별 후불", "선불 (연납)"];
+    // c18 단가 인상 조건
+    if (key === "c18")
+      return ["CPI 연동 연 1회", "계약 기간 내 동결", "협의"];
+    // c19 해지/위약금
+    if (key === "c19")
+      return ["30일 전 서면 통보", "위약금 없음", "잔여 기간 ×10%"];
+    // c20 BSM/전산 연동
+    if (key === "c20")
+      return ["ERP 연동 필요", "API 연동", "해당 없음"];
+
+    // ── 고유 필드 (p*) — 라벨 키워드 기반 ──
+    if (key.startsWith("p")) {
+      // 수량/인원
+      if (label.includes("수량") || label.includes("인원"))
+        return ["5명 미만", "10명", "20명", "기타"];
+      // 희망일/시작일/착공일
+      if (label.includes("희망일") || label.includes("시작")) {
+        const d1 = new Date(); d1.setDate(d1.getDate() + 14);
+        const d2 = new Date(); d2.setDate(d2.getDate() + 30);
+        return [d1.toLocaleDateString("ko-KR"), d2.toLocaleDateString("ko-KR"), "협의"];
+      }
+      // 방식 (교육, 제공, 수행)
+      if (label.includes("방식"))
+        return f.default ? [f.default, "협의"] : ["온라인", "오프라인", "혼합", "협의"];
+      // 기간 관련
+      if (label.includes("기간"))
+        return ["12개월", "24개월", "36개월", "48개월"];
+      // 여부
+      if (label.includes("여부"))
+        return f.default ? [f.default] : ["포함", "미포함", "협의"];
+      // 유형
+      if (label.includes("유형"))
+        return f.default ? [f.default, "기타"] : [];
+      // 장소
+      if (label.includes("장소"))
+        return f.default ? [f.default] : ["본사", "현장", "협의"];
+      // 기본값이 있으면 탭으로
+      if (f.default) return [f.default];
     }
-    // 계약 유형
-    if (key === "c8" || f.label?.includes("유형")) {
-      ["순수 렌탈 (계약 종료 후 반납)", "리스 (인수 옵션)", "단가 계약", "프로젝트 계약"].forEach(e => { if (!opts.includes(e)) opts.push(e); });
-    }
-    // 규모/수량
-    if (key === "c10" || f.label?.includes("규모") || f.label?.includes("수량")) {
-      ["소규모 (10개 미만)", "중규모 (10~50개)", "대규모 (50개 이상)"].forEach(e => { if (!opts.includes(e)) opts.push(e); });
-    }
-    // 서비스 범위/요구사양
-    if (key === "c11" || f.label?.includes("범위") || f.label?.includes("사양")) {
-      if (f.default && !opts.includes(f.default)) opts.unshift(f.default);
-    }
-    // 제공/수행 방식
-    if (key === "c12" || f.label?.includes("방식")) {
-      if (f.default && !opts.includes(f.default)) opts.unshift(f.default);
-    }
-    // 목적
-    if (key === "c7" || f.label?.includes("목적")) {
-      if (f.default && !opts.includes(f.default)) opts.unshift(f.default);
-    }
-    // 품목명/서비스명
-    if (key === "c6") {
-      if (f.default && !opts.includes(f.default)) opts.unshift(f.default);
-    }
-    // p로 시작하는 고유 필드 — 기본값이 있으면 옵션으로
-    if (key.startsWith("p") && f.default && !opts.includes(f.default)) {
-      opts.unshift(f.default);
-    }
-    return opts.slice(0, 4);
+    return [];
   };
 
   // ── PR 퀵필 카드: 필수 항목을 탭 형태로 선택 (c1~c5 제외) ──
@@ -959,38 +1002,89 @@ export default function ChatPage() {
   // ── RFP 필드별 선택 옵션 생성 ──
   const getRfpFieldOptions = (key, f) => {
     const label = (f.label || "").toLowerCase();
-    const opts = [];
-    // 발주기관 정보(s1~s5)는 탭 불필요
+    // 발주기관 정보(s1~s5): 탭 불필요
     if (["s1","s2","s3","s4","s5"].includes(key)) return [];
-    // 계약형태 / 계약유형
-    if (label.includes("계약") && (label.includes("형태") || label.includes("유형")))
-      return ["도급 계약", "위탁 계약", "단가 계약", "연간 구독"];
-    // 수행기간 / 계약기간
+
+    // ── 계약/사업 개요 ──
+    // 계약형태 / 계약유형 / 리스/렌탈 형태
+    if (label.includes("형태") || (label.includes("계약") && label.includes("유형")))
+      return ["순수 렌탈 (반납)", "리스 (인수 옵션)", "도급 계약", "연간 구독/위탁"];
+    // 기간 (계약/수행/공사/유지보수)
     if (label.includes("기간"))
-      return ["6개월", "1년", "2년", "3년"];
-    // 수량 / 대상인원 / 대상 규모
-    if (label.includes("수량")) return ["10개", "50개", "100개", "협의"];
-    if (label.includes("인원") || label.includes("규모")) return ["10명 이내", "10~50명", "50~100명", "100명 이상"];
-    // 납품기한
-    if (label.includes("납품") && label.includes("기한")) return ["1주 이내", "2주 이내", "1개월 이내", "협의"];
-    // 납품 조건
-    if (label.includes("납품") && label.includes("조건")) return ["지정 장소 납품", "택배 배송", "직접 설치", "협의"];
-    // 수행 방식
-    if (label.includes("수행") && label.includes("방식")) return ["상주", "원격", "상주+원격 혼합", "정기 방문"];
-    // 평가 기준 (%)
-    if (label.includes("평가")) return ["25%", "30%", "20%", "15%"];
-    // 제출기한
+      return ["12개월", "24개월", "36개월", "48개월"];
+    // 수량
+    if (label.includes("수량"))
+      return ["5대 미만", "10대 미만", "20대 미만", "기타"];
+    // 대상 규모 / 대상인원
+    if (label.includes("규모"))
+      return ["5대 미만", "10대 미만", "20대 미만", "기타"];
+    if (label.includes("인원"))
+      return ["10명 이내", "10~50명", "50~100명", "100명 이상"];
+    // 투입 인력
+    if (label.includes("투입") && label.includes("인력"))
+      return ["1~2명", "3~5명", "5~10명", "10명 이상"];
+
+    // ── 납품/배송 ──
+    if (label.includes("납품") && label.includes("기한"))
+      return ["1주 이내", "2주 이내", "1개월 이내", "협의"];
+    if (label.includes("납품") && label.includes("조건"))
+      return ["지정 장소 납품", "택배 배송", "직접 설치", "협의"];
+
+    // ── 서비스/수행 방식 ──
+    if (label.includes("방식") && (label.includes("수행") || label.includes("제공")))
+      return ["상주", "원격", "상주+원격 혼합", "정기 방문"];
+
+    // ── 품질/SLA ──
+    if (label.includes("sla") || label.includes("품질"))
+      return ["24시간 내 대응", "99.9% 가용성", "월간 리포트"];
+    if (label.includes("안전") && label.includes("기준"))
+      return ["산업안전보건법 준수", "안전관리자 배치", "KOSHA-MS 인증"];
+
+    // ── 보안 ──
+    if (label.includes("보안") || label.includes("기밀"))
+      return ["개인정보보호법 준수", "보안서약서 징구", "해당 없음"];
+
+    // ── 반납/인수 ──
+    if (label.includes("반납") || label.includes("인수"))
+      return ["반납 (원상복구)", "인수 (잔존가 정산)", "재계약 협의"];
+    // 중도 해지
+    if (label.includes("해지"))
+      return ["30일 전 서면 통보", "위약금 없음", "잔여 기간 ×10%"];
+    // 잔존 가치
+    if (label.includes("잔존"))
+      return ["감가상각 후 무상 이전", "시장가 정산", "협의"];
+    // 소모품 포함
+    if (label.includes("소모품"))
+      return ["렌탈료 포함", "별도 과금", "협의"];
+    // 장애 대응
+    if (label.includes("장애"))
+      return ["신고 후 4시간 내 대응", "24시간 내 대체기 제공", "원격 즉시 대응"];
+    // A/S 조건
+    if (label.includes("a/s"))
+      return ["무상 1년", "무상 2년", "유상 A/S"];
+    // 리스 조건
+    if (label.includes("리스") && label.includes("조건"))
+      return ["운용 리스", "금융 리스", "협의"];
+
+    // ── 평가 기준 (%) ──
+    if (label.includes("평가"))
+      return ["25%", "30%", "20%", "15%"];
+
+    // ── 제출 ──
     if (label.includes("제출") && label.includes("기한")) {
-      const d = new Date(); d.setDate(d.getDate() + 14);
+      const d1 = new Date(); d1.setDate(d1.getDate() + 14);
       const d2 = new Date(); d2.setDate(d2.getDate() + 21);
-      return [d.toLocaleDateString("ko-KR"), d2.toLocaleDateString("ko-KR")];
+      return [d1.toLocaleDateString("ko-KR"), d2.toLocaleDateString("ko-KR")];
     }
-    // 제출방식
-    if (label.includes("제출") && label.includes("방식")) return ["이메일 제출", "온라인 시스템", "우편 + 전자본"];
-    // SLA
-    if (label.includes("sla")) return ["99.9% 가용성", "24시간 내 대응", "월간 리포트 제공"];
-    // 요구 사양 / 서비스 범위 / 품질 기준 — 일반 텍스트이므로 빈 배열
-    return opts;
+    if (label.includes("제출") && label.includes("방식"))
+      return ["이메일 제출", "온라인 시스템", "우편 + 전자본"];
+
+    // ── 목적 ──
+    if (label.includes("목적"))
+      return ["업무 환경 개선", "비용 절감", "생산성 향상", "법적 의무"];
+
+    // 기타: 선택지 없음
+    return [];
   };
 
   // ══ 오른쪽 패널: 채워지는 RFP ══

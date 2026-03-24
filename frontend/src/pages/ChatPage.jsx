@@ -272,10 +272,11 @@ export default function ChatPage() {
   const total  = Object.keys(fields).length;
   const pct    = total > 0 ? Math.round(filled / total * 100) : 0;
 
-  // PR 계산 — 필수 필드 기준 (required: true인 필드만)
+  // PR 계산 — 필수 필드 기준 (c1~c5 제외: 추후 시스템 연동으로 자동 입력)
   const currentPrTemplate = prType ? getPrTemplate(prType) : null;
   const currentPrSections = currentPrTemplate?.sections || [];
-  const prRequiredFields = Object.entries(prFields).filter(([, f]) => f.required !== false);
+  const PR_SKIP_KEYS_CALC = new Set(["c1","c2","c3","c4","c5"]);
+  const prRequiredFields = Object.entries(prFields).filter(([k, f]) => f.required !== false && !PR_SKIP_KEYS_CALC.has(k));
   const prOptionalFields = Object.entries(prFields).filter(([, f]) => f.required === false);
   const prRequiredFilled = prRequiredFields.filter(([, f]) => (f.value || "").trim()).length;
   const prRequiredTotal  = prRequiredFields.length;
@@ -654,11 +655,17 @@ export default function ChatPage() {
               // 분류 결과에 pr_template_key가 있으면 자동 선택 (카테고리 선택 스킵)
               const autoKey = metaData.classification?.pr_template_key
                 || lastClassification?.pr_template_key;
-              if (autoKey && autoKey !== "_generic" && getPrTemplate(autoKey)) {
+              if (autoKey && autoKey !== "_generic" && autoKey !== "" && getPrTemplate(autoKey)) {
+                // 분류 성공 → 바로 PR 작성 진입
                 handlePrTypeSelect(autoKey);
               } else {
+                // 분류 실패/불확실 → 카테고리 선택 화면 표시
                 setMessages(prev => prev.map(m =>
-                  m.id === aiMsgId ? { ...m, prTypeSelect: true } : m
+                  m.id === aiMsgId ? {
+                    ...m,
+                    text: m.text || "구매요청서 작성을 진행하겠습니다. 아래에서 구매 카테고리를 선택해 주십시오.",
+                    prTypeSelect: true,
+                  } : m
                 ));
               }
             } else if (metaData.phase_trigger === "rfp_agreed") {
@@ -842,39 +849,57 @@ export default function ChatPage() {
     </div>
   );
 
+  // ── PR 필드별 선택 옵션 생성 (퀵필 카드 + 패널 모두 사용) ──
+  const getPrFieldOptions = (key, f) => {
+    const opts = [];
+    if (f.default && !(f.value || "").trim()) opts.push(f.default);
+    // 계약 기간
+    if (key === "c9" || f.label?.includes("기간")) {
+      ["1년", "2년", "3년 약정 (36개월)", "5년", "단기 (6개월)"].forEach(e => { if (!opts.includes(e)) opts.push(e); });
+    }
+    // 계약 유형
+    if (key === "c8" || f.label?.includes("유형")) {
+      ["순수 렌탈 (계약 종료 후 반납)", "리스 (인수 옵션)", "단가 계약", "프로젝트 계약"].forEach(e => { if (!opts.includes(e)) opts.push(e); });
+    }
+    // 규모/수량
+    if (key === "c10" || f.label?.includes("규모") || f.label?.includes("수량")) {
+      ["소규모 (10개 미만)", "중규모 (10~50개)", "대규모 (50개 이상)"].forEach(e => { if (!opts.includes(e)) opts.push(e); });
+    }
+    // 서비스 범위/요구사양
+    if (key === "c11" || f.label?.includes("범위") || f.label?.includes("사양")) {
+      if (f.default && !opts.includes(f.default)) opts.unshift(f.default);
+    }
+    // 제공/수행 방식
+    if (key === "c12" || f.label?.includes("방식")) {
+      if (f.default && !opts.includes(f.default)) opts.unshift(f.default);
+    }
+    // 목적
+    if (key === "c7" || f.label?.includes("목적")) {
+      if (f.default && !opts.includes(f.default)) opts.unshift(f.default);
+    }
+    // 품목명/서비스명
+    if (key === "c6") {
+      if (f.default && !opts.includes(f.default)) opts.unshift(f.default);
+    }
+    // p로 시작하는 고유 필드 — 기본값이 있으면 옵션으로
+    if (key.startsWith("p") && f.default && !opts.includes(f.default)) {
+      opts.unshift(f.default);
+    }
+    return opts.slice(0, 4);
+  };
+
   // ── PR 퀵필 카드: 필수 항목을 탭 형태로 선택 (c1~c5 제외) ──
   const renderPrQuickFillCards = () => {
     if (!prType || !prFields || Object.keys(prFields).length === 0) return null;
-    // c1~c5 제외, 필수 필드만, 기본값이 있는 필드 우선
+    // c1~c5 제외, 필수 필드만
     const targetFields = Object.entries(prFields)
       .filter(([k, f]) => f.required !== false && !PR_SKIP_KEYS.has(k));
     if (targetFields.length === 0) return null;
 
-    // 필드별 선택지 생성 (기본값 + 대안)
-    const getOptions = (key, f) => {
-      const opts = [];
-      if (f.default) opts.push(f.default);
-      // 계약 기간 관련 필드
-      if (key === "c9" || f.label?.includes("기간")) {
-        const extras = ["1년", "2년", "3년 약정 (36개월)", "5년", "단기 (6개월)"];
-        extras.forEach(e => { if (!opts.includes(e)) opts.push(e); });
-      }
-      // 계약 유형 관련
-      if (key === "c8" || f.label?.includes("유형")) {
-        const extras = ["순수 렌탈 (계약 종료 후 반납)", "리스 (인수 옵션)", "단가 계약", "프로젝트 계약"];
-        extras.forEach(e => { if (!opts.includes(e)) opts.push(e); });
-      }
-      // 규모/수량
-      if (key === "c10" || f.label?.includes("규모") || f.label?.includes("수량")) {
-        if (!opts.length) opts.push("소규모 (10개 미만)", "중규모 (10~50개)", "대규모 (50개 이상)");
-      }
-      return opts.slice(0, 4);  // 최대 4개
-    };
-
     return (
       <div style={{ marginTop:12, display:"flex", flexDirection:"column", gap:10 }}>
         {targetFields.map(([fk, f]) => {
-          const opts = getOptions(fk, f);
+          const opts = getPrFieldOptions(fk, f);
           const isFilled = (f.value || "").trim();
           return (
             <div key={fk} style={{
@@ -2575,46 +2600,67 @@ export default function ChatPage() {
                     if (!f) return null;
                     const isNew = prJustFilled.has(fk);
                     const isRequired = f.required !== false;
+                    const isEmpty = !(f.value || "").trim();
+                    const fieldOpts = isRequired && isEmpty ? getPrFieldOptions(fk, f) : [];
                     return (
                       <div key={fk} style={{
-                        display:"flex", alignItems:"flex-start",
                         borderBottom: fi < currentTabFields.length-1 ? `1px solid ${T.borderLight}` : "none",
                         animation: isNew ? "field-highlight 2.5s ease forwards" : "none",
                         background: fi % 2 === 1 ? "rgba(6,182,212,0.02)" : "transparent",
                       }}>
-                        <div style={{
-                          width:126, padding:"10px 12px", flexShrink:0,
-                          background:"rgba(6,182,212,0.03)", borderRight:`1px solid rgba(6,182,212,0.06)`,
-                          fontSize:11, fontWeight:700, color: T.sub,
-                          display:"flex", alignItems:"center", minHeight:40, gap:3,
-                        }}>
-                          {isRequired && <span style={{ color: T.red, fontSize:10 }}>*</span>}
-                          {f.label}
+                        <div style={{ display:"flex", alignItems:"flex-start" }}>
+                          <div style={{
+                            width:126, padding:"10px 12px", flexShrink:0,
+                            background:"rgba(6,182,212,0.03)", borderRight:`1px solid rgba(6,182,212,0.06)`,
+                            fontSize:11, fontWeight:700, color: T.sub,
+                            display:"flex", alignItems:"center", minHeight:40, gap:3,
+                          }}>
+                            {isRequired && <span style={{ color: T.red, fontSize:10 }}>*</span>}
+                            {f.label}
+                          </div>
+                          <div style={{
+                            flex:1, padding:"4px 8px", fontSize:12,
+                            lineHeight:1.7, minHeight:40, display:"flex", alignItems:"center", gap:4,
+                          }}>
+                            <input
+                              type="text"
+                              value={f.value || ""}
+                              placeholder="직접 입력 또는 채팅으로 입력"
+                              onChange={(e) => handlePrFieldEdit(fk, e.target.value)}
+                              style={{
+                                width:"100%", border:"none", outline:"none",
+                                background:"transparent", fontSize:12, color: T.text,
+                                padding:"6px 8px", borderRadius:4, fontFamily:"inherit",
+                                transition:"background 0.2s",
+                              }}
+                              onFocus={(e) => { e.target.style.background = "rgba(6,182,212,0.06)"; }}
+                              onBlur={(e) => { e.target.style.background = "transparent"; }}
+                            />
+                            {isNew && <span style={{
+                              fontSize:9, padding:"2px 6px", flexShrink:0,
+                              background: T.tealLight, border:`1px solid ${T.tealMid}`,
+                              borderRadius:4, color: T.tealDark, fontWeight:700,
+                            }}>NEW</span>}
+                          </div>
                         </div>
-                        <div style={{
-                          flex:1, padding:"4px 8px", fontSize:12,
-                          lineHeight:1.7, minHeight:40, display:"flex", alignItems:"center", gap:4,
-                        }}>
-                          <input
-                            type="text"
-                            value={f.value || ""}
-                            placeholder="직접 입력 또는 채팅으로 입력"
-                            onChange={(e) => handlePrFieldEdit(fk, e.target.value)}
-                            style={{
-                              width:"100%", border:"none", outline:"none",
-                              background:"transparent", fontSize:12, color: T.text,
-                              padding:"6px 8px", borderRadius:4, fontFamily:"inherit",
-                              transition:"background 0.2s",
-                            }}
-                            onFocus={(e) => { e.target.style.background = "rgba(6,182,212,0.06)"; }}
-                            onBlur={(e) => { e.target.style.background = "transparent"; }}
-                          />
-                          {isNew && <span style={{
-                            fontSize:9, padding:"2px 6px", flexShrink:0,
-                            background: T.tealLight, border:`1px solid ${T.tealMid}`,
-                            borderRadius:4, color: T.tealDark, fontWeight:700,
-                          }}>NEW</span>}
-                        </div>
+                        {/* 필수 필드 선택 탭 — 값이 비어있을 때만 표시 */}
+                        {fieldOpts.length > 0 && (
+                          <div style={{ padding:"4px 8px 8px 134px", display:"flex", gap:4, flexWrap:"wrap" }}>
+                            {fieldOpts.map((opt, oi) => (
+                              <button
+                                key={oi}
+                                onMouseDown={(e) => { e.preventDefault(); handlePrFieldEdit(fk, opt); }}
+                                style={{
+                                  padding:"4px 10px", borderRadius:12, fontSize:10, fontWeight:600,
+                                  border:`1px solid rgba(6,182,212,0.2)`, background:"rgba(6,182,212,0.04)",
+                                  color: T.primary, cursor:"pointer", fontFamily:"inherit", transition:"all 0.15s",
+                                }}
+                                onMouseEnter={e => { e.currentTarget.style.background = "rgba(6,182,212,0.12)"; e.currentTarget.style.borderColor = T.primary; }}
+                                onMouseLeave={e => { e.currentTarget.style.background = "rgba(6,182,212,0.04)"; e.currentTarget.style.borderColor = "rgba(6,182,212,0.2)"; }}
+                              >{opt}</button>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     );
                   })}

@@ -529,7 +529,7 @@ export default function ChatPage() {
 
     const templateFields = {};
     // c10(대상 규모/수량)은 탭 선택으로 받아야 하므로 기본값 자동 채움 제외
-    const NO_AUTO_FILL = new Set(["c10"]);
+    const NO_AUTO_FILL = new Set(["c9", "c10"]);
     Object.entries(tmpl.fields).forEach(([k, v]) => {
       templateFields[k] = { ...v, value: NO_AUTO_FILL.has(k) ? "" : (v.default || "") };
     });

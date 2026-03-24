@@ -64,10 +64,11 @@ async def search_suppliers(category: str = "", keywords: str = ""):
                 score += 1
         return score
 
-    # 관련도 > 0인 것만 반환, 최대 20개
-    ranked = sorted(suppliers, key=lambda s: (-relevance(s), -s.get("score", 0)))
-    ranked = [s for s in ranked if relevance(s) > 0]
-    return {"suppliers": ranked[:20]}
+    # 관련도 1회 계산 → 정렬 + 필터링
+    scored = [(relevance(s), s) for s in suppliers]
+    scored = [(r, s) for r, s in scored if r > 0]
+    scored.sort(key=lambda x: (-x[0], -x[1].get("score", 0)))
+    return {"suppliers": [s for _, s in scored[:20]]}
 
 
 @router.post("")

@@ -182,32 +182,29 @@ def _build_legacy_taxonomy() -> dict:
 
 class _LazyTaxonomy:
     """서버 시작 시 DB 연결 전에 import되어도 오류 없도록 lazy 로딩"""
-    _data = None
+
+    def __init__(self):
+        self._data = None
+
+    def _ensure_loaded(self) -> dict:
+        if self._data is None:
+            self._data = _build_legacy_taxonomy()
+        return self._data
 
     def items(self):
-        if self._data is None:
-            self._data = _build_legacy_taxonomy()
-        return self._data.items()
+        return self._ensure_loaded().items()
 
     def __contains__(self, item):
-        if self._data is None:
-            self._data = _build_legacy_taxonomy()
-        return item in self._data
+        return item in self._ensure_loaded()
 
     def get(self, key, default=None):
-        if self._data is None:
-            self._data = _build_legacy_taxonomy()
-        return self._data.get(key, default)
+        return self._ensure_loaded().get(key, default)
 
     def __getitem__(self, key):
-        if self._data is None:
-            self._data = _build_legacy_taxonomy()
-        return self._data[key]
+        return self._ensure_loaded()[key]
 
     def keys(self):
-        if self._data is None:
-            self._data = _build_legacy_taxonomy()
-        return self._data.keys()
+        return self._ensure_loaded().keys()
 
 
 TAXONOMY = _LazyTaxonomy()

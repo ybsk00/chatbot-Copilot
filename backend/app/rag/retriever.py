@@ -323,14 +323,13 @@ def hybrid_search(query: str, category: str | None = None, taxonomy_major: str |
 
     t_primary = time.time()
 
-    # 1순위 RRF (FAQ 없이 BM25 + Vector만)
-    primary_fused = _rrf_fuse([], bm25_chunks, vector_chunks, top_k=RRF_TOP_K)
+    # 1순위 RRF (BM25 + Vector)
+    fused = _rrf_fuse([], bm25_chunks, vector_chunks, top_k=RRF_TOP_K)
 
     # ── 2순위 폴백: FAQ (1순위 결과가 부족할 때) ──
     faq_chunks = []
-    # 1순위 결과가 top_k 미만이거나 최상위 유사도가 낮으면 FAQ 폴백
-    primary_max_sim = max((c.get("similarity", 0) for c in primary_fused), default=0)
-    needs_faq_fallback = len(primary_fused) < top_k or primary_max_sim < 0.72
+    primary_max_sim = max((c.get("similarity", 0) for c in fused), default=0)
+    needs_faq_fallback = len(fused) < top_k or primary_max_sim < 0.72
 
     if needs_faq_fallback:
         try:
@@ -341,11 +340,14 @@ def hybrid_search(query: str, category: str | None = None, taxonomy_major: str |
 
     t_fallback = time.time()
 
-    # 최종 RRF 통합 (1순위 + FAQ 폴백)
+    # FAQ 결과를 기존 fused에 병합 (이중 RRF 방지)
     if faq_chunks:
-        fused = _rrf_fuse(faq_chunks, bm25_chunks, vector_chunks, top_k=RRF_TOP_K)
-    else:
-        fused = primary_fused
+        existing_ids = {c.get("id") for c in fused}
+        for fc in faq_chunks:
+            if fc.get("id") not in existing_ids:
+                fused.append(fc)
+        fused.sort(key=lambda c: c.get("rrf_score", c.get("similarity", 0)), reverse=True)
+        fused = fused[:RRF_TOP_K]
 
     t_fuse = time.time()
     logger.info(

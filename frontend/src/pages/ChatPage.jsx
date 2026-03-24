@@ -3,6 +3,7 @@ import { api } from "../api/client";
 import { T } from "../styles/tokens";
 import { RFP_TEMPLATES } from "../data/rfpTemplates";
 import { PR_TEMPLATES, PR_CATEGORIES } from "../data/prTemplates";
+import { COMMON_SECTIONS } from "../data/commonFields";
 import { PR_TO_RFP_MAPPING } from "../data/fieldMapping";
 import { downloadRfpPdf } from "../utils/rfpExport";
 import { downloadPrPdf } from "../utils/prExport";
@@ -250,6 +251,7 @@ export default function ChatPage() {
   const [prSuppliers, setPrSuppliers]       = useState([]);
   const [selectedPrSuppliers, setSelectedPrSuppliers] = useState([]);  // [{id, name}, ...]
   const [prSaved, setPrSaved] = useState(false);
+  const [prRequestId, setPrRequestId] = useState(null);
   const [uploadedPrSuppliers, setUploadedPrSuppliers] = useState([]);  // PDF에서 추출된 공급업체
   const [prSupplierLoading, setPrSupplierLoading] = useState(false);
   const [dbPrTemplates, setDbPrTemplates] = useState(null); // DB에서 로드된 PR 템플릿
@@ -351,6 +353,25 @@ export default function ChatPage() {
     }
   }, [phase, userRole, prType]);
 
+  // PR 필수 필드(c1~c5 제외) 채움률 감지 → 패널 자동 오픈
+  const PR_SKIP_KEYS = new Set(["c1","c2","c3","c4","c5"]);
+  useEffect(() => {
+    if (phase === "pr_filling" && !prRightVisible && prType) {
+      const nonBasicRequired = Object.entries(prFields)
+        .filter(([k, f]) => f.required !== false && !PR_SKIP_KEYS.has(k));
+      const filledCount = nonBasicRequired.filter(([, f]) => (f.value || "").trim()).length;
+      const totalCount = nonBasicRequired.length;
+      // 50% 이상 채워지면 패널 자동 오픈
+      if (totalCount > 0 && filledCount / totalCount >= 0.5) {
+        setPrRightVisible(true);
+        setMessages(prev => [...prev, {
+          id: msgIdCounter++, role: "assistant",
+          text: "주요 항목이 채워졌습니다. 우측 패널에서 나머지 항목을 확인하고 수정해 주세요.",
+        }]);
+      }
+    }
+  }, [prFields, phase, prRightVisible, prType]);
+
   const applyFills = (fills) => {
     if (!fills || !Object.keys(fills).length) return;
     const keys = new Set(Object.keys(fills));
@@ -447,6 +468,39 @@ export default function ChatPage() {
     return result;
   };
 
+  // ── RFP/PR 인라인 프리뷰 (새 탭에 HTML 렌더링) ──
+  const openLocalPreview = (title, subtitle, sections, fieldsObj) => {
+    const rows = sections.flatMap(sec =>
+      sec.fields.map(fk => {
+        const f = fieldsObj[fk];
+        if (!f) return null;
+        return `<tr><td style="width:180px;background:#f8fafb;padding:10px 14px;font-weight:700;font-size:13px;color:#475569;border:1px solid #e2e8f0">${f.label}</td><td style="padding:10px 14px;font-size:13px;color:#1e293b;border:1px solid #e2e8f0">${f.value || ""}</td></tr>`;
+      }).filter(Boolean)
+    ).join("");
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:800px;margin:40px auto;padding:0 20px;color:#1e293b}h1{text-align:center;font-size:22px;letter-spacing:4px;margin-bottom:4px}h2{text-align:center;font-size:13px;color:#64748b;margin-bottom:24px}table{width:100%;border-collapse:collapse;margin-bottom:24px}@media print{body{margin:20px}}</style></head><body><h1>${title}</h1><h2>${subtitle}</h2><table>${rows}</table><div style="text-align:center;margin-top:24px"><button onclick="window.print()" style="padding:10px 24px;background:#0EA5A0;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">PDF 다운로드 (인쇄)</button></div></body></html>`;
+    const w = window.open("", "_blank");
+    if (w) { w.document.write(html); w.document.close(); }
+  };
+
+  const previewRfp = () => {
+    const baseUrl = import.meta.env.VITE_API_URL || "https://ip-assist-backend-1058034030780.asia-northeast3.run.app";
+    if (rfpRequestId) {
+      window.open(`${baseUrl}/rfp/view/${rfpRequestId}`, "_blank");
+    } else {
+      const tmpl = RFP_TEMPLATES[rfpType];
+      if (tmpl) openLocalPreview("제 안 요 청 서", tmpl.label, tmpl.sections, fields);
+    }
+  };
+
+  const previewPr = () => {
+    const baseUrl = import.meta.env.VITE_API_URL || "https://ip-assist-backend-1058034030780.asia-northeast3.run.app";
+    if (prRequestId) {
+      window.open(`${baseUrl}/pr/view/${prRequestId}`, "_blank");
+    } else if (currentPrTemplate) {
+      openLocalPreview("구 매 요 청 서", currentPrTemplate.label, currentPrSections, prFields);
+    }
+  };
+
   const handleRfpTypeSelect = (type) => {
     setRfpType(type);
     const templateFields = {};
@@ -466,7 +520,7 @@ export default function ChatPage() {
     ]);
   };
 
-  // PR 카테고리 선택
+  // PR 카테고리 선택 — 패널 즉시 열지 않고 인터랙티브 퀵필 카드 표시
   const handlePrTypeSelect = (type) => {
     setPrType(type);
     const tmpl = getPrTemplate(type);
@@ -478,14 +532,18 @@ export default function ChatPage() {
       templateFields[k] = { ...v, value: v.default || "" };
     });
     setPrFields(templateFields);
-    setPrRightVisible(true);
+    setPrRightVisible(false);   // 패널 즉시 열지 않음 — 필수값 채운 뒤 자동 오픈
     setPhase("pr_filling");
 
     const label = tmpl.name || tmpl.label;
     setMessages(prev => [
       ...prev,
       { id: msgIdCounter++, role: "user", text: label },
-      { id: msgIdCounter++, role: "assistant", text: `${label} 구매요청서를 준비했습니다.\n기본값이 미리 입력되어 있습니다. 변경이 필요한 항목만 수정해 주세요.\n우측 패널에서 직접 수정하거나, 채팅으로 알려주셔도 됩니다.` }
+      {
+        id: msgIdCounter++, role: "assistant",
+        text: `${label} 구매요청서를 준비 중입니다.\n기본정보(요청자 정보)는 추후 시스템 연동으로 자동 입력됩니다.\n아래 주요 항목을 확인하고 선택해 주세요.`,
+        prQuickFill: true,
+      }
     ]);
   };
 
@@ -529,6 +587,7 @@ export default function ChatPage() {
           rag_score: data.rag_score, trigger: data.phase_trigger,
         }]);
         if (data.phase_trigger === "pr_complete") {
+          if (data.pr_request_id) setPrRequestId(data.pr_request_id);
           setTimeout(() => setPhase("pr_complete"), 800);
           setPrRightVisible(true);
         }
@@ -592,9 +651,16 @@ export default function ChatPage() {
               m.id === aiMsgId ? { ...m, isStreaming: false } : m
             ));
             if (metaData.phase_trigger === "pr_agreed") {
-              setMessages(prev => prev.map(m =>
-                m.id === aiMsgId ? { ...m, prTypeSelect: true } : m
-              ));
+              // 분류 결과에 pr_template_key가 있으면 자동 선택 (카테고리 선택 스킵)
+              const autoKey = metaData.classification?.pr_template_key
+                || lastClassification?.pr_template_key;
+              if (autoKey && autoKey !== "_generic" && getPrTemplate(autoKey)) {
+                handlePrTypeSelect(autoKey);
+              } else {
+                setMessages(prev => prev.map(m =>
+                  m.id === aiMsgId ? { ...m, prTypeSelect: true } : m
+                ));
+              }
             } else if (metaData.phase_trigger === "rfp_agreed") {
               setMessages(prev => prev.map(m =>
                 m.id === aiMsgId ? { ...m, rfpTypeSelect: true } : m
@@ -776,6 +842,95 @@ export default function ChatPage() {
     </div>
   );
 
+  // ── PR 퀵필 카드: 필수 항목을 탭 형태로 선택 (c1~c5 제외) ──
+  const renderPrQuickFillCards = () => {
+    if (!prType || !prFields || Object.keys(prFields).length === 0) return null;
+    // c1~c5 제외, 필수 필드만, 기본값이 있는 필드 우선
+    const targetFields = Object.entries(prFields)
+      .filter(([k, f]) => f.required !== false && !PR_SKIP_KEYS.has(k));
+    if (targetFields.length === 0) return null;
+
+    // 필드별 선택지 생성 (기본값 + 대안)
+    const getOptions = (key, f) => {
+      const opts = [];
+      if (f.default) opts.push(f.default);
+      // 계약 기간 관련 필드
+      if (key === "c9" || f.label?.includes("기간")) {
+        const extras = ["1년", "2년", "3년 약정 (36개월)", "5년", "단기 (6개월)"];
+        extras.forEach(e => { if (!opts.includes(e)) opts.push(e); });
+      }
+      // 계약 유형 관련
+      if (key === "c8" || f.label?.includes("유형")) {
+        const extras = ["순수 렌탈 (계약 종료 후 반납)", "리스 (인수 옵션)", "단가 계약", "프로젝트 계약"];
+        extras.forEach(e => { if (!opts.includes(e)) opts.push(e); });
+      }
+      // 규모/수량
+      if (key === "c10" || f.label?.includes("규모") || f.label?.includes("수량")) {
+        if (!opts.length) opts.push("소규모 (10개 미만)", "중규모 (10~50개)", "대규모 (50개 이상)");
+      }
+      return opts.slice(0, 4);  // 최대 4개
+    };
+
+    return (
+      <div style={{ marginTop:12, display:"flex", flexDirection:"column", gap:10 }}>
+        {targetFields.map(([fk, f]) => {
+          const opts = getOptions(fk, f);
+          const isFilled = (f.value || "").trim();
+          return (
+            <div key={fk} style={{
+              background: isFilled ? "rgba(16,185,129,0.06)" : "rgba(6,182,212,0.04)",
+              border: `1px solid ${isFilled ? "rgba(16,185,129,0.15)" : "rgba(6,182,212,0.12)"}`,
+              borderRadius: 10, padding:"10px 14px",
+            }}>
+              <div style={{ fontSize:11, fontWeight:700, color: isFilled ? T.greenDark : T.primary, marginBottom:6, display:"flex", alignItems:"center", gap:4 }}>
+                {isFilled ? <IconCheck size={11} /> : <span style={{ color: T.red, fontSize:10 }}>*</span>}
+                {f.label}
+                {isFilled && <span style={{ fontSize:10, fontWeight:600, color: T.greenDark, marginLeft:"auto" }}>{f.value}</span>}
+              </div>
+              {!isFilled && opts.length > 0 && (
+                <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                  {opts.map((opt, i) => (
+                    <button
+                      key={i}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        applyPrFills({ [fk]: opt });
+                      }}
+                      style={{
+                        padding:"6px 12px", borderRadius:16, fontSize:11, fontWeight:600,
+                        border:`1px solid rgba(6,182,212,0.2)`, background:"rgba(255,255,255,0.8)",
+                        color: T.text, cursor:"pointer", fontFamily:"inherit", transition:"all 0.15s",
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = "rgba(6,182,212,0.1)"; e.currentTarget.style.borderColor = T.primary; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.8)"; e.currentTarget.style.borderColor = "rgba(6,182,212,0.2)"; }}
+                    >{opt}</button>
+                  ))}
+                </div>
+              )}
+              {!isFilled && opts.length === 0 && (
+                <div style={{ fontSize:10, color: T.muted }}>채팅으로 입력하거나 패널에서 직접 입력해 주세요</div>
+              )}
+            </div>
+          );
+        })}
+        {/* 패널 열기 버튼 */}
+        <button
+          onMouseDown={(e) => { e.preventDefault(); setPrRightVisible(true); }}
+          style={{
+            padding:"10px 16px", borderRadius:10, border:`1.5px solid ${T.border}`,
+            background: T.card, color: T.sub, fontSize:11, fontWeight:600,
+            cursor:"pointer", fontFamily:"inherit", textAlign:"center", transition:"all 0.15s",
+          }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = T.primary; e.currentTarget.style.color = T.primary; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.color = T.sub; }}
+        >
+          전체 항목 보기 (패널 열기)
+        </button>
+      </div>
+    );
+  };
+
   // ══ 오른쪽 패널: 채워지는 RFP ══
   const PanelFilling = () => (
     <div className="custom-scroll" style={{ flex:1, overflowY:"auto", padding:"20px 22px" }}>
@@ -954,15 +1109,7 @@ export default function ChatPage() {
           <div style={{ fontSize:11, color:"#16a34a", marginTop:3 }}>미리보기로 확인 후 다운로드하세요.</div>
         </div>
         <button
-          onClick={() => {
-            const baseUrl = import.meta.env.VITE_API_URL || "https://ip-assist-backend-1058034030780.asia-northeast3.run.app";
-            if (rfpRequestId) {
-              window.open(`${baseUrl}/rfp/view/${rfpRequestId}`, "_blank");
-            } else {
-              const tmpl = RFP_TEMPLATES[rfpType];
-              if (tmpl) downloadRfpPdf(fields, tmpl.sections, tmpl.label, fields.s1?.value);
-            }
-          }}
+          onClick={previewRfp}
           style={{
             marginLeft:"auto", padding:"10px 22px", borderRadius: T.r10,
             border:`1.5px solid ${T.primary}`,
@@ -1110,15 +1257,7 @@ export default function ChatPage() {
 
       {/* 발송 버튼 */}
       <div style={{ marginTop:16, display:"flex", gap:8 }}>
-        <button onClick={() => {
-          const baseUrl = import.meta.env.VITE_API_URL || "https://ip-assist-backend-1058034030780.asia-northeast3.run.app";
-          if (rfpRequestId) {
-            window.open(`${baseUrl}/rfp/view/${rfpRequestId}`, "_blank");
-          } else {
-            const tmpl = RFP_TEMPLATES[rfpType];
-            if (tmpl) downloadRfpPdf(fields, tmpl.sections, tmpl.label, fields.s1?.value);
-          }
-        }} style={{
+        <button onClick={previewRfp} style={{
           flex:1, padding:"14px", borderRadius: T.r10,
           border:`1px solid ${T.primary}`, background: "rgba(14,165,160,0.04)",
           color: T.primary, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
@@ -1131,13 +1270,8 @@ export default function ChatPage() {
           <IconPreview size={14} /> 미리보기
         </button>
         <button onClick={() => {
-          if (rfpRequestId) {
-            const baseUrl = import.meta.env.VITE_API_URL || "https://ip-assist-backend-1058034030780.asia-northeast3.run.app";
-            window.open(`${baseUrl}/rfp/view/${rfpRequestId}`, "_blank");
-          } else {
-            const tmpl = RFP_TEMPLATES[rfpType];
-            if (tmpl) downloadRfpPdf(fields, tmpl.sections, tmpl.label, fields.s1?.value);
-          }
+          const tmpl = RFP_TEMPLATES[rfpType];
+          if (tmpl) downloadRfpPdf(fields, tmpl.sections, tmpl.label, fields.s1?.value);
           setDownloaded(true);
         }} style={{
           flex:1, padding:"14px", borderRadius: T.r10,
@@ -1741,6 +1875,9 @@ export default function ChatPage() {
                 {/* PR 카테고리 선택 카드 */}
                 {msg.prTypeSelect && !prType && renderPrTypeSelector()}
 
+                {/* PR 퀵필 카드 — 필수 항목 탭 선택 */}
+                {msg.prQuickFill && phase === "pr_filling" && renderPrQuickFillCards()}
+
                 {/* RFP 유형 선택 카드 */}
                 {msg.rfpTypeSelect && !rfpType && renderRfpTypeSelector()}
 
@@ -2037,25 +2174,41 @@ export default function ChatPage() {
                     </div>
                   </div>
                   {prSaved && (
-                    <button
-                      onClick={() => {
-                        if (currentPrTemplate) {
-                          const supplierNames = selectedPrSuppliers.map(s => s.name).join(", ");
-                          downloadPrPdf(prFields, currentPrSections, currentPrTemplate.label, supplierNames);
-                        }
-                      }}
-                      style={{
-                        padding:"8px 16px", borderRadius: T.r10,
-                        border:`1px solid ${T.primary}`, background:"rgba(6,182,212,0.06)",
-                        color: T.primary, fontSize:11, fontWeight:700, cursor:"pointer",
-                        fontFamily:"inherit", whiteSpace:"nowrap",
-                        display:"flex", alignItems:"center", gap:5,
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.background = "rgba(6,182,212,0.12)"}
-                      onMouseLeave={e => e.currentTarget.style.background = "rgba(6,182,212,0.06)"}
-                    >
-                      <IconDownload size={13} /> PDF
-                    </button>
+                    <div style={{ display:"flex", gap:6 }}>
+                      <button
+                        onClick={previewPr}
+                        style={{
+                          padding:"8px 14px", borderRadius: T.r10,
+                          border:`1px solid ${T.primary}`, background:"rgba(6,182,212,0.06)",
+                          color: T.primary, fontSize:11, fontWeight:700, cursor:"pointer",
+                          fontFamily:"inherit", whiteSpace:"nowrap",
+                          display:"flex", alignItems:"center", gap:5,
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.background = "rgba(6,182,212,0.12)"}
+                        onMouseLeave={e => e.currentTarget.style.background = "rgba(6,182,212,0.06)"}
+                      >
+                        <IconPreview size={13} /> 미리보기
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (currentPrTemplate) {
+                            const supplierNames = selectedPrSuppliers.map(s => s.name).join(", ");
+                            downloadPrPdf(prFields, currentPrSections, currentPrTemplate.label, supplierNames);
+                          }
+                        }}
+                        style={{
+                          padding:"8px 14px", borderRadius: T.r10,
+                          border:`1px solid ${T.border}`, background: T.card,
+                          color: T.sub, fontSize:11, fontWeight:700, cursor:"pointer",
+                          fontFamily:"inherit", whiteSpace:"nowrap",
+                          display:"flex", alignItems:"center", gap:5,
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.background = "rgba(6,182,212,0.06)"}
+                        onMouseLeave={e => e.currentTarget.style.background = T.card}
+                      >
+                        <IconDownload size={13} /> PDF
+                      </button>
+                    </div>
                   )}
                 </div>
 
@@ -2280,6 +2433,16 @@ export default function ChatPage() {
                     </div>
                     <div style={{ display:"flex", gap:8, marginTop:16, justifyContent:"center", flexWrap:"nowrap" }}>
                       <button
+                        onClick={previewPr}
+                        style={{
+                          padding:"10px 16px", borderRadius: T.r10,
+                          border:`1px solid ${T.primary}`, background:"rgba(6,182,212,0.06)",
+                          color: T.primary, fontSize:12, fontWeight:700, cursor:"pointer",
+                          fontFamily:"inherit", display:"flex", alignItems:"center", gap:4,
+                          whiteSpace:"nowrap",
+                        }}
+                      ><IconPreview size={14} /> 미리보기</button>
+                      <button
                         onClick={() => {
                           if (currentPrTemplate) {
                             const supplierNames = selectedPrSuppliers.map(s => s.name).join(", ");
@@ -2288,12 +2451,12 @@ export default function ChatPage() {
                         }}
                         style={{
                           padding:"10px 16px", borderRadius: T.r10,
-                          border:`1px solid ${T.primary}`, background:"rgba(6,182,212,0.06)",
-                          color: T.primary, fontSize:12, fontWeight:700, cursor:"pointer",
+                          border:`1px solid ${T.border}`, background: T.card,
+                          color: T.sub, fontSize:12, fontWeight:700, cursor:"pointer",
                           fontFamily:"inherit", display:"flex", alignItems:"center", gap:4,
                           whiteSpace:"nowrap",
                         }}
-                      ><IconDownload size={14} />PDF</button>
+                      ><IconDownload size={14} /> PDF</button>
                       {PR_TO_RFP_MAPPING[prType] && (
                         <button
                           onClick={convertPrToRfp}
@@ -2330,9 +2493,12 @@ export default function ChatPage() {
             {/* ── PR Filling: 진행률 + 3탭 구조 ── */}
             {phase === "pr_filling" && (() => {
               // 3탭 필드 그룹핑: 기본정보(c1~c10) / 상세요건(c11~c14 + p*) / 계약조건(c15~c20)
-              const basicFields = Object.entries(prFields).filter(([k]) => /^c([1-9]|10)$/.test(k));
-              const detailFields = Object.entries(prFields).filter(([k]) => /^c1[1-4]$/.test(k) || k.startsWith("p"));
-              const contractFields = Object.entries(prFields).filter(([k]) => /^c1[5-9]$|^c20$/.test(k));
+              const basicKeys = new Set([...COMMON_SECTIONS.requester.fields, ...COMMON_SECTIONS.contract.fields]);
+              const detailKeys = new Set(COMMON_SECTIONS.require.fields);
+              const contractKeys = new Set(COMMON_SECTIONS.payment.fields);
+              const basicFields = Object.entries(prFields).filter(([k]) => basicKeys.has(k));
+              const detailFields = Object.entries(prFields).filter(([k]) => detailKeys.has(k) || k.startsWith("p"));
+              const contractFields = Object.entries(prFields).filter(([k]) => contractKeys.has(k));
               const tabGroups = [
                 { key: "basic", label: "기본 정보", icon: "📋", fields: basicFields },
                 { key: "detail", label: "상세 요건", icon: "📦", fields: detailFields },

@@ -2327,115 +2327,142 @@ export default function ChatPage() {
           </div>
           {/* PR 패널 내용 — filling / complete 분기 */}
           <div className="custom-scroll" style={{ flex:1, overflowY:"auto", padding:"20px 22px" }}>
-            {/* ── PR Complete: 성공 배너 + 공급업체 추천 ── */}
+            {/* ── PR Complete: RFP 완료와 동일한 구조 ── */}
             {phase === "pr_complete" && (
               <>
-                {/* 성공 배너 */}
+                {/* 성공 배너 — RFP PanelComplete와 동일 */}
                 <div style={{
-                  background: `linear-gradient(135deg, rgba(16,185,129,0.08), rgba(6,182,212,0.06))`,
+                  background: `linear-gradient(135deg, rgba(16,185,129,0.08), rgba(14,165,160,0.06))`,
                   borderRadius: T.r16, padding:"18px 22px", marginBottom:18,
                   border:`1.5px solid rgba(16,185,129,0.15)`,
                   display:"flex", alignItems:"center", gap:14,
                 }}>
                   <IconParty size={32} />
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontSize:14, fontWeight:800, color: T.greenDark }}>
-                      {prSaved ? "구매요청서 저장 완료!" : "구매요청서 작성 완료!"}
-                    </div>
-                    <div style={{ fontSize:11, color:"#16a34a", marginTop:3 }}>
-                      {prSaved
-                        ? `공급업체 ${selectedPrSuppliers.length}개 선택됨`
-                        : selectedPrSuppliers.length > 0
-                          ? `공급업체 ${selectedPrSuppliers.length}개 선택 중`
-                          : "아래에서 공급업체를 선택해 주세요."}
-                    </div>
+                  <div>
+                    <div style={{ fontSize:14, fontWeight:800, color: T.greenDark }}>구매요청서 작성 완료!</div>
+                    <div style={{ fontSize:11, color:"#16a34a", marginTop:3 }}>미리보기로 확인 후 다운로드하세요.</div>
                   </div>
-                  {prSaved && (
-                    <div style={{ display:"flex", gap:6 }}>
-                      <button
-                        onClick={previewPr}
-                        style={{
-                          padding:"8px 14px", borderRadius: T.r10,
-                          border:`1px solid ${T.primary}`, background:"rgba(6,182,212,0.06)",
-                          color: T.primary, fontSize:11, fontWeight:700, cursor:"pointer",
-                          fontFamily:"inherit", whiteSpace:"nowrap",
-                          display:"flex", alignItems:"center", gap:5,
-                        }}
-                        onMouseEnter={e => e.currentTarget.style.background = "rgba(6,182,212,0.12)"}
-                        onMouseLeave={e => e.currentTarget.style.background = "rgba(6,182,212,0.06)"}
-                      >
-                        <IconPreview size={13} /> 미리보기
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (currentPrTemplate) {
-                            const supplierNames = selectedPrSuppliers.map(s => s.name).join(", ");
-                            downloadPrPdf(prFields, currentPrSections, currentPrTemplate.label, supplierNames);
-                          }
-                        }}
-                        style={{
-                          padding:"8px 14px", borderRadius: T.r10,
-                          border:`1px solid ${T.border}`, background: T.card,
-                          color: T.sub, fontSize:11, fontWeight:700, cursor:"pointer",
-                          fontFamily:"inherit", whiteSpace:"nowrap",
-                          display:"flex", alignItems:"center", gap:5,
-                        }}
-                        onMouseEnter={e => e.currentTarget.style.background = "rgba(6,182,212,0.06)"}
-                        onMouseLeave={e => e.currentTarget.style.background = T.card}
-                      >
-                        <IconDownload size={13} /> PDF
-                      </button>
+                  <button
+                    onClick={previewPr}
+                    style={{
+                      marginLeft:"auto", padding:"10px 22px", borderRadius: T.r10,
+                      border:`1.5px solid ${T.primary}`,
+                      background: "rgba(14,165,160,0.06)",
+                      color: T.primary, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
+                      whiteSpace:"nowrap", transition:"all 0.2s",
+                      display:"flex", alignItems:"center", gap:6,
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = "rgba(14,165,160,0.12)"}
+                    onMouseLeave={e => e.currentTarget.style.background = "rgba(14,165,160,0.06)"}
+                  >
+                    <IconPreview size={14} /> 미리보기
+                  </button>
+                </div>
+
+                {/* PR 문서 헤더 — RFP와 동일 스타일 */}
+                <div style={{
+                  background: 'rgba(255,255,255,0.8)', borderRadius: T.r16, padding:"22px 28px", textAlign:"center",
+                  marginBottom:16, border:`1.5px solid rgba(14,165,160,0.15)`,
+                  boxShadow:'0 2px 12px rgba(14,165,160,0.06)',
+                  position:"relative", overflow:"hidden",
+                  backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
+                }}>
+                  <div style={{ position:"absolute", top:0, left:0, right:0, height:3, background: T.gradTeal }} />
+                  <div style={{ fontSize:10, letterSpacing:3, color: T.sub, marginBottom:8 }}>간접구매 표준 양식</div>
+                  <div style={{ fontSize:20, fontWeight:900, letterSpacing:4, color: T.navy }}>구 매 요 청 서</div>
+                  {currentPrTemplate && (
+                    <div style={{ marginTop:12, display:"flex", justifyContent:"center", gap:8 }}>
+                      <span style={{
+                        fontSize:12, fontWeight:700, padding:"4px 14px",
+                        background: T.primaryLight, color: T.primary,
+                        borderRadius:8, border:`1px solid ${T.primaryMid}`,
+                      }}>{currentPrTemplate.label}</span>
+                      {prFields.c6?.value && <span style={{
+                        fontSize:12, fontWeight:700, padding:"4px 14px",
+                        background: T.primaryLight, color: T.primary,
+                        borderRadius:8, border:`1px solid ${T.primaryMid}`,
+                      }}>{prFields.c6.value}</span>}
                     </div>
                   )}
                 </div>
 
-                {/* 채워진 필드 요약 (접기/펼치기) */}
-                <div style={{ marginBottom:16 }}>
-                  <div
-                    onClick={() => setOpenSec(p => ({...p, pr_summary: !p.pr_summary}))}
-                    style={{
-                      background: 'rgba(255,255,255,0.7)', padding:"12px 16px",
-                      border: `1px solid rgba(6,182,212,0.08)`,
-                      borderRadius: openSec.pr_summary ? `${T.r12}px ${T.r12}px 0 0` : T.r12,
-                      display:"flex", alignItems:"center", gap:10, cursor:"pointer",
-                    }}
-                  >
-                    <IconDoc size={14} />
-                    <span style={{ fontSize:12, fontWeight:700, flex:1, color: T.text }}>작성된 구매요청서</span>
-                    <Chip>{prFilled}/{prTotal} 항목</Chip>
-                    <span style={{ color: T.muted }}><IconChevron open={openSec.pr_summary} /></span>
-                  </div>
-                  {openSec.pr_summary && (
-                    <div style={{
-                      background: 'rgba(255,255,255,0.65)', border:`1px solid rgba(6,182,212,0.08)`, borderTop:"none",
-                      borderRadius:`0 0 ${T.r12}px ${T.r12}px`, overflow:"hidden",
-                    }}>
-                      {Object.entries(prFields).filter(([,f]) => f.value).map(([fk, f], fi) => (
-                        <div key={fk} style={{
-                          display:"flex", alignItems:"flex-start",
-                          borderBottom: `1px solid ${T.borderLight}`,
-                          background: fi % 2 === 1 ? "rgba(6,182,212,0.02)" : "transparent",
-                        }}>
-                          <div style={{
-                            width:136, padding:"8px 14px", flexShrink:0,
-                            background:"rgba(6,182,212,0.03)", borderRight:`1px solid rgba(6,182,212,0.06)`,
-                            fontSize:11, fontWeight:700, color: T.sub,
-                          }}>{f.label}</div>
-                          <div style={{ flex:1, padding:"8px 14px", fontSize:12, color: T.text }}>{f.value}</div>
-                        </div>
-                      ))}
+                {/* 섹션별 아코디언 — RFP와 동일 */}
+                {currentPrSections.map((sec, si) => {
+                  const sectionDone = sec.fields.every(f => prFields[f]?.value);
+                  return (
+                    <div key={si} style={{ marginBottom:12 }}>
+                      <div style={{
+                        background: 'rgba(14,165,160,0.04)', padding:"10px 16px",
+                        display:"flex", alignItems:"center", gap:8,
+                        borderRadius:`${T.r10}px ${T.r10}px 0 0`,
+                        border:`1px solid rgba(14,165,160,0.08)`,
+                      }}>
+                        <span>{SECTION_ICONS[sec.icon]}</span>
+                        <span style={{ fontSize:12, fontWeight:700, color: T.navy }}>{sec.title}</span>
+                        {sectionDone
+                          ? <Chip>완료 ✓</Chip>
+                          : <Chip color={T.red} bg={T.redLight} border={T.redMid}>미완료</Chip>
+                        }
+                      </div>
+                      <div style={{
+                        background: 'rgba(255,255,255,0.7)', border:`1px solid rgba(14,165,160,0.08)`, borderTop:"none",
+                        borderRadius:`0 0 ${T.r10}px ${T.r10}px`, overflow:"hidden",
+                      }}>
+                        {sec.fields.map((fk, fi) => {
+                          const f = prFields[fk];
+                          if (!f) return null;
+                          return (
+                            <div key={fk} style={{
+                              display:"flex", alignItems:"flex-start",
+                              borderBottom: fi < sec.fields.length-1 ? `1px solid ${T.borderLight}` : "none",
+                            }}>
+                              <div style={{
+                                width:136, padding:"10px 14px",
+                                background:"rgba(14,165,160,0.03)", borderRight:`1px solid rgba(14,165,160,0.06)`,
+                                fontSize:11, fontWeight:700, color: T.sub, flexShrink:0,
+                                display:"flex", alignItems:"center",
+                              }}>{f.label}</div>
+                              <div style={{ flex:1, padding:"10px 14px", fontSize:12, color: T.text, lineHeight:1.7 }}>{f.value || ""}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                  )}
+                  );
+                })}
+
+                {/* 서명 영역 — RFP와 동일 */}
+                <div style={{ background: 'rgba(255,255,255,0.7)', borderRadius: T.r12, padding:"22px 26px", border:`1px solid rgba(14,165,160,0.08)` }}>
+                  <div style={{ display:"flex", justifyContent:"space-around" }}>
+                    {[
+                      { label:"작성일", value: new Date().toLocaleDateString("ko-KR") },
+                      { label:"요청자 (서명)", value: prFields.c3?.value || "" },
+                      { label:"발주기관", value: prFields.c1?.value || "" },
+                    ].map(item => (
+                      <div key={item.label} style={{ textAlign:"center" }}>
+                        <div style={{ fontSize:10, color: T.sub, marginBottom:10 }}>{item.label}</div>
+                        <div style={{
+                          width:120, borderBottom:`1.5px solid ${T.border}`, paddingBottom:6,
+                          fontSize:12, color: T.text,
+                        }}>{item.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ marginTop:16, textAlign:"center" }}>
+                    <span style={{
+                      fontSize:10, color: T.muted, padding:"5px 14px",
+                      background: T.bg, borderRadius:20, border:`1px solid ${T.border}`,
+                    }}>RAG 기반 생성 · 구매전략·표준프로세스 문서 근거</span>
+                  </div>
                 </div>
 
                 {/* 공급업체 추천 (사용자 전용) — 저장 전 */}
                 {userRole === "user" && !prSaved && (
                   <>
-                    {/* 선택된 공급업체 태그 */}
                     {selectedPrSuppliers.length > 0 && (
                       <div style={{
                         background: 'rgba(16,185,129,0.06)', borderRadius: T.r12,
-                        padding:"12px 16px", marginBottom:12,
+                        padding:"12px 16px", marginTop:16, marginBottom:12,
                         border:`1px solid rgba(16,185,129,0.12)`,
                       }}>
                         <div style={{ fontSize:11, fontWeight:700, color: T.greenDark, marginBottom:8 }}>
@@ -2446,14 +2473,11 @@ export default function ChatPage() {
                             <span key={sp.id} style={{
                               display:"inline-flex", alignItems:"center", gap:4,
                               fontSize:11, padding:"4px 10px", borderRadius:20,
-                              background:"rgba(16,185,129,0.12)", color: T.greenDark,
-                              fontWeight:600,
+                              background:"rgba(16,185,129,0.12)", color: T.greenDark, fontWeight:600,
                             }}>
                               {sp.name}
-                              <span
-                                onClick={() => setSelectedPrSuppliers(prev => prev.filter(x => x.id !== sp.id))}
-                                style={{ cursor:"pointer", fontSize:13, lineHeight:1, marginLeft:2, opacity:0.6 }}
-                              >✕</span>
+                              <span onClick={() => setSelectedPrSuppliers(prev => prev.filter(x => x.id !== sp.id))}
+                                style={{ cursor:"pointer", fontSize:13, lineHeight:1, marginLeft:2, opacity:0.6 }}>✕</span>
                             </span>
                           ))}
                         </div>
@@ -2462,7 +2486,7 @@ export default function ChatPage() {
 
                     <div style={{
                       background: `linear-gradient(135deg, rgba(14,165,160,0.08), rgba(6,182,212,0.06))`,
-                      borderRadius: T.r16, padding:"14px 18px", marginBottom:14,
+                      borderRadius: T.r16, padding:"14px 18px", marginTop:16, marginBottom:14,
                       border:`1px solid rgba(14,165,160,0.12)`,
                     }}>
                       <div style={{ fontSize:13, fontWeight:800, color: T.primary }}>추천 공급업체</div>
@@ -2470,13 +2494,9 @@ export default function ChatPage() {
                     </div>
 
                     {prSupplierLoading ? (
-                      <div style={{ textAlign:"center", padding:30, color: T.muted, fontSize:12 }}>
-                        공급업체 검색 중...
-                      </div>
+                      <div style={{ textAlign:"center", padding:30, color: T.muted, fontSize:12 }}>공급업체 검색 중...</div>
                     ) : prSuppliers.length === 0 ? (
-                      <div style={{ textAlign:"center", padding:30, color: T.muted, fontSize:12 }}>
-                        매칭되는 공급업체가 없습니다.
-                      </div>
+                      <div style={{ textAlign:"center", padding:30, color: T.muted, fontSize:12 }}>매칭되는 공급업체가 없습니다.</div>
                     ) : prSuppliers.slice(0, 8).map((s, i) => {
                       const isTop = i < 3;
                       const isSelected = selectedPrSuppliers.some(sp => sp.id === s.id);
@@ -2489,11 +2509,8 @@ export default function ChatPage() {
                           transition:"all 0.2s", cursor:"pointer",
                         }}
                           onClick={() => {
-                            if (isSelected) {
-                              setSelectedPrSuppliers(prev => prev.filter(x => x.id !== s.id));
-                            } else {
-                              setSelectedPrSuppliers(prev => [...prev, { id: s.id, name: s.name }]);
-                            }
+                            if (isSelected) setSelectedPrSuppliers(prev => prev.filter(x => x.id !== s.id));
+                            else setSelectedPrSuppliers(prev => [...prev, { id: s.id, name: s.name }]);
                           }}
                           onMouseEnter={e => { if (!isSelected) { e.currentTarget.style.borderColor = T.primary; e.currentTarget.style.boxShadow = "0 4px 16px rgba(14,165,160,0.12)"; }}}
                           onMouseLeave={e => { if (!isSelected) { e.currentTarget.style.borderColor = "rgba(14,165,160,0.08)"; e.currentTarget.style.boxShadow = "none"; }}}
@@ -2517,8 +2534,6 @@ export default function ChatPage() {
                               color: isSelected ? T.greenDark : isTop ? "#059669" : "#d97706",
                             }}>{isSelected ? "선택됨" : isTop ? "추천" : "검토"}</span>
                           </div>
-
-                          {/* 매칭률 바 */}
                           <div style={{ marginBottom:8 }}>
                             <div style={{ fontSize:9, color: T.muted, marginBottom:3 }}>매칭률</div>
                             <div style={{ height:5, borderRadius:3, background: T.bgSubtle, overflow:"hidden" }}>
@@ -2526,144 +2541,96 @@ export default function ChatPage() {
                             </div>
                             <div style={{ fontSize:10, fontWeight:700, color: isSelected ? T.greenDark : T.primary, marginTop:2 }}>{s.match_rate || 80}%</div>
                           </div>
-
-                          {/* 태그 */}
                           <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
                             {(s.tags || []).slice(0, 3).map(tag => (
-                              <span key={tag} style={{
-                                fontSize:9, padding:"2px 7px", borderRadius:10,
-                                background: T.bgSubtle, color: T.sub, border:`1px solid ${T.border}`,
-                              }}>{tag}</span>
+                              <span key={tag} style={{ fontSize:9, padding:"2px 7px", borderRadius:10, background: T.bgSubtle, color: T.sub, border:`1px solid ${T.border}` }}>{tag}</span>
                             ))}
                           </div>
                         </div>
                       );
                     })}
 
-                    <div style={{
-                      textAlign:"center", padding:"12px", marginTop:6,
-                      fontSize:10, color: T.muted,
-                      background: T.bgSubtle, borderRadius: T.r10,
-                    }}>
+                    <div style={{ textAlign:"center", padding:"12px", marginTop:6, fontSize:10, color: T.muted, background: T.bgSubtle, borderRadius: T.r10 }}>
                       업무마켓9(workmarket9.com) 등록 업체 기준
                     </div>
-
-                    {/* 저장 버튼 */}
-                    <button
-                      onClick={async () => {
-                        try {
-                          const supplierNames = selectedPrSuppliers.map(sp => sp.name).join(", ");
-                          const supplierIds = selectedPrSuppliers.map(sp => sp.id);
-                          // 첫 번째 공급업체로 DB 저장 (기존 API 호환) + 전체 목록은 fields에 포함
-                          if (selectedPrSuppliers.length > 0) {
-                            await api.updatePrSupplier(sessionId, supplierIds[0], supplierNames);
-                          }
-                          setPrSaved(true);
-                          setMessages(prev => [...prev, {
-                            id: msgIdCounter++, role: "assistant",
-                            text: `구매요청서가 저장되었습니다.${selectedPrSuppliers.length > 0 ? `\n선택 공급업체: ${supplierNames}` : ""}\n\n구매담당자가 확인할 수 있습니다.`,
-                          }]);
-                        } catch (err) {
-                          console.warn("PR save failed:", err);
-                        }
-                      }}
-                      style={{
-                        width:"100%", padding:"14px", borderRadius: T.r12, marginTop:12,
-                        border:"none", background: T.gradPrimary,
-                        color:"#fff", fontSize:14, fontWeight:800, cursor:"pointer",
-                        fontFamily:"inherit", transition:"all 0.2s",
-                        boxShadow: "0 4px 16px rgba(6,182,212,0.3)",
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.transform = "translateY(-1px)"}
-                      onMouseLeave={e => e.currentTarget.style.transform = "translateY(0)"}
-                    >
-                      {selectedPrSuppliers.length > 0
-                        ? `구매요청서 저장 (공급업체 ${selectedPrSuppliers.length}개)`
-                        : "구매요청서 저장"}
-                    </button>
                   </>
                 )}
 
-                {/* 저장 완료 */}
-                {prSaved && (
-                  <div style={{
-                    background: 'rgba(16,185,129,0.06)', borderRadius: T.r16,
-                    padding:"22px", border:`1.5px solid rgba(16,185,129,0.15)`,
-                    textAlign:"center",
-                  }}>
-                    <IconCheck size={28} />
-                    <div style={{ fontSize:15, fontWeight:800, color: T.greenDark, marginTop:10 }}>
-                      구매요청서 저장 완료
-                    </div>
-                    {selectedPrSuppliers.length > 0 && (
-                      <div style={{ marginTop:10, display:"flex", gap:6, flexWrap:"wrap", justifyContent:"center" }}>
-                        {selectedPrSuppliers.map(sp => (
-                          <span key={sp.id} style={{
-                            fontSize:12, padding:"5px 14px", borderRadius:20,
-                            background:"rgba(16,185,129,0.12)", color: T.greenDark, fontWeight:700,
-                          }}>{sp.name}</span>
-                        ))}
-                      </div>
-                    )}
-                    <div style={{ fontSize:11, color: T.sub, marginTop:10 }}>
-                      구매담당자가 관리 페이지에서 확인할 수 있습니다.
-                    </div>
-                    <div style={{ display:"flex", gap:8, marginTop:16, justifyContent:"center", flexWrap:"nowrap" }}>
-                      <button
-                        onClick={previewPr}
-                        style={{
-                          padding:"10px 16px", borderRadius: T.r10,
-                          border:`1px solid ${T.primary}`, background:"rgba(6,182,212,0.06)",
-                          color: T.primary, fontSize:12, fontWeight:700, cursor:"pointer",
-                          fontFamily:"inherit", display:"flex", alignItems:"center", gap:4,
-                          whiteSpace:"nowrap",
-                        }}
-                      ><IconPreview size={14} /> 미리보기</button>
-                      <button
-                        onClick={() => {
-                          if (currentPrTemplate) {
-                            const supplierNames = selectedPrSuppliers.map(s => s.name).join(", ");
-                            downloadPrPdf(prFields, currentPrSections, currentPrTemplate.label, supplierNames);
-                          }
-                        }}
-                        style={{
-                          padding:"10px 16px", borderRadius: T.r10,
-                          border:`1px solid ${T.border}`, background: T.card,
-                          color: T.sub, fontSize:12, fontWeight:700, cursor:"pointer",
-                          fontFamily:"inherit", display:"flex", alignItems:"center", gap:4,
-                          whiteSpace:"nowrap",
-                        }}
-                      ><IconDownload size={14} /> PDF</button>
-                      {PR_TO_RFP_MAPPING[prType] && (
-                        <button
-                          onClick={convertPrToRfp}
-                          style={{
-                            padding:"10px 16px", borderRadius: T.r10,
-                            border:`1px solid ${T.primary}`, background:"rgba(6,182,212,0.06)",
-                            color: T.primary, fontSize:12, fontWeight:700, cursor:"pointer",
-                            fontFamily:"inherit", display:"flex", alignItems:"center", gap:4,
-                            whiteSpace:"nowrap",
-                          }}
-                        >RFP 전환</button>
-                      )}
-                      <button
-                        onClick={() => {
-                          setPhase("chat"); setPrRightVisible(false);
-                          setMessages(prev => [...prev, {
-                            id: msgIdCounter++, role: "assistant",
-                            text: "다른 질문이 있으시면 말씀해 주세요.",
-                          }]);
-                        }}
-                        style={{
-                          padding:"10px 16px", borderRadius: T.r10,
-                          border:"none", background: T.gradPrimary,
-                          color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer",
-                          fontFamily:"inherit", whiteSpace:"nowrap",
-                        }}
-                      >새 질문</button>
-                    </div>
-                  </div>
-                )}
+                {/* 하단 버튼 — RFP PanelComplete와 동일 레이아웃 (3버튼) */}
+                <div style={{ marginTop:16, display:"flex", gap:8 }}>
+                  <button onClick={previewPr} style={{
+                    flex:1, padding:"14px", borderRadius: T.r10,
+                    border:`1px solid ${T.primary}`, background: "rgba(14,165,160,0.04)",
+                    color: T.primary, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
+                    display:"flex", alignItems:"center", justifyContent:"center", gap:6, transition:"all 0.2s",
+                  }}
+                    onMouseEnter={e => { e.currentTarget.style.background = "rgba(14,165,160,0.1)"; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = "rgba(14,165,160,0.04)"; }}
+                  >
+                    <IconPreview size={14} /> 미리보기
+                  </button>
+                  <button onClick={() => {
+                    if (currentPrTemplate) {
+                      const supplierNames = selectedPrSuppliers.map(s => s.name).join(", ");
+                      downloadPrPdf(prFields, currentPrSections, currentPrTemplate.label, supplierNames);
+                    }
+                  }} style={{
+                    flex:1, padding:"14px", borderRadius: T.r10,
+                    border:`1px solid ${T.border}`, background: T.card,
+                    color: T.sub, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
+                    display:"flex", alignItems:"center", justifyContent:"center", gap:6, transition:"all 0.2s",
+                  }}
+                    onMouseEnter={e => { e.currentTarget.style.background = T.bgSubtle; e.currentTarget.style.borderColor = T.primary; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = T.card; e.currentTarget.style.borderColor = T.border; }}
+                  >
+                    <IconDownload size={14} /> PDF 다운로드
+                  </button>
+                  {!prSaved ? (
+                    <button onClick={async () => {
+                      try {
+                        const supplierNames = selectedPrSuppliers.map(sp => sp.name).join(", ");
+                        const supplierIds = selectedPrSuppliers.map(sp => sp.id);
+                        if (selectedPrSuppliers.length > 0) {
+                          await api.updatePrSupplier(sessionId, supplierIds[0], supplierNames);
+                        }
+                        setPrSaved(true);
+                        setMessages(prev => [...prev, {
+                          id: msgIdCounter++, role: "assistant",
+                          text: `구매요청서가 저장되었습니다.${selectedPrSuppliers.length > 0 ? `\n선택 공급업체: ${supplierNames}` : ""}\n\n구매담당자가 확인할 수 있습니다.`,
+                        }]);
+                      } catch (err) { console.warn("PR save failed:", err); }
+                    }} style={{
+                      flex:1, padding:"14px", borderRadius: T.r10,
+                      border:"none", background: T.gradPrimary,
+                      color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
+                      display:"flex", alignItems:"center", justifyContent:"center", gap:6, transition:"all 0.3s",
+                      boxShadow: T.shadowBlue,
+                    }}
+                      onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.02)"; }}
+                      onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
+                    >
+                      {selectedPrSuppliers.length > 0
+                        ? `저장 (업체 ${selectedPrSuppliers.length}개)`
+                        : "저장"}
+                    </button>
+                  ) : (
+                    <button onClick={() => {
+                      setPhase("chat"); setPrRightVisible(false);
+                      setMessages(prev => [...prev, { id: msgIdCounter++, role: "assistant", text: "다른 질문이 있으시면 말씀해 주세요." }]);
+                    }} style={{
+                      flex:1, padding:"14px", borderRadius: T.r10,
+                      border:"none", background: T.gradPrimary,
+                      color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
+                      display:"flex", alignItems:"center", justifyContent:"center", gap:6, transition:"all 0.3s",
+                      boxShadow: T.shadowBlue,
+                    }}
+                      onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.02)"; }}
+                      onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
+                    >
+                      새 질문
+                    </button>
+                  )}
+                </div>
               </>
             )}
 

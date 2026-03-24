@@ -956,6 +956,43 @@ export default function ChatPage() {
     );
   };
 
+  // ── RFP 필드별 선택 옵션 생성 ──
+  const getRfpFieldOptions = (key, f) => {
+    const label = (f.label || "").toLowerCase();
+    const opts = [];
+    // 발주기관 정보(s1~s5)는 탭 불필요
+    if (["s1","s2","s3","s4","s5"].includes(key)) return [];
+    // 계약형태 / 계약유형
+    if (label.includes("계약") && (label.includes("형태") || label.includes("유형")))
+      return ["도급 계약", "위탁 계약", "단가 계약", "연간 구독"];
+    // 수행기간 / 계약기간
+    if (label.includes("기간"))
+      return ["6개월", "1년", "2년", "3년"];
+    // 수량 / 대상인원 / 대상 규모
+    if (label.includes("수량")) return ["10개", "50개", "100개", "협의"];
+    if (label.includes("인원") || label.includes("규모")) return ["10명 이내", "10~50명", "50~100명", "100명 이상"];
+    // 납품기한
+    if (label.includes("납품") && label.includes("기한")) return ["1주 이내", "2주 이내", "1개월 이내", "협의"];
+    // 납품 조건
+    if (label.includes("납품") && label.includes("조건")) return ["지정 장소 납품", "택배 배송", "직접 설치", "협의"];
+    // 수행 방식
+    if (label.includes("수행") && label.includes("방식")) return ["상주", "원격", "상주+원격 혼합", "정기 방문"];
+    // 평가 기준 (%)
+    if (label.includes("평가")) return ["25%", "30%", "20%", "15%"];
+    // 제출기한
+    if (label.includes("제출") && label.includes("기한")) {
+      const d = new Date(); d.setDate(d.getDate() + 14);
+      const d2 = new Date(); d2.setDate(d2.getDate() + 21);
+      return [d.toLocaleDateString("ko-KR"), d2.toLocaleDateString("ko-KR")];
+    }
+    // 제출방식
+    if (label.includes("제출") && label.includes("방식")) return ["이메일 제출", "온라인 시스템", "우편 + 전자본"];
+    // SLA
+    if (label.includes("sla")) return ["99.9% 가용성", "24시간 내 대응", "월간 리포트 제공"];
+    // 요구 사양 / 서비스 범위 / 품질 기준 — 일반 텍스트이므로 빈 배열
+    return opts;
+  };
+
   // ══ 오른쪽 패널: 채워지는 RFP ══
   const PanelFilling = () => (
     <div className="custom-scroll" style={{ flex:1, overflowY:"auto", padding:"20px 22px" }}>
@@ -1036,43 +1073,64 @@ export default function ChatPage() {
                   const f = fields[fk];
                   if (!f) return null;
                   const isNew = justFilled.has(fk);
+                  const rfpEmpty = !(f.value || "").trim();
+                  const rfpOpts = rfpEmpty ? getRfpFieldOptions(fk, f) : [];
                   return (
                     <div key={fk} ref={el => fieldRefs.current[fk] = el} style={{
-                      display:"flex", alignItems:"flex-start",
                       borderBottom: fi < sec.fields.length-1 ? `1px solid ${T.borderLight}` : "none",
                       animation: isNew ? "field-highlight 2.5s ease forwards" : "none",
                       background: fi % 2 === 1 ? "rgba(14,165,160,0.02)" : "transparent",
                     }}>
-                      <div style={{
-                        width:136, padding:"10px 14px", flexShrink:0,
-                        background:"rgba(14,165,160,0.03)", borderRight:`1px solid rgba(14,165,160,0.06)`,
-                        fontSize:11, fontWeight:700, color: T.sub,
-                        display:"flex", alignItems:"center", minHeight:40,
-                      }}>{f.label}</div>
-                      <div style={{
-                        flex:1, padding:"4px 8px", fontSize:12,
-                        lineHeight:1.7, minHeight:40, display:"flex", alignItems:"center", gap:4,
-                      }}>
-                        <input
-                          type="text"
-                          value={f.value || ""}
-                          placeholder="직접 입력 또는 채팅으로 입력"
-                          onChange={(e) => handleFieldEdit(fk, e.target.value)}
-                          style={{
-                            width:"100%", border:"none", outline:"none",
-                            background:"transparent", fontSize:12, color: T.text,
-                            padding:"6px 8px", borderRadius:4, fontFamily:"inherit",
-                            transition:"background 0.2s",
-                          }}
-                          onFocus={(e) => { e.target.style.background = "rgba(14,165,160,0.06)"; }}
-                          onBlur={(e) => { e.target.style.background = "transparent"; }}
-                        />
-                        {isNew && <span style={{
-                          fontSize:9, padding:"2px 6px", flexShrink:0,
-                          background: T.tealLight, border:`1px solid ${T.tealMid}`,
-                          borderRadius:4, color: T.tealDark, fontWeight:700,
-                        }}>NEW</span>}
+                      <div style={{ display:"flex", alignItems:"flex-start" }}>
+                        <div style={{
+                          width:136, padding:"10px 14px", flexShrink:0,
+                          background:"rgba(14,165,160,0.03)", borderRight:`1px solid rgba(14,165,160,0.06)`,
+                          fontSize:11, fontWeight:700, color: T.sub,
+                          display:"flex", alignItems:"center", minHeight:40,
+                        }}>{f.label}</div>
+                        <div style={{
+                          flex:1, padding:"4px 8px", fontSize:12,
+                          lineHeight:1.7, minHeight:40, display:"flex", alignItems:"center", gap:4,
+                        }}>
+                          <input
+                            type="text"
+                            value={f.value || ""}
+                            placeholder="직접 입력 또는 채팅으로 입력"
+                            onChange={(e) => handleFieldEdit(fk, e.target.value)}
+                            style={{
+                              width:"100%", border:"none", outline:"none",
+                              background:"transparent", fontSize:12, color: T.text,
+                              padding:"6px 8px", borderRadius:4, fontFamily:"inherit",
+                              transition:"background 0.2s",
+                            }}
+                            onFocus={(e) => { e.target.style.background = "rgba(14,165,160,0.06)"; }}
+                            onBlur={(e) => { e.target.style.background = "transparent"; }}
+                          />
+                          {isNew && <span style={{
+                            fontSize:9, padding:"2px 6px", flexShrink:0,
+                            background: T.tealLight, border:`1px solid ${T.tealMid}`,
+                            borderRadius:4, color: T.tealDark, fontWeight:700,
+                          }}>NEW</span>}
+                        </div>
                       </div>
+                      {/* RFP 필드 선택 탭 */}
+                      {rfpOpts.length > 0 && (
+                        <div style={{ padding:"4px 8px 8px 144px", display:"flex", gap:4, flexWrap:"wrap" }}>
+                          {rfpOpts.map((opt, oi) => (
+                            <button
+                              key={oi}
+                              onMouseDown={(e) => { e.preventDefault(); handleFieldEdit(fk, opt); }}
+                              style={{
+                                padding:"4px 10px", borderRadius:12, fontSize:10, fontWeight:600,
+                                border:`1px solid rgba(14,165,160,0.2)`, background:"rgba(14,165,160,0.04)",
+                                color: T.primary, cursor:"pointer", fontFamily:"inherit", transition:"all 0.15s",
+                              }}
+                              onMouseEnter={e => { e.currentTarget.style.background = "rgba(14,165,160,0.12)"; e.currentTarget.style.borderColor = T.primary; }}
+                              onMouseLeave={e => { e.currentTarget.style.background = "rgba(14,165,160,0.04)"; e.currentTarget.style.borderColor = "rgba(14,165,160,0.2)"; }}
+                            >{opt}</button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 })}

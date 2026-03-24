@@ -2556,36 +2556,37 @@ export default function ChatPage() {
                   </>
                 )}
 
-                {/* 하단 버튼 — RFP PanelComplete와 동일 레이아웃 (3버튼) */}
-                <div style={{ marginTop:16, display:"flex", gap:8 }}>
-                  <button onClick={previewPr} style={{
-                    flex:1, padding:"14px", borderRadius: T.r10,
-                    border:`1px solid ${T.primary}`, background: "rgba(14,165,160,0.04)",
-                    color: T.primary, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
-                    display:"flex", alignItems:"center", justifyContent:"center", gap:6, transition:"all 0.2s",
-                  }}
-                    onMouseEnter={e => { e.currentTarget.style.background = "rgba(14,165,160,0.1)"; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = "rgba(14,165,160,0.04)"; }}
-                  >
-                    <IconPreview size={14} /> 미리보기
-                  </button>
-                  <button onClick={() => {
-                    if (currentPrTemplate) {
-                      const supplierNames = selectedPrSuppliers.map(s => s.name).join(", ");
-                      downloadPrPdf(prFields, currentPrSections, currentPrTemplate.label, supplierNames);
-                    }
-                  }} style={{
-                    flex:1, padding:"14px", borderRadius: T.r10,
-                    border:`1px solid ${T.border}`, background: T.card,
-                    color: T.sub, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
-                    display:"flex", alignItems:"center", justifyContent:"center", gap:6, transition:"all 0.2s",
-                  }}
-                    onMouseEnter={e => { e.currentTarget.style.background = T.bgSubtle; e.currentTarget.style.borderColor = T.primary; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = T.card; e.currentTarget.style.borderColor = T.border; }}
-                  >
-                    <IconDownload size={14} /> PDF 다운로드
-                  </button>
-                  {!prSaved ? (
+                {/* 하단 버튼 — RFP PanelComplete와 동일 레이아웃 */}
+                {!prSaved ? (
+                  /* 저장 전: 미리보기 | PDF 다운로드 | 저장 */
+                  <div style={{ marginTop:16, display:"flex", gap:8 }}>
+                    <button onClick={previewPr} style={{
+                      flex:1, padding:"14px", borderRadius: T.r10,
+                      border:`1px solid ${T.primary}`, background: "rgba(14,165,160,0.04)",
+                      color: T.primary, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
+                      display:"flex", alignItems:"center", justifyContent:"center", gap:6, transition:"all 0.2s",
+                    }}
+                      onMouseEnter={e => { e.currentTarget.style.background = "rgba(14,165,160,0.1)"; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = "rgba(14,165,160,0.04)"; }}
+                    >
+                      <IconPreview size={14} /> 미리보기
+                    </button>
+                    <button onClick={() => {
+                      if (currentPrTemplate) {
+                        const supplierNames = selectedPrSuppliers.map(s => s.name).join(", ");
+                        downloadPrPdf(prFields, currentPrSections, currentPrTemplate.label, supplierNames);
+                      }
+                    }} style={{
+                      flex:1, padding:"14px", borderRadius: T.r10,
+                      border:`1px solid ${T.border}`, background: T.card,
+                      color: T.sub, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
+                      display:"flex", alignItems:"center", justifyContent:"center", gap:6, transition:"all 0.2s",
+                    }}
+                      onMouseEnter={e => { e.currentTarget.style.background = T.bgSubtle; e.currentTarget.style.borderColor = T.primary; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = T.card; e.currentTarget.style.borderColor = T.border; }}
+                    >
+                      <IconDownload size={14} /> PDF 다운로드
+                    </button>
                     <button onClick={async () => {
                       try {
                         const supplierNames = selectedPrSuppliers.map(sp => sp.name).join(", ");
@@ -2609,15 +2610,40 @@ export default function ChatPage() {
                       onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.02)"; }}
                       onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
                     >
-                      {selectedPrSuppliers.length > 0
-                        ? `저장 (업체 ${selectedPrSuppliers.length}개)`
-                        : "저장"}
+                      {selectedPrSuppliers.length > 0 ? `저장 (업체 ${selectedPrSuppliers.length}개)` : "저장"}
                     </button>
-                  ) : (
+                  </div>
+                ) : (
+                  /* 저장 후: 미리보기 | PDF 다운로드 | RFP 전환 */
+                  <div style={{ marginTop:16, display:"flex", gap:8 }}>
+                    <button onClick={previewPr} style={{
+                      flex:1, padding:"14px", borderRadius: T.r10,
+                      border:`1px solid ${T.primary}`, background: "rgba(14,165,160,0.04)",
+                      color: T.primary, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
+                      display:"flex", alignItems:"center", justifyContent:"center", gap:6, transition:"all 0.2s",
+                    }}
+                      onMouseEnter={e => { e.currentTarget.style.background = "rgba(14,165,160,0.1)"; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = "rgba(14,165,160,0.04)"; }}
+                    >
+                      <IconPreview size={14} /> 미리보기
+                    </button>
                     <button onClick={() => {
-                      setPhase("chat"); setPrRightVisible(false);
-                      setMessages(prev => [...prev, { id: msgIdCounter++, role: "assistant", text: "다른 질문이 있으시면 말씀해 주세요." }]);
+                      if (currentPrTemplate) {
+                        const supplierNames = selectedPrSuppliers.map(s => s.name).join(", ");
+                        downloadPrPdf(prFields, currentPrSections, currentPrTemplate.label, supplierNames);
+                      }
                     }} style={{
+                      flex:1, padding:"14px", borderRadius: T.r10,
+                      border:`1px solid ${T.border}`, background: T.card,
+                      color: T.sub, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
+                      display:"flex", alignItems:"center", justifyContent:"center", gap:6, transition:"all 0.2s",
+                    }}
+                      onMouseEnter={e => { e.currentTarget.style.background = T.bgSubtle; e.currentTarget.style.borderColor = T.primary; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = T.card; e.currentTarget.style.borderColor = T.border; }}
+                    >
+                      <IconDownload size={14} /> PDF 다운로드
+                    </button>
+                    <button onClick={convertPrToRfp} style={{
                       flex:1, padding:"14px", borderRadius: T.r10,
                       border:"none", background: T.gradPrimary,
                       color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
@@ -2627,10 +2653,10 @@ export default function ChatPage() {
                       onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.02)"; }}
                       onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
                     >
-                      새 질문
+                      <IconSendMail size={13} /> RFP 전환
                     </button>
-                  )}
-                </div>
+                  </div>
+                )}
               </>
             )}
 

@@ -7,6 +7,7 @@ import { COMMON_SECTIONS } from "../data/commonFields";
 import { PR_TO_RFP_MAPPING, getPrToRfpMapping } from "../data/fieldMapping";
 import { downloadRfpPdf } from "../utils/rfpExport";
 import { downloadPrPdf } from "../utils/prExport";
+import { previewRfq } from "../utils/rfqExport";
 // BackgroundBlobs 제거 — 업무마켓9 임베드 시 외부 배경 불필요
 
 // ═══════════════════════════════════════════
@@ -1774,25 +1775,7 @@ export default function ChatPage() {
 
       {/* 하단 3버튼: 미리보기 | RFP 전환 | 저장 */}
       <div style={{ marginTop:16, display:"flex", gap:8 }}>
-        <button onClick={() => {
-          // RFQ 미리보기 (간단 HTML)
-          const w = window.open("", "_blank");
-          if (!w) return;
-          let html = `<html><head><meta charset="utf-8"><title>견적요청서 미리보기</title><style>body{font-family:sans-serif;max-width:800px;margin:40px auto;padding:20px}h1{text-align:center;letter-spacing:4px}table{width:100%;border-collapse:collapse;margin-top:20px}td,th{border:1px solid #ddd;padding:8px;font-size:13px}th{background:#f5f5f5;text-align:left;width:30%}</style></head><body>`;
-          html += `<h1>견 적 요 청 서</h1>`;
-          html += `<p style="text-align:center;color:#666">${rfqTemplate?.name || ""}</p>`;
-          rfqSections.forEach(sec => {
-            html += `<h3>${sec.title}</h3><table>`;
-            sec.fields.forEach(fk => {
-              const f = rfqFields[fk];
-              if (f) html += `<tr><th>${f.label}</th><td>${f.value || "-"}</td></tr>`;
-            });
-            html += `</table>`;
-          });
-          html += `</body></html>`;
-          w.document.write(html);
-          w.document.close();
-        }} style={{
+        <button onClick={() => previewRfq(rfqFields, rfqSections, rfqTemplate?.name)} style={{
           flex:1, padding:"14px", borderRadius: T.r10,
           border:`1px solid #6366f1`, background: "rgba(99,102,241,0.04)",
           color: "#6366f1", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit",

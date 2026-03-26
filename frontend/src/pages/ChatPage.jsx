@@ -378,22 +378,6 @@ export default function ChatPage() {
 
   // PR 필수 필드(c1~c5 제외) 채움률 감지 → 패널 자동 오픈
   const PR_SKIP_KEYS = new Set(["c1","c2","c3","c4","c5"]);
-  useEffect(() => {
-    if (phase === "pr_filling" && !prRightVisible && prType) {
-      const nonBasicRequired = Object.entries(prFields)
-        .filter(([k, f]) => f.required !== false && !PR_SKIP_KEYS.has(k));
-      const filledCount = nonBasicRequired.filter(([, f]) => (f.value || "").trim()).length;
-      const totalCount = nonBasicRequired.length;
-      // 50% 이상 채워지면 패널 자동 오픈
-      if (totalCount > 0 && filledCount / totalCount >= 0.5) {
-        setPrRightVisible(true);
-        setMessages(prev => [...prev, {
-          id: msgIdCounter++, role: "assistant",
-          text: "주요 항목이 채워졌습니다. 우측 패널에서 나머지 항목을 확인하고 수정해 주세요.",
-        }]);
-      }
-    }
-  }, [prFields, phase, prRightVisible, prType]);
 
   const applyFills = (fills) => {
     if (!fills || !Object.keys(fills).length) return;
@@ -586,7 +570,7 @@ export default function ChatPage() {
       templateFields[k] = { ...v, value: NO_AUTO_FILL.has(k) ? "" : (v.default || "") };
     });
     setPrFields(templateFields);
-    setPrRightVisible(false);   // 패널 즉시 열지 않음 — 필수값 채운 뒤 자동 오픈
+    setPrRightVisible(true);    // 패널 즉시 열기 — 우측에 구매요청서 양식 표시
     setPhase("pr_filling");
 
     const label = tmpl.name || tmpl.label;
@@ -595,7 +579,7 @@ export default function ChatPage() {
       { id: msgIdCounter++, role: "user", text: label },
       {
         id: msgIdCounter++, role: "assistant",
-        text: `${label} 구매요청서를 준비 중입니다.\n기본정보(요청자 정보)는 추후 시스템 연동으로 자동 입력됩니다.\n아래 주요 항목을 확인하고 선택해 주세요.`,
+        text: `${label} 구매요청서를 준비했습니다.\n우측 패널에서 직접 입력하거나, 채팅으로 내용을 알려주시면 자동으로 채워드립니다.`,
         prQuickFill: true,
       }
     ]);

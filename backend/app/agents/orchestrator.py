@@ -635,9 +635,8 @@ class OrchestratorAgent(AgentBase):
             self.pr.extract_fields(ctx, self._critical_pool),
         )
 
-        # ── question/rfp_question일 때만 Retrieval (선택적) ──
-        if ctx.filling_intent in ("question", "rfp_question"):
-            await self.retrieval.execute(ctx, self._critical_pool)
+        # ── Retrieval: PR에서는 field_input 포함 모든 의도에서 RAG 검색 (역제안용) ──
+        await self.retrieval.execute(ctx, self._critical_pool)
 
         # ── PHASE 3: 새 필드 머지 + 완성 여부 판단 ──
         trigger = None
@@ -683,12 +682,11 @@ class OrchestratorAgent(AgentBase):
                 missing = required_keys - all_filled
                 logger.info(f"[Orchestrator:PR] PR not complete. missing={missing}")
 
-        # ── PHASE 4: 답변 생성 (헌법/화법 주입은 question일 때만) ──
-        if ctx.filling_intent in ("question", "rfp_question") and ctx.query_embedding:
+        # ── PHASE 4: 답변 생성 (역제안을 위해 항상 헌법 주입) ──
+        if ctx.query_embedding:
             await self.constitution.inject_rules(ctx, self._background_pool)
 
         await self.generation.execute(ctx, self._critical_pool)
-        # PR filling은 post_check 스킵 (RFP filling과 동일)
 
         # ── 타이밍 로그 ──
         total_ms = (time.time() - total_start) * 1000

@@ -664,7 +664,7 @@ export default function ChatPage() {
         }]);
         if (data.phase_trigger === "rfq_complete") {
           if (data.rfq_request_id) setRfqRequestId(data.rfq_request_id);
-          setTimeout(() => setPhase("rfq_complete"), 800);
+          setTimeout(() => { setPhase("rfq_complete"); setRfqRightVisible(true); }, 800);
         }
       } else if (phase === "filling") {
         const data = await api.chat(sessionId, text, null, history, phase, getFilledFields(), rfpType);
@@ -1603,6 +1603,268 @@ export default function ChatPage() {
       <div style={{ height:20 }} />
     </div>
   );
+
+  // ══ RFQ 패널: 견적서 작성 ══
+  const rfqTemplate = rfqType && dbRfqTemplates ? dbRfqTemplates[rfqType] : null;
+  const rfqSections = rfqTemplate?.sections || [];
+  const rfqFilled = Object.values(rfqFields).filter(f => (f.value || "").trim()).length;
+  const rfqTotal = Object.keys(rfqFields).length;
+  const rfqPct = rfqTotal > 0 ? Math.round(rfqFilled / rfqTotal * 100) : 0;
+  const rfqRequiredFilled = Object.entries(rfqFields).filter(([, f]) => f.required !== false && (f.value || "").trim()).length;
+  const rfqRequiredTotal = Object.entries(rfqFields).filter(([, f]) => f.required !== false).length;
+
+  const [rfqOpenSec, setRfqOpenSec] = useState({0:true,1:true,2:true,3:true,4:true});
+
+  const RfqPanelFilling = () => (
+    <div className="custom-scroll" style={{ flex:1, overflowY:"auto", padding:"20px 22px" }}>
+      {/* 진행률 */}
+      <div style={{
+        background: `linear-gradient(135deg, rgba(99,102,241,0.06) 0%, rgba(129,140,248,0.04) 100%)`,
+        borderRadius: T.r16, padding:"16px 20px", marginBottom:16,
+        border: `1px solid rgba(99,102,241,0.12)`,
+      }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+          <span style={{ fontSize:12, fontWeight:700, color: T.text }}>견적서(RFQ) 완성도</span>
+          <span style={{
+            fontSize:11, fontWeight:700, padding:"4px 12px", borderRadius:20,
+            background: rfqPct >= 80 ? T.greenLight : 'rgba(255,255,255,0.8)',
+            color: rfqPct >= 80 ? T.greenDark : '#6366f1',
+          }}>필수 {rfqRequiredFilled}/{rfqRequiredTotal} · {rfqPct}%</span>
+        </div>
+        <div style={{ height:8, background:"rgba(255,255,255,0.7)", borderRadius:4, overflow:"hidden" }}>
+          <div style={{
+            height:"100%", width:`${rfqPct}%`, borderRadius:4,
+            background: `linear-gradient(90deg, #6366f1, #818cf8)`,
+            transition:"width 0.6s ease",
+          }} />
+        </div>
+      </div>
+
+      {/* 섹션 아코디언 */}
+      {rfqSections.map((sec, si) => {
+        const secDone = sec.fields.every(f => rfqFields[f]?.value);
+        return (
+          <div key={si} style={{ marginBottom:10 }}>
+            <div
+              onClick={() => setRfqOpenSec(p => ({...p,[si]:!p[si]}))}
+              style={{
+                display:"flex", alignItems:"center", gap:8, padding:"10px 16px",
+                background: secDone ? 'rgba(16,185,129,0.04)' : 'rgba(99,102,241,0.04)',
+                borderRadius: rfqOpenSec[si] ? `${T.r10}px ${T.r10}px 0 0` : T.r10,
+                cursor:"pointer", border:`1px solid ${secDone ? 'rgba(16,185,129,0.15)' : 'rgba(99,102,241,0.12)'}`,
+                transition:"all 0.2s",
+              }}
+            >
+              <span style={{ fontSize:10, transform: rfqOpenSec[si] ? "rotate(90deg)" : "rotate(0)", transition:"0.2s" }}>▶</span>
+              <span style={{ flex:1, fontSize:12, fontWeight:700, color: T.navy }}>{sec.title}</span>
+              {secDone && <span style={{ fontSize:10, color: T.greenDark, fontWeight:700 }}>✓</span>}
+              <span style={{ fontSize:10, color: T.sub }}>
+                {sec.fields.filter(f => (rfqFields[f]?.value || "").trim()).length}/{sec.fields.length}
+              </span>
+            </div>
+            {rfqOpenSec[si] && (
+              <div style={{
+                border:`1px solid rgba(99,102,241,0.08)`, borderTop:"none",
+                borderRadius:`0 0 ${T.r10}px ${T.r10}px`, overflow:"hidden",
+              }}>
+                {sec.fields.map(fk => {
+                  const f = rfqFields[fk];
+                  if (!f) return null;
+                  return (
+                    <div key={fk} style={{
+                      padding:"10px 16px", borderBottom:`1px solid ${T.border}`,
+                      background: (f.value || "").trim() ? 'rgba(16,185,129,0.02)' : '#fff',
+                    }}>
+                      <div style={{ fontSize:11, fontWeight:600, color: T.navy, marginBottom:4, display:"flex", alignItems:"center", gap:4 }}>
+                        {f.label}
+                        {f.required !== false && <span style={{ color: T.red, fontSize:10 }}>*</span>}
+                      </div>
+                      {f.description && <div style={{ fontSize:10, color: T.sub, marginBottom:4 }}>{f.description.slice(0, 80)}</div>}
+                      <input
+                        value={f.value || ""}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setRfqFields(prev => ({ ...prev, [fk]: { ...prev[fk], value: val } }));
+                        }}
+                        placeholder={f.default || "입력하세요"}
+                        style={{
+                          width:"100%", padding:"8px 10px", fontSize:12, border:`1px solid ${T.border}`,
+                          borderRadius:6, outline:"none", fontFamily:"inherit", background:"#fff",
+                          boxSizing:"border-box",
+                        }}
+                        onFocus={e => e.target.style.borderColor = '#6366f1'}
+                        onBlur={e => e.target.style.borderColor = T.border}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+      <div style={{ height:20 }} />
+    </div>
+  );
+
+  const RfqPanelComplete = () => (
+    <div className="custom-scroll" style={{ flex:1, overflowY:"auto", padding:"20px 22px" }}>
+      {/* 성공 배너 */}
+      <div style={{
+        background: `linear-gradient(135deg, rgba(16,185,129,0.08), rgba(99,102,241,0.06))`,
+        borderRadius: T.r16, padding:"18px 22px", marginBottom:18,
+        border:`1.5px solid rgba(16,185,129,0.15)`,
+        display:"flex", alignItems:"center", gap:14,
+      }}>
+        <IconParty size={32} />
+        <div>
+          <div style={{ fontSize:14, fontWeight:800, color: T.greenDark }}>견적서(RFQ) 작성 완료!</div>
+          <div style={{ fontSize:11, color:"#16a34a", marginTop:3 }}>RFP로 전환하거나 미리보기로 확인하세요.</div>
+        </div>
+      </div>
+
+      {/* 문서 헤더 */}
+      <div style={{
+        background: 'rgba(255,255,255,0.8)', borderRadius: T.r16, padding:"22px 28px", textAlign:"center",
+        marginBottom:16, border:`1.5px solid rgba(99,102,241,0.15)`,
+        boxShadow:'0 2px 12px rgba(99,102,241,0.06)',
+        position:"relative", overflow:"hidden",
+      }}>
+        <div style={{ position:"absolute", top:0, left:0, right:0, height:3, background: "linear-gradient(90deg, #6366f1, #818cf8)" }} />
+        <div style={{ fontSize:10, letterSpacing:3, color: T.sub, marginBottom:8 }}>표준 견적서 양식</div>
+        <div style={{ fontSize:20, fontWeight:900, letterSpacing:4, color: T.navy }}>견 적 요 청 서</div>
+        {rfqTemplate && (
+          <div style={{ marginTop:12 }}>
+            <span style={{ fontSize:12, fontWeight:700, padding:"4px 14px", background:"rgba(99,102,241,0.08)", color:"#6366f1", borderRadius:8 }}>
+              {rfqTemplate.name}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* 섹션 요약 */}
+      {rfqSections.map((sec, si) => (
+        <div key={si} style={{ marginBottom:12 }}>
+          <div style={{
+            background: 'rgba(99,102,241,0.04)', padding:"10px 16px",
+            display:"flex", alignItems:"center", gap:8,
+            borderRadius:`${T.r10}px ${T.r10}px 0 0`,
+            border:`1px solid rgba(99,102,241,0.08)`,
+          }}>
+            <span style={{ fontSize:12, fontWeight:700, color: T.navy }}>{sec.title}</span>
+            <span style={{ fontSize:10, color: T.greenDark, fontWeight:700 }}>완료 ✓</span>
+          </div>
+          <div style={{
+            background: 'rgba(255,255,255,0.7)', border:`1px solid rgba(99,102,241,0.08)`, borderTop:"none",
+            borderRadius:`0 0 ${T.r10}px ${T.r10}px`, overflow:"hidden",
+          }}>
+            {sec.fields.map(fk => {
+              const f = rfqFields[fk];
+              if (!f) return null;
+              return (
+                <div key={fk} style={{ padding:"8px 16px", borderBottom:`1px solid ${T.border}`, fontSize:12, display:"flex", gap:8 }}>
+                  <span style={{ fontWeight:600, color: T.navy, minWidth:100 }}>{f.label}</span>
+                  <span style={{ color: T.text }}>{f.value || "-"}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+
+      {/* 하단 3버튼: 미리보기 | RFP 전환 | 저장 */}
+      <div style={{ marginTop:16, display:"flex", gap:8 }}>
+        <button onClick={() => {
+          // RFQ 미리보기 (간단 HTML)
+          const w = window.open("", "_blank");
+          if (!w) return;
+          let html = `<html><head><meta charset="utf-8"><title>견적요청서 미리보기</title><style>body{font-family:sans-serif;max-width:800px;margin:40px auto;padding:20px}h1{text-align:center;letter-spacing:4px}table{width:100%;border-collapse:collapse;margin-top:20px}td,th{border:1px solid #ddd;padding:8px;font-size:13px}th{background:#f5f5f5;text-align:left;width:30%}</style></head><body>`;
+          html += `<h1>견 적 요 청 서</h1>`;
+          html += `<p style="text-align:center;color:#666">${rfqTemplate?.name || ""}</p>`;
+          rfqSections.forEach(sec => {
+            html += `<h3>${sec.title}</h3><table>`;
+            sec.fields.forEach(fk => {
+              const f = rfqFields[fk];
+              if (f) html += `<tr><th>${f.label}</th><td>${f.value || "-"}</td></tr>`;
+            });
+            html += `</table>`;
+          });
+          html += `</body></html>`;
+          w.document.write(html);
+          w.document.close();
+        }} style={{
+          flex:1, padding:"14px", borderRadius: T.r10,
+          border:`1px solid #6366f1`, background: "rgba(99,102,241,0.04)",
+          color: "#6366f1", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
+          display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+        }}>
+          <IconPreview size={14} /> 미리보기
+        </button>
+        <button onClick={convertRfqToRfp} style={{
+          flex:1, padding:"14px", borderRadius: T.r10,
+          border:"none", background: T.gradPrimary,
+          color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
+          display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+          boxShadow: T.shadowBlue,
+        }}
+          onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.02)"; }}
+          onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
+        >
+          <IconSendMail size={13} /> RFP 전환
+        </button>
+        <button onClick={() => {
+          setPrSaved(true);
+          setMessages(prev => [...prev, { id: msgIdCounter++, role: "assistant", text: "견적요청서(RFQ)가 저장되었습니다." }]);
+        }} style={{
+          flex:1, padding:"14px", borderRadius: T.r10,
+          border:"none", background: "linear-gradient(135deg, #6366f1, #818cf8)",
+          color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
+          display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+          boxShadow: "0 2px 8px rgba(99,102,241,0.3)",
+        }}
+          onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.02)"; }}
+          onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
+        >
+          저장
+        </button>
+      </div>
+      <div style={{ height:20 }} />
+    </div>
+  );
+
+  // ══ RFQ → RFP 전환 ══
+  const convertRfqToRfp = () => {
+    // RFQ 필드에서 RFP로 매핑 가능한 값 추출
+    const mapping = getPrToRfpMapping(rfqType || prType);
+    if (!mapping) return;
+
+    const rfpTemplateFields = {};
+    Object.entries(RFP_TEMPLATES[mapping.rfpType]?.fields || {}).forEach(([k, v]) => {
+      rfpTemplateFields[k] = { ...v };
+    });
+
+    // RFQ 값 중 매칭 가능한 것을 RFP에 복사
+    // 먼저 PR에서 온 공통필드(c→s) 매핑
+    if (prFields && Object.keys(prFields).length > 0) {
+      Object.entries(mapping.fieldMap).forEach(([prKey, rfpKey]) => {
+        if (prFields[prKey]?.value && rfpTemplateFields[rfpKey]) {
+          rfpTemplateFields[rfpKey] = { ...rfpTemplateFields[rfpKey], value: prFields[prKey].value };
+        }
+      });
+    }
+
+    setRfpType(mapping.rfpType);
+    setFields(rfpTemplateFields);
+    setPhase("filling");
+    setRightVisible(true);
+    setRfqRightVisible(false);
+
+    const rfpLabel = RFP_TEMPLATES[mapping.rfpType]?.label || "제안요청서";
+    setMessages(prev => [
+      ...prev,
+      { id: msgIdCounter++, role: "assistant", text: `견적서(RFQ) 내용을 기반으로 **${rfpLabel}** 제안요청서(RFP)를 준비했습니다.\n자동 매핑된 항목을 확인하시고, 추가 정보를 입력해 주세요.` }
+    ]);
+  };
 
   // ══ 오른쪽 패널: 추천 업체 (DB + 업무마켓9 통합) ══
   const [dbSuppliers, setDbSuppliers] = useState([]);
@@ -3004,6 +3266,47 @@ export default function ChatPage() {
           {phase === "filling" && PanelFilling()}
           {phase === "complete" && !sent && PanelComplete()}
           {phase === "complete" && sent && userRole !== "procurement" && PanelSuppliers()}
+        </div>
+      )}
+
+      {/* ══ RFQ 우측 패널 ══ */}
+      {(phase === "rfq_filling" || phase === "rfq_complete") && (
+        <div style={{
+          width: 420, flexShrink:0, background: T.card,
+          borderLeft:`1px solid ${T.border}`,
+          display:"flex", flexDirection:"column", position:"relative",
+          boxShadow: "-4px 0 20px rgba(0,0,0,0.03)",
+        }}>
+          {/* 헤더 */}
+          <div style={{
+            padding:"16px 22px", borderBottom:`1px solid ${T.border}`,
+            display:"flex", alignItems:"center", justifyContent:"space-between",
+            background: "linear-gradient(135deg, rgba(99,102,241,0.03), rgba(129,140,248,0.02))",
+          }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <div style={{
+                width:28, height:28, borderRadius:8,
+                background: "linear-gradient(135deg, #6366f1, #818cf8)",
+                display:"flex", alignItems:"center", justifyContent:"center",
+                fontSize:13, color:"#fff",
+              }}>📋</div>
+              <div>
+                <div style={{ fontSize:13, fontWeight:800, color: T.navy }}>견적요청서 (RFQ)</div>
+                <div style={{ fontSize:10, color: T.sub }}>{rfqTemplate?.name || ""}</div>
+              </div>
+            </div>
+            <button
+              onClick={() => setRfqRightVisible(false)}
+              style={{
+                width:28, height:28, borderRadius:8, border:"none",
+                background:"rgba(100,116,139,0.08)", cursor:"pointer",
+                display:"flex", alignItems:"center", justifyContent:"center",
+                fontSize:14, color: T.muted,
+              }}
+            >✕</button>
+          </div>
+          {phase === "rfq_filling" && RfqPanelFilling()}
+          {phase === "rfq_complete" && RfqPanelComplete()}
         </div>
       )}
 

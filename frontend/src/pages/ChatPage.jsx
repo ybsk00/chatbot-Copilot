@@ -1772,6 +1772,36 @@ export default function ChatPage() {
           </div>
         );
       })}
+
+      {/* 하단 버튼: 미리보기 | RFP 전환 | 저장 */}
+      <div style={{ marginTop:16, display:"flex", gap:8, padding:"0 2px" }}>
+        <button onClick={() => previewRfq(rfqFields, rfqSections, rfqTemplate?.name)} style={{
+          flex:1, padding:"12px", borderRadius: T.r10,
+          border:`1px solid #6366f1`, background: "rgba(99,102,241,0.04)",
+          color: "#6366f1", fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
+          display:"flex", alignItems:"center", justifyContent:"center", gap:5,
+        }}>
+          미리보기
+        </button>
+        <button onClick={convertRfqToRfp} style={{
+          flex:1, padding:"12px", borderRadius: T.r10,
+          border:"none", background: T.gradPrimary,
+          color:"#fff", fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
+          display:"flex", alignItems:"center", justifyContent:"center", gap:5,
+        }}>
+          RFP 전환
+        </button>
+        <button onClick={() => {
+          setMessages(prev => [...prev, { id: msgIdCounter++, role: "assistant", text: "견적요청서(RFQ)가 저장되었습니다." }]);
+        }} style={{
+          flex:1, padding:"12px", borderRadius: T.r10,
+          border:"none", background: "linear-gradient(135deg, #6366f1, #818cf8)",
+          color:"#fff", fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
+          display:"flex", alignItems:"center", justifyContent:"center", gap:5,
+        }}>
+          저장
+        </button>
+      </div>
       <div style={{ height:20 }} />
     </div>
   );

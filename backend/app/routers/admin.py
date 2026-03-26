@@ -438,6 +438,15 @@ async def delete_pr_template(template_id: int):
     return {"status": "deleted"}
 
 
+# ── RFQ 템플릿 CRUD ──
+
+@router.get("/rfq-templates")
+async def list_rfq_templates():
+    supabase = get_client()
+    result = supabase.table("rfq_templates").select("*").eq("is_active", True).order("id").execute()
+    return result.data or []
+
+
 # ── 차세대 분류체계 (taxonomy_v2) ──
 
 @router.get("/taxonomy-v2/tree")

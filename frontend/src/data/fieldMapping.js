@@ -458,3 +458,85 @@ export const PR_TO_RFP_MAPPING = {
     },
   },
 };
+
+// ── L3 개별키(L1101 등) → L2 그룹 매핑 (fallback) ──
+// L3 코드가 PR_TO_RFP_MAPPING에 없을 때 L2 그룹으로 폴백
+const L3_TO_L2_GROUP = {
+  // L01 사무·총무
+  L1101: "goods_purchase", L1102: "goods_purchase", L1103: "goods_purchase",
+  L1201: "print_production", L1301: "office_support", L1302: "office_support",
+  L1303: "office_support", L1401: "rental_lease",
+  // L02 인사·복리후생
+  L2101: "welfare_service", L2102: "welfare_service", L2103: "welfare_service",
+  L2104: "welfare_service", L2105: "welfare_service", L2106: "welfare_service",
+  L2107: "welfare_service",
+  L2201: "education_training", L2202: "education_training", L2203: "education_training",
+  L2301: "service_outsourcing", L2302: "service_outsourcing", L2401: "service_outsourcing",
+  // L03 시설·건물관리
+  L3101: "construction", L3102: "construction", L3103: "construction",
+  L3104: "construction", L3105: "consulting", L3106: "service_outsourcing",
+  L3201: "service_outsourcing", L3202: "service_outsourcing", L3203: "service_outsourcing",
+  L3204: "service_outsourcing", L3205: "service_outsourcing",
+  L3301: "rental_lease", L3302: "rental_lease", L3303: "goods_purchase",
+  L3304: "utility_energy",
+  // L04 차량·출장
+  L4101: "rental_lease", L4102: "service_outsourcing", L4201: "business_travel",
+  L4202: "business_travel", L4203: "business_travel",
+  // L05 보험
+  L5101: "insurance", L5102: "insurance", L5103: "insurance",
+  L5104: "insurance", L5105: "insurance", L5106: "insurance",
+  L5107: "insurance", L5108: "insurance",
+  // L06 전문용역·컨설팅
+  L6101: "consulting", L6201: "consulting", L6202: "consulting",
+  L6203: "consulting", L6301: "consulting", L6302: "service_outsourcing",
+  L6401: "service_outsourcing",
+  // L07 마케팅
+  L7101: "advertising_media", L7201: "advertising_media", L7203: "advertising_media",
+  L7204: "advertising_media", L7205: "advertising_media",
+  L7301: "print_production", L7302: "print_production", L7303: "advertising_media",
+  L7304: "print_production",
+  L7401: "event_exhibition", L7402: "event_exhibition", L7403: "event_exhibition",
+  L7404: "event_exhibition",
+  L7501: "goods_purchase", L7502: "service_outsourcing", L7503: "goods_purchase",
+  L7504: "print_production", L7505: "print_production",
+  L7601: "service_outsourcing", L7701: "consulting", L7702: "it_software_cloud",
+  // L08 IT/ICT
+  L8101: "it_hardware", L8102: "it_hardware", L8201: "it_hardware", L8202: "it_hardware",
+  L8301: "it_hardware", L8302: "it_hardware",
+  L8401: "it_software_cloud", L8402: "it_software_cloud", L8403: "it_software_cloud",
+  L8404: "it_software_cloud", L8405: "it_software_cloud",
+  L8501: "it_software_cloud", L8502: "it_development", L8503: "it_software_cloud",
+  L8504: "it_development", L8505: "it_development",
+  L8701: "it_hardware", L8702: "it_hardware", L8703: "it_hardware",
+  // L09 물류
+  L9101: "logistics_transport", L9102: "logistics_transport", L9103: "logistics_transport",
+  L9104: "logistics_transport", L9201: "logistics_transport", L9202: "logistics_transport",
+  L9203: "logistics_transport", L9301: "logistics_transport", L9302: "logistics_transport",
+  L9303: "logistics_transport",
+  L9401: "logistics_warehouse", L9402: "logistics_warehouse", L9403: "logistics_warehouse",
+  L9404: "logistics_warehouse",
+  // L10 생산관리
+  M1001: "production_safety", M1002: "production_safety", M1003: "production_safety",
+  M1004: "production_safety", M1005: "production_safety", M1006: "production_safety",
+  M1007: "production_safety", M1008: "production_safety", M1009: "production_safety",
+  M1010: "production_safety",
+  // L11 연구개발
+  R2001: "rd_service", R2002: "rd_service", R2003: "rd_service",
+  R2601: "certification_test",
+  R2701: "rd_service", R2702: "rd_service", R2703: "rd_service",
+  R2801: "rd_service", R2802: "rd_service", R2803: "rd_service",
+  R2804: "rd_service", R2805: "rd_service", R2806: "rd_service",
+  R2901: "certification_test", R2902: "certification_test", R2903: "certification_test",
+  R3001: "certification_test", R3002: "certification_test", R3003: "certification_test",
+};
+
+/**
+ * L3 개별키 또는 기존 그룹키 → PR_TO_RFP_MAPPING 조회
+ * L3키가 직접 있으면 사용, 없으면 L2 그룹으로 폴백
+ */
+export function getPrToRfpMapping(prTypeKey) {
+  if (PR_TO_RFP_MAPPING[prTypeKey]) return PR_TO_RFP_MAPPING[prTypeKey];
+  const l2Group = L3_TO_L2_GROUP[prTypeKey];
+  if (l2Group && PR_TO_RFP_MAPPING[l2Group]) return PR_TO_RFP_MAPPING[l2Group];
+  return PR_TO_RFP_MAPPING._generic || { rfpType: "service_contract", fieldMap: { ...COMMON_MAP_BY_RFP.service_contract } };
+}

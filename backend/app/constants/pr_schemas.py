@@ -447,6 +447,69 @@ TAXONOMY_TO_PR = {
 }
 
 
+# ── DB-first PR 스키마 로딩 (139개 L3 템플릿) ──────────────────
+def load_pr_schemas_from_db():
+    """pr_templates 테이블에서 139개 L3 템플릿을 PR_SCHEMAS에 로드"""
+    try:
+        from app.db.supabase_client import get_client
+        sb = get_client()
+        rows = sb.table("pr_templates").select("*").eq("is_active", True).execute().data
+        if not rows:
+            return 0
+
+        loaded = 0
+        for row in rows:
+            key = row["type_key"]
+            fields_json = row.get("fields", {})
+            sections_json = row.get("sections", [])
+
+            # fields → "key:label, ..." 문자열
+            fields_str = ", ".join(f"{k}:{v['label']}" for k, v in fields_json.items())
+
+            # required → "key1,key2,..." 문자열
+            required_str = ",".join(k for k, v in fields_json.items() if v.get("required"))
+
+            # sections → 사람 읽기용 문자열
+            sections_parts = []
+            for s in sections_json:
+                field_labels = []
+                for fk in s.get("fields", []):
+                    if fk in fields_json:
+                        field_labels.append(fields_json[fk]["label"])
+                sections_parts.append(f"{s['title']} ({', '.join(field_labels)})")
+            sections_str = "\n".join(sections_parts)
+
+            # sections_detail → "섹션명:f1,f2|..." 문자열
+            detail_parts = []
+            for s in sections_json:
+                title = s["title"].split(". ", 1)[-1] if ". " in s["title"] else s["title"]
+                detail_parts.append(f"{title}:{','.join(s.get('fields', []))}")
+            sections_detail_str = "|".join(detail_parts)
+
+            PR_SCHEMAS[key] = {
+                "label": row.get("name", key),
+                "category": row.get("description", ""),
+                "fields": fields_str,
+                "required": required_str,
+                "sections": sections_str,
+                "sections_detail": sections_detail_str,
+            }
+            loaded += 1
+
+        return loaded
+    except Exception as e:
+        print(f"[PR_SCHEMAS] DB 로드 실패, 하드코딩 fallback 사용: {e}")
+        return 0
+
+
+# 서버 시작 시 자동 로드
+_db_loaded = load_pr_schemas_from_db()
+if _db_loaded:
+    print(f"[PR_SCHEMAS] DB에서 {_db_loaded}개 PR 템플릿 로드 완료")
+else:
+    print(f"[PR_SCHEMAS] DB 로드 실패, 하드코딩 {len(PR_SCHEMAS)}개 사용")
+
+
 PR_PHASE_PROMPT = """사용자 메시지에서 구매요청서 필드 값을 추출하여 JSON만 반환하세요. 설명 없이 JSON만.
 
 ## 전체 필드 목록

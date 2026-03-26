@@ -85,6 +85,9 @@ class ChatRequest(BaseModel):
     pr_type: str | None = None           # PR 카테고리 키
     pr_filled_fields: dict = {}          # PR 채워진 필드
     role_turn_count: int = 0             # 역할 감지 턴 카운터
+    # RFQ (견적서) 관련
+    rfq_type: str | None = None          # RFQ 카테고리 키
+    rfq_filled_fields: dict = {}         # RFQ 채워진 필드
 
 
 # ──────────────────────────────────────────────
@@ -135,9 +138,15 @@ async def chat_stream(req: ChatRequest):
 
 @router.post("")
 async def chat(req: ChatRequest):
-    # PR phase인 경우 pr_filled_fields 사용
+    # Phase별 filled_fields 선택
     is_pr_phase = req.phase.startswith("pr_")
-    filled = req.pr_filled_fields if is_pr_phase else req.filled_fields
+    is_rfq_phase = req.phase.startswith("rfq_")
+    if is_pr_phase:
+        filled = req.pr_filled_fields
+    elif is_rfq_phase:
+        filled = req.rfq_filled_fields
+    else:
+        filled = req.filled_fields
 
     ctx = AgentContext(
         session_id=req.session_id,
@@ -150,13 +159,16 @@ async def chat(req: ChatRequest):
         user_role=req.user_role,
         role_turn_count=req.role_turn_count,
         pr_type=req.pr_type,
+        rfq_type=req.rfq_type,
     )
 
     orchestrator = _get_orchestrator()
 
-    # PR filling phase → execute_sync_pr 호출
+    # Phase별 라우팅
     if is_pr_phase:
         result = await orchestrator.execute_sync_pr(ctx)
+    elif is_rfq_phase:
+        result = await orchestrator.execute_sync_rfq(ctx)
     else:
         result = await orchestrator.execute_sync(ctx)
 
@@ -184,6 +196,23 @@ async def chat(req: ChatRequest):
         except Exception as e:
             logger.error(f"[PR] Failed to save pr_request: {e}")
             result["pr_saved"] = False
+
+    # RFQ 완료 시 rfq_requests 테이블에 저장
+    if result.get("phase_trigger") == "rfq_complete" and req.rfq_filled_fields:
+        try:
+            supabase = get_client()
+            rfq_result = supabase.table("rfq_requests").insert({
+                "conversation_id": req.session_id,
+                "rfq_type": req.rfq_type or "_generic",
+                "fields": req.rfq_filled_fields,
+                "status": "draft",
+            }).execute()
+            result["rfq_saved"] = True
+            if rfq_result.data:
+                result["rfq_request_id"] = rfq_result.data[0].get("id")
+            logger.info(f"[RFQ] Saved rfq_request for session {req.session_id}")
+        except Exception as e:
+            logger.error(f"[RFQ] Failed to save rfq_request: {e}")
 
     # RFP 완료 시 rfp_requests 테이블에 저장
     if result.get("phase_trigger") == "complete" and req.filled_fields:

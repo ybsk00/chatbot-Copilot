@@ -257,17 +257,26 @@ def _get_rfp_type(major: str, middle: str | None = None, question: str = "") -> 
     return base_type
 
 
-def _get_pr_template_key(major: str, middle: str | None = None) -> str:
-    """분류 결과 → PR 템플릿 그룹 키 반환"""
+def _get_pr_template_key(major: str, middle: str | None = None, l3_code: str | None = None) -> str:
+    """분류 결과 → PR 템플릿 키 반환 (L3 개별키 우선)"""
     cache = _load_taxonomy()
 
+    # 1순위: L3 코드로 직접 매칭 (139개 개별 템플릿)
+    if l3_code and l3_code in cache.get("l3_map", {}):
+        l3_info = cache["l3_map"][l3_code]
+        l3_name = l3_info.get("name", "")
+        # L3 이름에서 prefix 추출 시도 (taxonomy_v2에 pr_template_key가 있으면 사용)
+        if l3_info.get("pr_template_key") and l3_info["pr_template_key"] != "_generic":
+            return l3_info["pr_template_key"]
+
+    # 2순위: L2 이름 매칭 (기존 로직, fallback)
     if middle:
         clean_middle = middle.split("(")[0].strip() if "(" in middle else middle
         for l2_code, l2_info in cache["l2_map"].items():
             if l2_info["name"] == clean_middle or clean_middle in l2_info["name"]:
                 return l2_info.get("pr_template_key", "_generic")
 
-    # L1 이름으로 첫 L2의 pr_template_key
+    # 3순위: L1 이름으로 첫 L2의 pr_template_key
     for l1_code, l1_name in cache["l1_map"].items():
         if l1_name == major:
             for l2_code, l2_info in cache["l2_map"].items():
@@ -275,6 +284,17 @@ def _get_pr_template_key(major: str, middle: str | None = None) -> str:
                     return l2_info.get("pr_template_key", "_generic")
 
     return "_generic"
+
+
+def _get_rfq_template_key(pr_template_key: str) -> str | None:
+    """PR 템플릿 키에 대응하는 RFQ 템플릿이 있는지 확인"""
+    try:
+        from app.constants.rfq_schemas import RFQ_SCHEMAS
+        if pr_template_key in RFQ_SCHEMAS:
+            return pr_template_key
+    except ImportError:
+        pass
+    return None
 
 
 # ── CTA 키워드 사전감지 (LLM 결과 보정용) ──
@@ -423,9 +443,12 @@ def classify_intent(question: str, history: list[dict] | None = None) -> dict | 
             cta = "warm"
 
         rfp_type = _get_rfp_type(major, middle, question)
-        pr_template_key = _get_pr_template_key(major, middle)
 
-        # 키워드 사전매칭에서 L3 코드가 있으면 포함
+        # L3 코드 결정
+        l3_code = pre_match["l3_code"] if pre_match and pre_match["l1_name"] == major else None
+        pr_template_key = _get_pr_template_key(major, middle, l3_code)
+        rfq_template_key = _get_rfq_template_key(pr_template_key)
+
         out = {
             "대분류": major,
             "중분류": middle,
@@ -433,9 +456,11 @@ def classify_intent(question: str, history: list[dict] | None = None) -> dict | 
             "cta": cta,
             "pr_template_key": pr_template_key,
         }
-        if pre_match and pre_match["l1_name"] == major:
-            out["l3_code"] = pre_match["l3_code"]
+        if l3_code:
+            out["l3_code"] = l3_code
             out["l3_name"] = pre_match["l3_name"]
+        if rfq_template_key:
+            out["rfq_template_key"] = rfq_template_key
 
         return out
 

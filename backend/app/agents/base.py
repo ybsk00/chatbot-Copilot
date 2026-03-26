@@ -56,6 +56,10 @@ class AgentContext:
     pr_type: str | None = None         # 구매요청서 카테고리 키
     pr_fields: dict = field(default_factory=dict)  # 추출된 PR 필드
 
+    # ── RFQ (견적서) ──
+    rfq_type: str | None = None        # 견적서 카테고리 키
+    rfq_fields: dict = field(default_factory=dict)  # 추출된 RFQ 필드
+
     # ── 출력 ──
     answer: str = ""
     suggestions: list[str] = field(default_factory=list)

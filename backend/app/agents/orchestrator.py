@@ -15,11 +15,13 @@ from app.agents.generation import GenerationAgent
 from app.agents.suggestion import SuggestionAgent
 from app.agents.rfp import RfpAgent
 from app.agents.pr import PrAgent
+from app.agents.rfq import RfqAgent
 from app.agents.role_detector import RoleDetectorAgent
 from app.agents.script import ScriptAgent
 from app.config import RFP_AGREE_KEYWORDS, PR_AGREE_KEYWORDS, CONFIDENCE_THRESHOLD
 from app.constants.rfp_schemas import RFP_SCHEMAS
 from app.constants.pr_schemas import PR_SCHEMAS
+from app.constants.rfq_schemas import RFQ_SCHEMAS
 from app.rag.classifier import TAXONOMY
 
 logger = logging.getLogger(__name__)
@@ -85,6 +87,7 @@ class OrchestratorAgent(AgentBase):
         self.suggestion = SuggestionAgent()
         self.rfp = RfpAgent()
         self.pr = PrAgent()
+        self.rfq = RfqAgent()
         self.role_detector = RoleDetectorAgent()
         self.script = ScriptAgent()
 
@@ -704,6 +707,90 @@ class OrchestratorAgent(AgentBase):
             "rag_score": round(ctx.rag_score, 4),
             "phase_trigger": trigger,
             "pr_fields": ctx.pr_fields.get("pr_fields", {}),
+            "classification": ctx.classification,
+        }
+
+    async def execute_sync_rfq(self, ctx: AgentContext) -> dict:
+        """동기 실행 (rfq_filling phase용) — 견적서 필드 추출.
+        execute_sync_pr과 동일 패턴, RFQ 에이전트 사용.
+        """
+        total_start = time.time()
+
+        # ── GATE 1: 헌법 사전검사 ──
+        await self.constitution.pre_check(ctx, self._critical_pool)
+        if ctx.violation:
+            return {
+                "answer": ctx.violation, "sources": [], "rag_score": 0,
+                "phase_trigger": None, "rfq_fields": {}, "classification": None,
+            }
+
+        # ── PHASE 1+2: 의도 감지 + RFQ 추출 병렬 ──
+        await asyncio.gather(
+            self.classification.detect_filling_intent(ctx, self._critical_pool),
+            self.rfq.extract_fields(ctx, self._critical_pool),
+        )
+
+        # ── question일 때만 Retrieval ──
+        if ctx.filling_intent in ("question", "rfp_question"):
+            await self.retrieval.execute(ctx, self._critical_pool)
+
+        # ── PHASE 3: 필드 머지 + 완성 여부 ──
+        trigger = None
+        if ctx.phase == "rfq_filling":
+            new_fields = ctx.rfq_fields.get("rfq_fields", {})
+            schema = RFQ_SCHEMAS.get(ctx.rfq_type, RFQ_SCHEMAS["_generic"])
+
+            if new_fields:
+                already_filled = set(k for k, v in ctx.filled_fields.items() if v)
+                all_field_keys = [
+                    p.split(":")[0].strip()
+                    for p in schema["fields"].split(", ")
+                    if ":" in p
+                ]
+                safe_fields = {}
+                for k, v in new_fields.items():
+                    if not v:
+                        continue
+                    idx = all_field_keys.index(k) if k in all_field_keys else -1
+                    if idx >= 0:
+                        preceding_empty = sum(
+                            1 for pk in all_field_keys[:idx]
+                            if pk not in already_filled and pk not in new_fields
+                        )
+                        if preceding_empty >= 3:
+                            logger.warning(
+                                f"[Orchestrator:RFQ] Skipping hallucinated field {k}={v}"
+                            )
+                            continue
+                    safe_fields[k] = v
+
+                for k, v in safe_fields.items():
+                    ctx.filled_fields[k] = v
+                ctx.rfq_fields["rfq_fields"] = safe_fields
+
+            required_keys = set(k.strip() for k in schema["required"].split(","))
+            all_filled = set(k for k, v in ctx.filled_fields.items() if v)
+            if required_keys.issubset(all_filled):
+                trigger = "rfq_complete"
+                ctx.phase = "rfq_complete"
+
+        # ── PHASE 4: 답변 생성 ──
+        if ctx.filling_intent in ("question", "rfp_question") and ctx.query_embedding:
+            await self.constitution.inject_rules(ctx, self._background_pool)
+
+        await self.generation.execute(ctx, self._critical_pool)
+
+        total_ms = (time.time() - total_start) * 1000
+        logger.info(
+            f"[Orchestrator:rfq_filling] Total: {total_ms:.0f}ms"
+        )
+
+        return {
+            "answer": ctx.answer,
+            "sources": ctx.sources,
+            "rag_score": round(ctx.rag_score, 4),
+            "phase_trigger": trigger,
+            "rfq_fields": ctx.rfq_fields.get("rfq_fields", {}),
             "classification": ctx.classification,
         }
 

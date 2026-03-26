@@ -1,7 +1,7 @@
 const API_URL = import.meta.env.VITE_API_URL || "https://ip-assist-backend-1058034030780.asia-northeast3.run.app";
 
 export const api = {
-  async chat(sessionId, message, category, history = [], phase = "chat", filledFields = {}, rfpType = "service_contract", prType = null, prFilledFields = {}, userRole = null, roleTurnCount = 0) {
+  async chat(sessionId, message, category, history = [], phase = "chat", filledFields = {}, rfpType = "service_contract", prType = null, prFilledFields = {}, userRole = null, roleTurnCount = 0, rfqType = null, rfqFilledFields = {}) {
     const res = await fetch(`${API_URL}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json; charset=utf-8" },
@@ -10,6 +10,7 @@ export const api = {
         phase, filled_fields: filledFields, rfp_type: rfpType,
         pr_type: prType, pr_filled_fields: prFilledFields,
         user_role: userRole, role_turn_count: roleTurnCount,
+        rfq_type: rfqType, rfq_filled_fields: rfqFilledFields,
       }),
     });
     return res.json();
@@ -245,6 +246,12 @@ export const api = {
   // ── PR 양식 관리 ──
   async getPrTemplates() {
     const res = await fetch(`${API_URL}/admin/pr-templates`);
+    return res.json();
+  },
+
+  // ── RFQ 양식 관리 ──
+  async getRfqTemplates() {
+    const res = await fetch(`${API_URL}/admin/rfq-templates`);
     return res.json();
   },
 

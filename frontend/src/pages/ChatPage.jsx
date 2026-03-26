@@ -4,7 +4,7 @@ import { T } from "../styles/tokens";
 import { RFP_TEMPLATES } from "../data/rfpTemplates";
 import { PR_TEMPLATES, PR_CATEGORIES } from "../data/prTemplates";
 import { COMMON_SECTIONS } from "../data/commonFields";
-import { PR_TO_RFP_MAPPING } from "../data/fieldMapping";
+import { PR_TO_RFP_MAPPING, getPrToRfpMapping } from "../data/fieldMapping";
 import { downloadRfpPdf } from "../utils/rfpExport";
 import { downloadPrPdf } from "../utils/prExport";
 // BackgroundBlobs 제거 — 업무마켓9 임베드 시 외부 배경 불필요
@@ -255,6 +255,12 @@ export default function ChatPage() {
   const [uploadedPrSuppliers, setUploadedPrSuppliers] = useState([]);  // PDF에서 추출된 공급업체
   const [prSupplierLoading, setPrSupplierLoading] = useState(false);
   const [dbPrTemplates, setDbPrTemplates] = useState(null); // DB에서 로드된 PR 템플릿
+  // RFQ (견적서) state
+  const [rfqType, setRfqType]               = useState(null);
+  const [rfqFields, setRfqFields]           = useState({});
+  const [rfqRightVisible, setRfqRightVisible] = useState(false);
+  const [rfqRequestId, setRfqRequestId]     = useState(null);
+  const [dbRfqTemplates, setDbRfqTemplates] = useState(null);
   const msgEndRef  = useRef(null);
   const chatScrollRef = useRef(null);
   const fieldRefs  = useRef({});
@@ -303,10 +309,20 @@ export default function ChatPage() {
   // DB에서 PR 템플릿 로드
   useEffect(() => {
     api.getPrTemplates().then(res => {
-      if (res.templates && res.templates.length > 0) {
+      const arr = Array.isArray(res) ? res : (res.templates || []);
+      if (arr.length > 0) {
         const map = {};
-        res.templates.forEach(t => { map[t.type_key] = t; });
+        arr.forEach(t => { map[t.type_key] = t; });
         setDbPrTemplates(map);
+      }
+    }).catch(() => {});
+    // RFQ 템플릿도 로드
+    api.getRfqTemplates().then(res => {
+      const arr = Array.isArray(res) ? res : [];
+      if (arr.length > 0) {
+        const map = {};
+        arr.forEach(t => { map[t.type_key] = t; });
+        setDbRfqTemplates(map);
       }
     }).catch(() => {});
   }, []);
@@ -333,8 +349,13 @@ export default function ChatPage() {
       setPrSupplierLoading(true);
       // PR 카테고리 → L1 대분류 역매핑 (suppliers.category = L1 이름)
       let dbCat = "";
-      for (const [cat, keys] of Object.entries(PR_CATEGORIES)) {
-        if (keys.includes(prType)) { dbCat = cat; break; }
+      const tpl = getPrTemplate(prType);
+      if (tpl?.category_group) {
+        dbCat = tpl.category_group;
+      } else {
+        for (const [cat, keys] of Object.entries(PR_CATEGORIES)) {
+          if (keys.includes(prType)) { dbCat = cat; break; }
+        }
       }
       const schema = getPrTemplate(prType);
       // PR 필드에서 키워드 추출
@@ -433,7 +454,7 @@ export default function ChatPage() {
 
   // ── PR → RFP 전환 ──
   const convertPrToRfp = () => {
-    const mapping = PR_TO_RFP_MAPPING[prType];
+    const mapping = getPrToRfpMapping(prType);
     if (!mapping) return;
 
     const rfpTemplateFields = {};
@@ -458,6 +479,36 @@ export default function ChatPage() {
     setMessages(prev => [
       ...prev,
       { id: msgIdCounter++, role: "assistant", text: `구매요청서 내용을 기반으로 ${rfpLabel} 제안요청서(RFP)를 준비했습니다.\n자동 매핑된 항목을 확인하시고, 추가 정보를 입력해 주세요.` }
+    ]);
+  };
+
+  // ── PR → RFQ 전환 ──
+  const convertPrToRfq = () => {
+    // RFQ 템플릿 확인 (같은 L3 코드로)
+    const rfqTpl = dbRfqTemplates?.[prType];
+    if (!rfqTpl) {
+      setMessages(prev => [
+        ...prev,
+        { id: msgIdCounter++, role: "assistant", text: "이 품목은 아직 견적서(RFQ) 양식이 준비되지 않았습니다.\n현재 L01(사무·총무), L02(인사·복리후생), L03(시설·건물관리) 카테고리만 지원됩니다." }
+      ]);
+      return;
+    }
+
+    // RFQ 필드 초기화
+    const rfqTemplateFields = {};
+    Object.entries(rfqTpl.fields).forEach(([k, v]) => {
+      rfqTemplateFields[k] = { ...v };
+    });
+
+    setRfqType(prType);
+    setRfqFields(rfqTemplateFields);
+    setPhase("rfq_filling");
+    setRfqRightVisible(true);
+    setPrRightVisible(false);
+
+    setMessages(prev => [
+      ...prev,
+      { id: msgIdCounter++, role: "assistant", text: `구매요청서 내용을 기반으로 **${rfqTpl.name}** 견적서(RFQ)를 준비했습니다.\n소싱담당자 필수 항목을 채워주세요. 채팅으로 입력하시면 자동 매핑됩니다.` }
     ]);
   };
 
@@ -592,6 +643,28 @@ export default function ChatPage() {
           if (data.pr_request_id) setPrRequestId(data.pr_request_id);
           setTimeout(() => setPhase("pr_complete"), 800);
           setPrRightVisible(true);
+        }
+      } else if (phase === "rfq_filling") {
+        // RFQ 필드 추출
+        const rfqFilled = {};
+        Object.entries(rfqFields).forEach(([k, v]) => { if ((v.value || "").trim()) rfqFilled[k] = v.value; });
+        const data = await api.chat(sessionId, text, null, history, phase, {}, rfpType, prType, {}, userRole, roleTurnCount, rfqType, rfqFilled);
+        if (data.rfq_fields && Object.keys(data.rfq_fields).length > 0) {
+          setRfqFields(prev => {
+            const updated = { ...prev };
+            Object.entries(data.rfq_fields).forEach(([k, v]) => {
+              if (updated[k] && v) updated[k] = { ...updated[k], value: v };
+            });
+            return updated;
+          });
+        }
+        setMessages(prev => [...prev, {
+          id: msgIdCounter++, role: "assistant",
+          text: data.answer, sources: data.sources,
+        }]);
+        if (data.phase_trigger === "rfq_complete") {
+          if (data.rfq_request_id) setRfqRequestId(data.rfq_request_id);
+          setTimeout(() => setPhase("rfq_complete"), 800);
         }
       } else if (phase === "filling") {
         const data = await api.chat(sessionId, text, null, history, phase, getFilledFields(), rfpType);
@@ -805,9 +878,21 @@ export default function ChatPage() {
     "연구개발":        { emoji: "🔬", color: "#A855F7", bg: "#FAF5FF" },
   };
 
-  const renderPrTypeSelector = () => (
+  const renderPrTypeSelector = () => {
+    // DB 템플릿이 있으면 category_group별로 그루핑
+    let categories = PR_CATEGORIES;
+    if (dbPrTemplates && Object.keys(dbPrTemplates).length > 30) {
+      const grouped = {};
+      Object.entries(dbPrTemplates).forEach(([key, tpl]) => {
+        const group = tpl.category_group || "기타";
+        if (!grouped[group]) grouped[group] = [];
+        grouped[group].push(key);
+      });
+      categories = grouped;
+    }
+    return (
     <div style={{ marginTop:12, position:"relative", zIndex:2 }}>
-      {Object.entries(PR_CATEGORIES).map(([category, keys]) => {
+      {Object.entries(categories).map(([category, keys]) => {
         const catCfg = PR_CATEGORY_ICONS[category] || { emoji: "📦", color: T.primary, bg: T.primaryLight };
         return (
           <div key={category} style={{ marginBottom:12 }}>
@@ -848,7 +933,7 @@ export default function ChatPage() {
         );
       })}
     </div>
-  );
+  ); };
 
   // ── PR 필드별 선택 옵션 생성 (퀵필 카드 + 패널 모두 사용) ──
   const getPrFieldOptions = (key, f) => {
@@ -2614,7 +2699,7 @@ export default function ChatPage() {
                     </button>
                   </div>
                 ) : (
-                  /* 저장 후: 미리보기 | PDF 다운로드 | RFP 전환 */
+                  /* 저장 후: 미리보기 | RFP 전환 | RFQ 전환 */
                   <div style={{ marginTop:16, display:"flex", gap:8 }}>
                     <button onClick={previewPr} style={{
                       flex:1, padding:"14px", borderRadius: T.r10,
@@ -2627,22 +2712,6 @@ export default function ChatPage() {
                     >
                       <IconPreview size={14} /> 미리보기
                     </button>
-                    <button onClick={() => {
-                      if (currentPrTemplate) {
-                        const supplierNames = selectedPrSuppliers.map(s => s.name).join(", ");
-                        downloadPrPdf(prFields, currentPrSections, currentPrTemplate.label, supplierNames);
-                      }
-                    }} style={{
-                      flex:1, padding:"14px", borderRadius: T.r10,
-                      border:`1px solid ${T.border}`, background: T.card,
-                      color: T.sub, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
-                      display:"flex", alignItems:"center", justifyContent:"center", gap:6, transition:"all 0.2s",
-                    }}
-                      onMouseEnter={e => { e.currentTarget.style.background = T.bgSubtle; e.currentTarget.style.borderColor = T.primary; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = T.card; e.currentTarget.style.borderColor = T.border; }}
-                    >
-                      <IconDownload size={14} /> PDF 다운로드
-                    </button>
                     <button onClick={convertPrToRfp} style={{
                       flex:1, padding:"14px", borderRadius: T.r10,
                       border:"none", background: T.gradPrimary,
@@ -2654,6 +2723,18 @@ export default function ChatPage() {
                       onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
                     >
                       <IconSendMail size={13} /> RFP 전환
+                    </button>
+                    <button onClick={convertPrToRfq} style={{
+                      flex:1, padding:"14px", borderRadius: T.r10,
+                      border:"none", background: "linear-gradient(135deg, #6366f1, #818cf8)",
+                      color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
+                      display:"flex", alignItems:"center", justifyContent:"center", gap:6, transition:"all 0.3s",
+                      boxShadow: "0 2px 8px rgba(99,102,241,0.3)",
+                    }}
+                      onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.02)"; }}
+                      onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
+                    >
+                      <IconDownload size={13} /> RFQ 전환
                     </button>
                   </div>
                 )}

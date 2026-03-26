@@ -879,60 +879,121 @@ export default function ChatPage() {
     "연구개발":        { emoji: "🔬", color: "#A855F7", bg: "#FAF5FF" },
   };
 
+  const [prSearchTerm, setPrSearchTerm] = useState("");
+  const [prOpenL1, setPrOpenL1] = useState({});
+
   const renderPrTypeSelector = () => {
     // DB 템플릿이 있으면 category_group별로 그루핑
     let categories = PR_CATEGORIES;
     if (dbPrTemplates && Object.keys(dbPrTemplates).length > 30) {
       const grouped = {};
       Object.entries(dbPrTemplates).forEach(([key, tpl]) => {
+        if (key === "_generic") return;
         const group = tpl.category_group || "기타";
         if (!grouped[group]) grouped[group] = [];
         grouped[group].push(key);
       });
       categories = grouped;
     }
+
+    // 검색 필터
+    const term = prSearchTerm.trim().toLowerCase();
+    const filteredCategories = {};
+    Object.entries(categories).forEach(([cat, keys]) => {
+      const filtered = keys.filter(key => {
+        if (!term) return true;
+        const tmpl = getPrTemplate(key);
+        const name = (tmpl?.label || tmpl?.name || key).toLowerCase();
+        return name.includes(term) || cat.toLowerCase().includes(term);
+      });
+      if (filtered.length > 0) filteredCategories[cat] = filtered;
+    });
+
     return (
     <div style={{ marginTop:12, position:"relative", zIndex:2 }}>
-      {Object.entries(categories).map(([category, keys]) => {
+      {/* 검색창 */}
+      <div style={{ marginBottom:12 }}>
+        <input
+          value={prSearchTerm}
+          onChange={e => setPrSearchTerm(e.target.value)}
+          placeholder="품목명 검색 (예: 정수기, 서버, 보험...)"
+          style={{
+            width:"100%", padding:"10px 14px", fontSize:12, borderRadius: T.r10,
+            border:`1.5px solid ${T.border}`, outline:"none", fontFamily:"inherit",
+            background:"#fff", boxSizing:"border-box", transition:"border 0.2s",
+          }}
+          onFocus={e => e.target.style.borderColor = T.primary}
+          onBlur={e => e.target.style.borderColor = T.border}
+        />
+      </div>
+
+      {/* L1 아코디언 (접힘 기본, 검색 시 자동 펼침) */}
+      {Object.entries(filteredCategories).map(([category, keys]) => {
         const catCfg = PR_CATEGORY_ICONS[category] || { emoji: "📦", color: T.primary, bg: T.primaryLight };
+        const isOpen = term ? true : prOpenL1[category];
         return (
-          <div key={category} style={{ marginBottom:12 }}>
-            <div style={{ fontSize:11, fontWeight:700, color: catCfg.color, marginBottom:6, display:"flex", alignItems:"center", gap:4 }}>
+          <div key={category} style={{ marginBottom:8 }}>
+            <div
+              onClick={() => setPrOpenL1(p => ({...p, [category]: !p[category]}))}
+              style={{
+                fontSize:12, fontWeight:700, color: catCfg.color, padding:"8px 10px",
+                display:"flex", alignItems:"center", gap:6, cursor:"pointer",
+                background: catCfg.bg, borderRadius: isOpen ? `${T.r10}px ${T.r10}px 0 0` : T.r10,
+                border:`1px solid ${catCfg.color}20`, transition:"all 0.2s",
+              }}
+            >
+              <span style={{ fontSize:10, transform: isOpen ? "rotate(90deg)" : "rotate(0)", transition:"0.2s" }}>▶</span>
               <span>{catCfg.emoji}</span> {category}
+              <span style={{ fontSize:10, color: T.sub, marginLeft:"auto" }}>{keys.length}개</span>
             </div>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>
-              {keys.map(key => {
-                const tmpl = getPrTemplate(key);
-                if (!tmpl) return null;
-                return (
-                  <button
-                    key={key}
-                    onPointerDown={(e) => { e.stopPropagation(); handlePrTypeSelect(key); }}
-                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
-                    style={{
-                      padding:"10px 8px", borderRadius: T.r10,
-                      border:`1.5px solid ${T.border}`, background: T.card,
-                      cursor:"pointer", fontFamily:"inherit", textAlign:"center",
-                      transition:"all 0.15s", fontSize:11, fontWeight:600, color: T.text,
-                      position:"relative", zIndex:3,
-                    }}
-                    onMouseEnter={e => {
-                      e.currentTarget.style.borderColor = catCfg.color;
-                      e.currentTarget.style.background = catCfg.bg;
-                    }}
-                    onMouseLeave={e => {
-                      e.currentTarget.style.borderColor = T.border;
-                      e.currentTarget.style.background = T.card;
-                    }}
-                  >
-                    {tmpl.label || tmpl.name}
-                  </button>
-                );
-              })}
-            </div>
+            {isOpen && (
+              <div style={{
+                display:"grid", gridTemplateColumns:"1fr 1fr", gap:4, padding:6,
+                border:`1px solid ${catCfg.color}15`, borderTop:"none",
+                borderRadius:`0 0 ${T.r10}px ${T.r10}px`, background:"#fff",
+              }}>
+                {keys.map(key => {
+                  const tmpl = getPrTemplate(key);
+                  if (!tmpl) return null;
+                  return (
+                    <button
+                      key={key}
+                      onPointerDown={(e) => { e.stopPropagation(); handlePrTypeSelect(key); }}
+                      onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                      style={{
+                        padding:"8px 6px", borderRadius: 8,
+                        border:`1px solid ${T.border}`, background: T.card,
+                        cursor:"pointer", fontFamily:"inherit", textAlign:"left",
+                        transition:"all 0.15s", fontSize:11, fontWeight:500, color: T.text,
+                        position:"relative", zIndex:3, overflow:"hidden", textOverflow:"ellipsis",
+                        whiteSpace:"nowrap",
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.borderColor = catCfg.color;
+                        e.currentTarget.style.background = catCfg.bg;
+                        e.currentTarget.style.fontWeight = "700";
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.borderColor = T.border;
+                        e.currentTarget.style.background = T.card;
+                        e.currentTarget.style.fontWeight = "500";
+                      }}
+                      title={tmpl.label || tmpl.name}
+                    >
+                      {tmpl.label || tmpl.name}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         );
       })}
+      {Object.keys(filteredCategories).length === 0 && (
+        <div style={{ padding:16, textAlign:"center", color: T.sub, fontSize:12 }}>
+          "{prSearchTerm}" 검색 결과가 없습니다.
+        </div>
+      )}
     </div>
   ); };
 

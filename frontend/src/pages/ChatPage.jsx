@@ -2358,23 +2358,23 @@ export default function ChatPage() {
                   </div>
                 )}
 
-                {/* 분류 결과 (내부 필드 cta, rfp_type 숨김) */}
-                {msg.classification && (
+                {/* 분류 결과 — 대분류·중분류만 간결 표시 */}
+                {msg.classification && msg.classification["대분류"] && (
                   <div style={{
-                    background: 'rgba(14,165,160,0.05)',
-                    borderLeft: `3px solid ${T.primary}`,
-                    borderRadius: `2px ${T.r12}px ${T.r12}px 2px`,
-                    padding:"12px 16px",
-                    backdropFilter: "blur(6px)",
-                    WebkitBackdropFilter: "blur(6px)",
+                    display:"flex", gap:6, flexWrap:"wrap", marginBottom:2,
                   }}>
-                    <div style={{ fontSize:10, fontWeight:700, color: T.primary, marginBottom:8, display:"flex", alignItems:"center", gap:4 }}><IconSearch size={12} /> 분류 결과</div>
-                    {Object.entries(msg.classification).filter(([k]) => !["cta","rfp_type"].includes(k)).map(([k,v]) => (
-                      <div key={k} style={{ fontSize:11, display:"flex", gap:8, lineHeight:1.9 }}>
-                        <span style={{ color: T.muted, width:56, flexShrink:0 }}>{k}</span>
-                        <span style={{ fontWeight:600, color: T.text }}>{v}</span>
-                      </div>
-                    ))}
+                    <span style={{
+                      fontSize:10, fontWeight:600, padding:"3px 10px", borderRadius:12,
+                      background: 'rgba(14,165,160,0.08)', color: T.primary,
+                      border: `1px solid rgba(14,165,160,0.15)`,
+                    }}>{msg.classification["대분류"]}</span>
+                    {msg.classification["중분류"] && (
+                      <span style={{
+                        fontSize:10, fontWeight:600, padding:"3px 10px", borderRadius:12,
+                        background: 'rgba(14,165,160,0.05)', color: T.sub,
+                        border: `1px solid ${T.border}`,
+                      }}>{msg.classification["중분류"]}</span>
+                    )}
                   </div>
                 )}
 

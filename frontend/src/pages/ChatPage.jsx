@@ -1030,11 +1030,25 @@ export default function ChatPage() {
     if (key === "c20")
       return ["ERP 연동 필요", "API 연동", "해당 없음"];
 
-    // ── 고유 필드 (p*) — 라벨 키워드 기반 ──
+    // ── 고유 필드 (p*) — description 체크박스 파싱 + 라벨 키워드 기반 ──
     if (key.startsWith("p")) {
-      // 수량/인원
-      if (label.includes("수량") || label.includes("인원"))
-        return ["5명 미만", "10명", "20명", "기타"];
+      // 1순위: description에서 ☐ 옵션 추출 (Excel 원본 구조)
+      const desc = f.description || "";
+      if (desc.includes("☐")) {
+        const checkboxOpts = desc.match(/☐\s*([^☐()\n]{2,30})/g);
+        if (checkboxOpts && checkboxOpts.length >= 2) {
+          const opts = checkboxOpts
+            .map(o => o.replace("☐", "").trim())
+            .filter(o => o.length >= 2 && o.length <= 25)
+            .slice(0, 5);
+          if (opts.length >= 2) return opts;
+        }
+      }
+
+      // 2순위: 라벨 키워드 매칭
+      // 수량/인원/대수
+      if (label.includes("수량") || label.includes("인원") || label.includes("대수"))
+        return f.default ? [f.default, "기타"] : ["5대 미만", "10~20대", "30대 이상", "기타"];
       // 희망일/시작일/착공일
       if (label.includes("희망일") || label.includes("시작")) {
         const d1 = new Date(); d1.setDate(d1.getDate() + 14);
@@ -1044,18 +1058,27 @@ export default function ChatPage() {
       // 방식 (교육, 제공, 수행)
       if (label.includes("방식"))
         return f.default ? [f.default, "협의"] : ["온라인", "오프라인", "혼합", "협의"];
-      // 기간 관련
-      if (label.includes("기간"))
-        return ["12개월", "24개월", "36개월", "48개월"];
-      // 여부
-      if (label.includes("여부"))
+      // 기간/약정
+      if (label.includes("기간") || label.includes("약정"))
+        return ["12개월", "24개월", "36개월", "60개월"];
+      // 여부/포함
+      if (label.includes("여부") || label.includes("포함"))
         return f.default ? [f.default] : ["포함", "미포함", "협의"];
-      // 유형
-      if (label.includes("유형"))
+      // 유형/선택
+      if (label.includes("유형") || label.includes("선택"))
         return f.default ? [f.default, "기타"] : [];
-      // 장소
-      if (label.includes("장소"))
-        return f.default ? [f.default] : ["본사", "현장", "협의"];
+      // 장소/사업장
+      if (label.includes("장소") || label.includes("사업장"))
+        return f.default ? [f.default] : ["본사", "전 사업장", "협의"];
+      // 주기 (교체/관리/점검)
+      if (label.includes("주기") || label.includes("교체"))
+        return ["3개월", "6개월", "12개월", "협의"];
+      // 예산/비용/금액
+      if (label.includes("예산") || label.includes("비용") || label.includes("금액"))
+        return f.default ? [f.default] : [];
+      // SLA/지표
+      if (label.includes("sla") || label.includes("지표"))
+        return f.default ? [f.default] : [];
       // 기본값이 있으면 탭으로
       if (f.default) return [f.default];
     }

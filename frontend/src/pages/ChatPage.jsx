@@ -10,6 +10,9 @@ import { downloadPrPdf } from "../utils/prExport";
 import { previewRfq } from "../utils/rfqExport";
 // BackgroundBlobs 제거 — 업무마켓9 임베드 시 외부 배경 불필요
 
+// PR 패널 자동 오픈 임계값 (사용자 답변 기준 %)
+const PR_AUTO_OPEN_PCT = 30;  // 나중에 50으로 조정 가능
+
 // ═══════════════════════════════════════════
 // SVG Icons
 // ═══════════════════════════════════════════
@@ -252,6 +255,9 @@ export default function ChatPage() {
   const [prSuppliers, setPrSuppliers]       = useState([]);
   const [selectedPrSuppliers, setSelectedPrSuppliers] = useState([]);  // [{id, name}, ...]
   const [prSaved, setPrSaved] = useState(false);
+  const [prUserFilledKeys, setPrUserFilledKeys] = useState(new Set());  // 사용자가 채팅으로 채운 필드 키 추적
+  const [prFillingTurns, setPrFillingTurns] = useState(0);  // pr_filling에서 사용자 메시지 턴 수
+  const [activePrFieldKey, setActivePrFieldKey] = useState(null);  // 자율답변 대상 필드 키
   const [prRequestId, setPrRequestId] = useState(null);
   const [uploadedPrSuppliers, setUploadedPrSuppliers] = useState([]);  // PDF에서 추출된 공급업체
   const [prSupplierLoading, setPrSupplierLoading] = useState(false);
@@ -291,11 +297,25 @@ export default function ChatPage() {
   const prTotal  = Object.keys(prFields).length;
   const prPct    = prRequiredTotal > 0 ? Math.round(prRequiredFilled / prRequiredTotal * 100) : 0;
 
+  // 사용자가 채팅으로 채운 필수 필드 기준 % (자동오픈용 — default 값 제외)
+  const prUserFilledPct = prRequiredTotal > 0
+    ? Math.round(prRequiredFields.filter(([k]) => prUserFilledKeys.has(k)).length / prRequiredTotal * 100)
+    : 0;
+
   useEffect(() => {
     if (chatScrollRef.current) {
       chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
     }
   }, [messages, isTyping]);
+
+  // PR 패널 자동 오픈: 사용자 답변 30% 이상 또는 대화 3턴 이상
+  useEffect(() => {
+    if (phase === "pr_filling" && !prRightVisible) {
+      if (prUserFilledPct >= PR_AUTO_OPEN_PCT || prFillingTurns >= 3) {
+        setPrRightVisible(true);
+      }
+    }
+  }, [prUserFilledPct, prFillingTurns, phase, prRightVisible]);
 
   // PR 패널 "작성 완료" 버튼 핸들러
   const handlePrManualComplete = () => {
@@ -416,6 +436,8 @@ export default function ChatPage() {
     if (!fills || !Object.keys(fills).length) return;
     const keys = new Set(Object.keys(fills));
     setPrJustFilled(keys);
+    // 사용자가 채운 키 누적 추적 (자동오픈 임계값용)
+    setPrUserFilledKeys(prev => new Set([...prev, ...keys]));
     setPrFields(prev => {
       const next = { ...prev };
       Object.entries(fills).forEach(([k,v]) => {
@@ -534,7 +556,7 @@ export default function ChatPage() {
     if (prRequestId) {
       window.open(`${baseUrl}/pr/view/${prRequestId}`, "_blank");
     } else if (currentPrTemplate) {
-      openLocalPreview("구 매 요 청 서", currentPrTemplate.label, currentPrSections, prFields);
+      openLocalPreview("구 매 요 청 서", currentPrTemplate.label || currentPrTemplate.name, currentPrSections, prFields);
     }
   };
 
@@ -570,7 +592,10 @@ export default function ChatPage() {
       templateFields[k] = { ...v, value: NO_AUTO_FILL.has(k) ? "" : (v.default || "") };
     });
     setPrFields(templateFields);
-    setPrRightVisible(true);    // 패널 즉시 열기 — 우측에 구매요청서 양식 표시
+    setPrRightVisible(false);   // 대화로 필드 수집 후 자동 오픈 (PR_AUTO_OPEN_PCT% 도달 시)
+    setPrUserFilledKeys(new Set());  // 사용자 채움 추적 초기화
+    setPrFillingTurns(0);            // 대화 턴 초기화
+    setActivePrFieldKey(null);       // 자율답변 대상 초기화
     setPhase("pr_filling");
 
     const label = tmpl.name || tmpl.label;
@@ -579,7 +604,7 @@ export default function ChatPage() {
       { id: msgIdCounter++, role: "user", text: label },
       {
         id: msgIdCounter++, role: "assistant",
-        text: `${label} 구매요청서를 준비했습니다.\n우측 패널에서 직접 입력하거나, 채팅으로 내용을 알려주시면 자동으로 채워드립니다.`,
+        text: `${label} 구매요청서를 준비했습니다.\n아래 항목들을 확인하시고, 채팅으로 내용을 알려주시면 자동으로 채워드립니다.`,
         prQuickFill: true,
       }
     ]);
@@ -613,8 +638,22 @@ export default function ChatPage() {
     const history = messages.map(m => ({ role: m.role, content: m.text }));
 
     try {
-      if (phase === "pr_filling") {
-        // PR 필드 추출
+      if (phase === "pr_filling" && activePrFieldKey) {
+        // ── 자율답변 모드: 특정 필드에 직접 매핑 (백엔드 호출 없이 정확도 100%) ──
+        const fieldLabel = prFields[activePrFieldKey]?.label || activePrFieldKey;
+        applyPrFills({ [activePrFieldKey]: text });
+        setActivePrFieldKey(null);
+        setPrFillingTurns(prev => prev + 1);
+        setMessages(prev => [...prev, {
+          id: msgIdCounter++, role: "assistant",
+          text: `"${fieldLabel}" 항목에 "${text}"(을)를 입력했습니다. 다음 항목을 선택하거나 채팅으로 입력해 주세요.`,
+          prInlineTabs: true,
+        }]);
+        setIsTyping(false);
+        return;
+      } else if (phase === "pr_filling") {
+        // ── 일반 대화 모드: 백엔드 PR 필드 추출 ──
+        setPrFillingTurns(prev => prev + 1);
         const data = await api.chat(sessionId, text, null, history, phase, {}, rfpType, prType, getPrFilledFields(), userRole, roleTurnCount);
         if (data.pr_fields && Object.keys(data.pr_fields).length > 0) {
           applyPrFills(data.pr_fields);
@@ -623,6 +662,7 @@ export default function ChatPage() {
           id: msgIdCounter++, role: "assistant",
           text: data.answer, sources: data.sources,
           rag_score: data.rag_score, trigger: data.phase_trigger,
+          prInlineTabs: true,
         }]);
         if (data.phase_trigger === "pr_complete") {
           if (data.pr_request_id) setPrRequestId(data.pr_request_id);
@@ -1083,6 +1123,83 @@ export default function ChatPage() {
       if (f.default) return [f.default];
     }
     return [];
+  };
+
+  // ── PR 인라인 탭: AI 응답 아래에 사용자 미확인 필드 탭 표시 (최대 5개) ──
+  const renderPrInlineTabs = () => {
+    if (!prType || !prFields || Object.keys(prFields).length === 0) return null;
+    // 사용자가 아직 확인하지 않은 필수 필드 (c1~c5 제외)
+    // → default로 채워진 필드도 사용자가 클릭으로 확인해야 함
+    const unconfirmed = Object.entries(prFields)
+      .filter(([k, f]) => f.required !== false && !PR_SKIP_KEYS.has(k) && !prUserFilledKeys.has(k));
+    if (unconfirmed.length === 0) return null;
+
+    // 옵션이 있는 필드 우선, 최대 5개
+    const withOpts = unconfirmed.filter(([k, f]) => getPrFieldOptions(k, f).length > 0);
+    const noOpts = unconfirmed.filter(([k, f]) => getPrFieldOptions(k, f).length === 0);
+    const display = [...withOpts.slice(0, 5), ...noOpts.slice(0, Math.max(0, 5 - withOpts.length))].slice(0, 5);
+
+    return (
+      <div style={{ marginTop:10, display:"flex", flexDirection:"column", gap:8 }}>
+        <div style={{ fontSize:10, fontWeight:600, color: T.sub }}>
+          아래 항목을 선택하거나 채팅으로 입력하세요 ({unconfirmed.length}개 남음)
+        </div>
+        {display.map(([fk, f]) => {
+          const opts = getPrFieldOptions(fk, f);
+          const currentVal = (f.value || "").trim();
+          return (
+            <div key={fk} style={{
+              background: currentVal ? "rgba(14,165,160,0.04)" : "rgba(6,182,212,0.04)",
+              border: `1px solid ${currentVal ? "rgba(14,165,160,0.12)" : "rgba(6,182,212,0.12)"}`,
+              borderRadius: 10, padding:"8px 12px",
+            }}>
+              <div style={{ fontSize:11, fontWeight:700, color: T.primary, marginBottom:5, display:"flex", alignItems:"center", gap:4 }}>
+                <span style={{ color: T.red, fontSize:10 }}>*</span>
+                {f.label}
+                {currentVal && <span style={{ fontSize:10, fontWeight:500, color: T.sub, marginLeft:"auto" }}>현재: {currentVal}</span>}
+              </div>
+              <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
+                {opts.map((opt, i) => (
+                  <button
+                    key={i}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      applyPrFills({ [fk]: opt });
+                    }}
+                    style={{
+                      padding:"5px 11px", borderRadius:14, fontSize:11, fontWeight:600,
+                      border: `1px solid ${opt === currentVal ? T.primary : "rgba(6,182,212,0.2)"}`,
+                      background: opt === currentVal ? "rgba(14,165,160,0.1)" : "rgba(255,255,255,0.8)",
+                      color: opt === currentVal ? T.primary : T.text,
+                      cursor:"pointer", fontFamily:"inherit", transition:"all 0.15s",
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = "rgba(6,182,212,0.1)"; e.currentTarget.style.borderColor = T.primary; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = opt === currentVal ? "rgba(14,165,160,0.1)" : "rgba(255,255,255,0.8)"; e.currentTarget.style.borderColor = opt === currentVal ? T.primary : "rgba(6,182,212,0.2)"; }}
+                  >{opt}</button>
+                ))}
+                {/* 직접 입력 버튼 — 탭 옵션에 없는 값을 입력하고 싶을 때 */}
+                <button
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setActivePrFieldKey(fk);
+                    inputRef.current?.focus();
+                  }}
+                  style={{
+                    padding:"5px 11px", borderRadius:14, fontSize:11, fontWeight:600,
+                    border:`1px dashed ${activePrFieldKey === fk ? T.primary : "rgba(100,116,139,0.3)"}`,
+                    background: activePrFieldKey === fk ? "rgba(14,165,160,0.08)" : "transparent",
+                    color: activePrFieldKey === fk ? T.primary : T.muted,
+                    cursor:"pointer", fontFamily:"inherit", transition:"all 0.15s",
+                  }}
+                >✎ 직접 입력</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
   };
 
   // ── PR 퀵필 카드: 필수 항목을 탭 형태로 선택 (c1~c5 제외) ──
@@ -2480,8 +2597,11 @@ export default function ChatPage() {
                 {/* PR 카테고리 선택 카드 */}
                 {msg.prTypeSelect && !prType && renderPrTypeSelector()}
 
-                {/* PR 퀵필 카드 — 필수 항목 탭 선택 */}
+                {/* PR 퀵필 카드 — 초기 전체 필수 항목 탭 (첫 메시지만) */}
                 {msg.prQuickFill && phase === "pr_filling" && renderPrQuickFillCards()}
+
+                {/* PR 인라인 탭 — AI 응답마다 다음 미완 필드 탭 표시 */}
+                {msg.prInlineTabs && phase === "pr_filling" && renderPrInlineTabs()}
 
                 {/* RFP 유형 선택 카드 */}
                 {msg.rfpTypeSelect && !rfpType && renderRfpTypeSelector()}
@@ -2648,17 +2768,20 @@ export default function ChatPage() {
               onFocus={() => setInputFocused(true)}
               onBlur={() => setInputFocused(false)}
               placeholder={
-                phase === "chat" ? (userRole === "procurement" ? "질문을 입력하거나 구매요청서 PDF를 업로드하세요..." : "궁금한 내용을 입력해주세요...")
+                activePrFieldKey && phase === "pr_filling"
+                  ? `✎ "${prFields[activePrFieldKey]?.label || activePrFieldKey}" 값을 입력하세요...`
+                  : phase === "chat" ? (userRole === "procurement" ? "질문을 입력하거나 구매요청서 PDF를 업로드하세요..." : "궁금한 내용을 입력해주세요...")
                   : phase === "complete" ? "공급업체 추천 또는 추가 질문..."
                   : "추가 정보를 입력하세요..."
               }
               style={{
-                flex:1, height:48, background: inputFocused ? T.card : T.bgSubtle,
-                border:`1.5px solid ${inputFocused ? T.primary : "transparent"}`,
+                flex:1, height:48,
+                background: activePrFieldKey ? "rgba(14,165,160,0.06)" : (inputFocused ? T.card : T.bgSubtle),
+                border:`1.5px solid ${activePrFieldKey ? T.primary : (inputFocused ? T.primary : "transparent")}`,
                 borderRadius: T.r14, padding:"0 16px",
                 color: T.text, fontSize:14, outline:"none", fontFamily:"inherit",
                 transition:"all 0.2s ease",
-                boxShadow: inputFocused ? `0 0 0 3px rgba(14,165,160,0.10)` : "none",
+                boxShadow: activePrFieldKey ? `0 0 0 3px rgba(14,165,160,0.15)` : (inputFocused ? `0 0 0 3px rgba(14,165,160,0.10)` : "none"),
               }}
             />
             <button
@@ -2727,7 +2850,7 @@ export default function ChatPage() {
             </div>
             <div style={{ flex:1 }}>
               <div style={{ fontSize:13, fontWeight:800, color: T.text }}>
-                구매요청서 (PR) — {currentPrTemplate?.label || ""}
+                구매요청서 (PR) — {currentPrTemplate?.label || currentPrTemplate?.name || ""}
               </div>
               <div style={{ fontSize:10, color: T.sub, marginTop:2 }}>
                 {phase === "pr_filling" ? "작성 진행 중" : "작성 완료"}
@@ -2804,8 +2927,8 @@ export default function ChatPage() {
                         fontSize:12, fontWeight:700, padding:"4px 14px",
                         background: T.primaryLight, color: T.primary,
                         borderRadius:8, border:`1px solid ${T.primaryMid}`,
-                      }}>{currentPrTemplate.label}</span>
-                      {prFields.c6?.value && <span style={{
+                      }}>{currentPrTemplate.label || currentPrTemplate.name}</span>
+                      {prFields.c6?.value && prFields.c6.value !== (currentPrTemplate.label || currentPrTemplate.name) && <span style={{
                         fontSize:12, fontWeight:700, padding:"4px 14px",
                         background: T.primaryLight, color: T.primary,
                         borderRadius:8, border:`1px solid ${T.primaryMid}`,
@@ -3002,7 +3125,7 @@ export default function ChatPage() {
                     <button onClick={() => {
                       if (currentPrTemplate) {
                         const supplierNames = selectedPrSuppliers.map(s => s.name).join(", ");
-                        downloadPrPdf(prFields, currentPrSections, currentPrTemplate.label, supplierNames);
+                        downloadPrPdf(prFields, currentPrSections, currentPrTemplate.label || currentPrTemplate.name, supplierNames);
                       }
                     }} style={{
                       flex:1, padding:"14px", borderRadius: T.r10,

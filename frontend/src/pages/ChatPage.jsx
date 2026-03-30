@@ -2626,7 +2626,19 @@ export default function ChatPage() {
                   return (
                   <div style={{ display:"flex", flexDirection:"column", gap:6, marginTop:4 }}>
                     {display.map((item, i) => (
-                      <button key={i} onClick={() => handleSend(item)} style={{
+                      <button key={i} onClick={() => {
+                        if (item === "구매요청서 작성하기") {
+                          // PR 직접 진입: lastClassification의 pr_template_key 사용
+                          const prKey = lastClassification?.pr_template_key;
+                          if (prKey && prKey !== "_generic" && getPrTemplate(prKey)) {
+                            handlePrTypeSelect(prKey);
+                          } else {
+                            handleSend(item); // 폴백: 카테고리 선택
+                          }
+                        } else {
+                          handleSend(item);
+                        }
+                      }} style={{
                         padding:"9px 14px", borderRadius: T.r10,
                         border:`1px solid ${item.includes("RFP") || item.includes("제안요청서") ? 'rgba(14,165,160,0.3)' : 'rgba(14,165,160,0.12)'}`,
                         background: item.includes("RFP") || item.includes("제안요청서")

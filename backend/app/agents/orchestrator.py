@@ -455,13 +455,7 @@ class OrchestratorAgent(AgentBase):
 
         # ── GATE 3: 신뢰도 거부 ──
         if ctx.confidence_rejected:
-            # 역할별 CTA 결정
-            if ctx.user_role == "user":
-                rejected_cta = ["구매요청서 작성하기"]
-            elif ctx.user_role == "procurement":
-                rejected_cta = ["RFP 작성하기"]
-            else:
-                rejected_cta = ["구매요청서 작성하기", "RFP 작성하기"]
+            rejected_cta = []  # 근거 부족 시 구매요청서/RFP 버튼 추가 안 함
 
             yield self._sse("meta", {
                 "sources": [],
@@ -473,8 +467,8 @@ class OrchestratorAgent(AgentBase):
             })
             if ctx.user_role == "user":
                 rejected_msg = (
-                    "죄송합니다. 해당 내용에 대한 자료를 찾지 못했습니다. "
-                    "구매하려는 품목이나 서비스를 좀 더 구체적으로 말씀해 주시면 도움을 드리겠습니다."
+                    "해당 품목에 대한 매칭 정보가 없습니다. "
+                    "품목명이나 서비스를 구체적으로 입력해 주세요."
                 )
             elif ctx.user_role == "procurement":
                 rejected_msg = (
@@ -483,8 +477,8 @@ class OrchestratorAgent(AgentBase):
                 )
             else:
                 rejected_msg = (
-                    "죄송합니다. 현재 보유한 자료에서 관련 정보를 찾지 못했습니다. "
-                    "질문을 더 구체적으로 해주시거나, 다른 주제로 질문해 주십시오."
+                    "해당 내용에 대한 매칭 정보가 없습니다. "
+                    "품목명이나 서비스를 구체적으로 입력해 주세요."
                 )
             yield self._sse("token", {"content": rejected_msg})
             yield self._sse("suggestions", {"items": rejected_cta})

@@ -22,7 +22,7 @@ RAG_TOP_K       = 3
 BM25_WEIGHT     = 0.3
 MAX_CHUNK_TOKENS = 400
 VECTOR_MIN_SIMILARITY = 0.70   # 벡터 최소 유사도 (0.75→0.70 하향, 신규 구조화 청크 검색률 향상)
-CONFIDENCE_THRESHOLD  = 0.65   # 신뢰도 거부 임계값 (이하 시 답변 생성 안 함)
+CONFIDENCE_THRESHOLD  = 0.72   # 신뢰도 거부 임계값 (0.65→0.72 상향, 근거 부족 답변 차단)
 
 # RRF 리랭킹 설정
 RRF_K            = 60          # RRF 스무딩 상수

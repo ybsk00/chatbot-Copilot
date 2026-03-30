@@ -774,8 +774,10 @@ export default function ChatPage() {
               ));
             } else if (metaData.phase_trigger === "pr_agreed") {
               // 분류 결과에 pr_template_key가 있으면 자동 선택 (카테고리 선택 스킵)
-              const autoKey = metaData.classification?.pr_template_key
-                || lastClassification?.pr_template_key;
+              // "구매요청서 작성하기" 메시지는 분류 안 되므로 lastClassification 우선
+              const newKey = metaData.classification?.pr_template_key;
+              const lastKey = lastClassification?.pr_template_key;
+              const autoKey = (newKey && newKey !== "_generic" && newKey !== "") ? newKey : lastKey;
               if (autoKey && autoKey !== "_generic" && autoKey !== "" && getPrTemplate(autoKey)) {
                 // 분류 성공 → 바로 PR 작성 진입
                 handlePrTypeSelect(autoKey);

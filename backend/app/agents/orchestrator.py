@@ -576,12 +576,6 @@ class OrchestratorAgent(AgentBase):
             elif b2 == "2C_RFP입찰" and "제안요청서(RFP) 작성하기" not in ctx.suggestions:
                 ctx.suggestions.append("제안요청서(RFP) 작성하기")
         # L3 미매칭 또는 cold CTA: FAQ 후속질문만 (구매요청서/RFP 자동 추가 안 함)
-                    if b2 == "2B_RFQ" and "견적요청서(RFQ) 작성하기" not in ctx.suggestions:
-                        ctx.suggestions.append("견적요청서(RFQ) 작성하기")
-                    elif b2 == "2C_RFP입찰" and "제안요청서(RFP) 작성하기" not in ctx.suggestions:
-                        ctx.suggestions.append("제안요청서(RFP) 작성하기")
-                    elif "RFP 작성하기" not in ctx.suggestions:
-                        ctx.suggestions.append("RFP 작성하기")
 
         yield self._sse("suggestions", {"items": ctx.suggestions})
         yield self._sse("done", {})

@@ -556,22 +556,22 @@ class OrchestratorAgent(AgentBase):
         # L3 매칭 안 된 일반 질문에서는 구매요청서/RFP 자동 추가 안 함
         has_l3 = bool((ctx.classification or {}).get("l3_code"))
 
-        # 역할별 CTA 분기 — L3 매칭 시에만 구매요청서/RFP 추가
-        # 먼저 기존 구매요청서/RFP 버튼 전부 제거 (필요한 것만 아래서 추가)
+        # ── suggestions 최종 구성 (단순 명확한 분기) ──
+        # 1) 기존 구매요청서/RFP/액션 버튼 전부 제거 (아래서 필요한 것만 추가)
         ctx.suggestions = [s for s in ctx.suggestions
                            if s not in ("구매요청서 작성하기", "RFP 작성하기",
                                         "견적요청서(RFQ) 작성하기", "제안요청서(RFP) 작성하기")]
+        # BT 카드 액션버튼도 제거 (카드에서 이미 표시)
+        bt_action_btns = set((bt_routing or {}).get("action_buttons") or [])
+        ctx.suggestions = [s for s in ctx.suggestions if s not in bt_action_btns]
 
-        if pr_blocked:
-            # PR 차단 (BT-A/B/C/D): BT 액션버튼만
-            for btn in (bt_routing.get("action_buttons") or [])[:2]:
-                if btn not in ctx.suggestions:
-                    ctx.suggestions.append(btn)
-        elif has_l3 and pr_allowed:
-            # PR 허용 (BT-E~I): CTA 무관하게 구매요청서 항상 추가
-            if ctx.user_role != "procurement" and "구매요청서 작성하기" not in ctx.suggestions:
-                ctx.suggestions.append("구매요청서 작성하기")
-        # L3 미매칭 또는 conditional: FAQ 후속질문만
+        # 2) pr_action에 따라 정확히 분기
+        if has_l3 and pr_allowed:
+            # PR 허용 (BT-E~I): "구매요청서 작성하기" 추가
+            ctx.suggestions.append("구매요청서 작성하기")
+        # pr_blocked: 아무것도 추가 안 함 (BT 카드 액션버튼이 이미 표시)
+        # conditional: 아무것도 추가 안 함 (BT-J 카드가 이미 표시)
+        # L3 미매칭: 아무것도 추가 안 함 (FAQ 추천질문만)
 
         yield self._sse("suggestions", {"items": ctx.suggestions})
         yield self._sse("done", {})

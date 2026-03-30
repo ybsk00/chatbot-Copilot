@@ -2617,15 +2617,9 @@ export default function ChatPage() {
                   );
                 })()}
 
-                {/* 추천 질문 버튼 — 질문형 2개 + 구매요청서 작성하기 (있으면) */}
+                {/* 추천 질문/액션 버튼 — 백엔드 suggestions 그대로 표시 */}
                 {msg.suggestions && msg.suggestions.length > 0 && !msg.isStreaming && (() => {
-                  // 구매요청서/RFP/RFQ 작성 버튼은 항상 포함
-                  const actionBtns = msg.suggestions.filter(s => s.includes("작성하기"));
-                  // 질문형만 최대 2개
-                  const questions = msg.suggestions.filter(s =>
-                    !s.includes("작성하기") && (s.includes("?") || s.includes("하나요") || s.includes("인가요") || s.includes("될까요") || s.includes("드릴까요"))
-                  ).slice(0, 2);
-                  const display = [...actionBtns, ...questions];
+                  const display = msg.suggestions;
                   if (display.length === 0) return null;
                   return (
                   <div style={{ display:"flex", flexDirection:"column", gap:6, marginTop:4 }}>

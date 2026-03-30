@@ -416,6 +416,14 @@ def _enrich_bt_gt(out: dict) -> dict:
             out["dept"] = entry.dept
             out["branch1_path"] = store.get_branch1_path(l3_code)
             out["branch2_sourcing"] = store.get_branch2_sourcing(l3_code)
+            # pr_template_key도 DB에서 가져와 업데이트 (폴백 매칭 시 누락 방지)
+            from app.db.supabase_client import get_client as _get_sb
+            try:
+                row = _get_sb().table("taxonomy_v2").select("pr_template_key").eq("code", l3_code).single().execute()
+                if row.data and row.data.get("pr_template_key"):
+                    out["pr_template_key"] = row.data["pr_template_key"]
+            except Exception:
+                pass
     except Exception as e:
         logger.warning(f"BT/GT enrichment 실패 (l3={out.get('l3_code')}): {e}")
     return out

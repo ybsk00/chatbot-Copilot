@@ -173,24 +173,26 @@ def _get_filling_prompt(intent: str, user_role: str | None = None) -> str:
     return BASE_RULES + role_layer + _TEMPLATES.get(intent, _TEMPLATES["field_input"])
 
 def _get_pr_filling_prompt(intent: str, user_role: str | None = None) -> str:
-    """PR(구매요청서) filling 의도별 프롬프트 — 짧은 확인 + 다음 필드 질문."""
-    role_layer = _get_role_layer(user_role)
+    """PR(구매요청서) filling — 단답형 질문만. RAG 설명 금지."""
+    _CORE = """[구매요청서 작성 모드 — 엄격 규칙]
+당신은 구매요청서 필드를 수집하는 면접관입니다.
+절대로 설명하거나 조언하지 마세요. 오직 질문만 하세요.
+
+금지: 시장 데이터, 비용 분석, 전략 제안, 장문 설명, 참조 문서 인용
+필수: 한 줄 확인 + 한 줄 질문 (합계 2줄 이내)
+
+형식 예시:
+"확인. 다음으로 계약 기간을 입력해 주세요. (예: 6개월, 1년)"
+"확인. 서비스 범위를 입력해 주세요. (예: 사무보조, 데이터 입력)"
+
+현재 채워진 필드: {filled_keys}
+"""
     _TEMPLATES = {
-        "field_input": """[구매요청서 작성 모드] 섹션: {rfp_sections}
-50~100자. 입력값을 한 줄로 확인하고, 바로 다음 미입력 필드를 질문하세요.
-형식: "{{필드명}} 확인했습니다. 다음으로 {{다음 필드명}}을(를) 입력해 주세요."
-장문 설명, 역제안, 시장 데이터 제시 금지. 확인+질문만.
-현재 채워진 필드: {filled_keys}""",
-        "question": """[구매요청서 작성 모드 — 질문 응답] 섹션: {rfp_sections}
-100~150자. 질문에 간결하게 답변 후 다음 미입력 필드를 질문하세요.
-"다음으로 {{필드명}}을(를) 입력해 주세요."로 마무리.
-현재 채워진 필드: {filled_keys}""",
-        "rfp_question": """[구매요청서 작성 모드 — 필드 설명] 섹션: {rfp_sections}
-100~150자. 해당 필드 설명 + 입력 예시 1개.
-"입력해 주세요."로 마무리.
-현재 채워진 필드: {filled_keys}""",
+        "field_input": _CORE,
+        "question": _CORE + "\n사용자 질문에 한 줄로 답변 후 다음 필드를 질문하세요.",
+        "rfp_question": _CORE + "\n해당 필드를 한 줄로 설명 후 입력을 요청하세요.",
     }
-    return BASE_RULES + role_layer + _TEMPLATES.get(intent, _TEMPLATES["field_input"])
+    return _TEMPLATES.get(intent, _TEMPLATES["field_input"])
 
 RAG_PROMPT = """아래 참조 문서를 기반으로 사용자 질문에 답변하세요.
 주의: "참조 문서에 따르면" 등 출처 언급 표현을 절대 사용하지 마세요. 정보를 직접 서술하세요.

@@ -341,7 +341,7 @@ def _keyword_pre_match(question: str) -> dict | None:
 
     # 가장 많이 매칭된 L3
     best_l3_code = max(scores, key=scores.get)
-    if scores[best_l3_code] < 1:
+    if scores[best_l3_code] < 2:  # 최소 2개 키워드 매칭 필요 (1개는 오매칭 위험)
         return None
 
     l3 = cache["l3_map"].get(best_l3_code)

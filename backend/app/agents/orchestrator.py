@@ -431,6 +431,20 @@ class OrchestratorAgent(AgentBase):
         )
         await asyncio.gather(classification_task, retrieval_task)
 
+        # ── L3 JSON 청크 교체: 분류 성공 시 JSON 데이터로 보강 ──
+        l3_code = (ctx.classification or {}).get("l3_code")
+        if l3_code:
+            try:
+                from app.rag.retriever import _build_json_chunks
+                json_chunks = _build_json_chunks(l3_code)
+                if json_chunks:
+                    # JSON 청크를 맨 앞에 삽입 (기존 RAG 청크보다 우선)
+                    ctx.chunks = json_chunks + (ctx.chunks or [])
+                    ctx.rag_score = max(ctx.rag_score, 1.0)
+                    logger.info(f"[Orchestrator] L3 JSON chunks injected: {l3_code} ({len(json_chunks)}개)")
+            except Exception as e:
+                logger.warning(f"L3 JSON chunk injection failed: {e}")
+
         # ── 사후 필터링: 분류 결과로 관련 없는 청크 제거 ──
         self._filter_chunks_by_classification(ctx)
 

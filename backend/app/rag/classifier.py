@@ -369,14 +369,36 @@ def _keyword_pre_match(question: str) -> dict | None:
 def _enrich_bt_gt(out: dict) -> dict:
     """분류 결과에 BT/GT 라우팅 정보 추가.
 
-    추가 필드: bt_type, gt_code, pr_action, dept
+    추가 필드: bt_type, gt_code, pr_action, dept, branch1_path, branch2_sourcing
+    l3_code가 없으면 대분류+중분류 이름으로 01번 JSON에서 L3 폴백 매칭.
     """
-    l3_code = out.get("l3_code")
-    if not l3_code:
-        return out
     try:
         from app.data.routing_data import get_routing_store
         store = get_routing_store()
+
+        l3_code = out.get("l3_code")
+
+        # l3_code 없으면: 대분류+중분류 이름으로 01번 JSON에서 첫 번째 매칭 L3 탐색
+        if not l3_code:
+            major = out.get("대분류", "")
+            middle = out.get("중분류", "")
+            if major:
+                for code, entry in store.l3_index.items():
+                    # 중분류 이름 매칭 우선
+                    if middle and middle in entry.l2:
+                        l3_code = code
+                        break
+                    # 대분류만 있으면 첫 번째 L3
+                    if not middle and entry.l1 == major:
+                        l3_code = code
+                        break
+                if l3_code:
+                    out["l3_code"] = l3_code
+                    out["l3_name"] = store.l3_index[l3_code].l3_name
+
+        if not l3_code:
+            return out
+
         entry = store.get_routing(l3_code)
         if entry:
             out["bt_type"] = entry.bt_type
@@ -386,7 +408,7 @@ def _enrich_bt_gt(out: dict) -> dict:
             out["branch1_path"] = store.get_branch1_path(l3_code)
             out["branch2_sourcing"] = store.get_branch2_sourcing(l3_code)
     except Exception as e:
-        logger.warning(f"BT/GT enrichment 실패 (l3={l3_code}): {e}")
+        logger.warning(f"BT/GT enrichment 실패 (l3={out.get('l3_code')}): {e}")
     return out
 
 

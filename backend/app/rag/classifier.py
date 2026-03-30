@@ -379,7 +379,8 @@ def _enrich_bt_gt(out: dict) -> dict:
         l3_code = out.get("l3_code")
 
         # l3_code 없으면: 대분류+중분류+질문 키워드로 DB L3에서 폴백 매칭
-        if not l3_code:
+        # cold CTA(일반 정보 질문)는 폴백 안 함 — 오매칭 방지
+        if not l3_code and out.get("cta") != "cold":
             major = out.get("대분류", "")
             middle = out.get("중분류", "")
             question = out.get("_question", "")  # 원본 질문

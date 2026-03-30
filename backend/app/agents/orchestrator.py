@@ -584,14 +584,21 @@ class OrchestratorAgent(AgentBase):
                 elif "RFP 작성하기" not in ctx.suggestions:
                     ctx.suggestions.append("RFP 작성하기")
         else:
-            if ctx.cta_intent in ("hot", "warm"):
-                if pr_blocked:
-                    for btn in (bt_routing.get("action_buttons") or [])[:2]:
-                        if btn not in ctx.suggestions:
-                            ctx.suggestions.append(btn)
-                else:
-                    if "구매요청서 작성하기" not in ctx.suggestions:
-                        ctx.suggestions.append("구매요청서 작성하기")
+            if pr_blocked:
+                # 역할 미감지 + PR 차단: 구매요청서/RFP 제거 + 액션버튼
+                ctx.suggestions = [s for s in ctx.suggestions if s not in ("구매요청서 작성하기", "RFP 작성하기")]
+                for btn in (bt_routing.get("action_buttons") or [])[:2]:
+                    if btn not in ctx.suggestions:
+                        ctx.suggestions.append(btn)
+            elif ctx.cta_intent in ("hot", "warm"):
+                if "구매요청서 작성하기" not in ctx.suggestions:
+                    ctx.suggestions.append("구매요청서 작성하기")
+                if b2 == "2B_RFQ" and "견적요청서(RFQ) 작성하기" not in ctx.suggestions:
+                    ctx.suggestions.append("견적요청서(RFQ) 작성하기")
+                elif b2 == "2C_RFP입찰" and "제안요청서(RFP) 작성하기" not in ctx.suggestions:
+                    ctx.suggestions.append("제안요청서(RFP) 작성하기")
+                elif "RFP 작성하기" not in ctx.suggestions:
+                    ctx.suggestions.append("RFP 작성하기")
                     if b2 == "2B_RFQ" and "견적요청서(RFQ) 작성하기" not in ctx.suggestions:
                         ctx.suggestions.append("견적요청서(RFQ) 작성하기")
                     elif b2 == "2C_RFP입찰" and "제안요청서(RFP) 작성하기" not in ctx.suggestions:

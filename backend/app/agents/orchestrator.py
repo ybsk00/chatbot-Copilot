@@ -796,9 +796,31 @@ class OrchestratorAgent(AgentBase):
                 missing = required_keys - all_filled
                 logger.info(f"[Orchestrator:PR] PR not complete. missing={missing}")
 
-        # ── PHASE 4: 답변 생성 (RAG/헌법/화법 전부 차단, 단답형 질문만) ──
+        # ── PHASE 4: 답변 생성 (RAG 대신 미입력 필드 목록을 context로 전달) ──
         ctx.constitution_text = ""
         ctx.script_text = ""
+
+        # 미입력 필수 필드 목록을 가상 청크로 주입 → LLM이 다음 질문할 필드를 알 수 있음
+        if ctx.phase == "pr_filling":
+            schema = PR_SCHEMAS.get(ctx.pr_type, PR_SCHEMAS.get("_generic", {}))
+            if schema:
+                all_fields = schema.get("fields", "")
+                required = set(k.strip() for k in schema.get("required", "").split(","))
+                filled = set(k for k, v in ctx.filled_fields.items() if v)
+                missing = []
+                for part in all_fields.split(", "):
+                    if ":" in part:
+                        key, label = part.split(":", 1)
+                        key = key.strip()
+                        if key in required and key not in filled:
+                            missing.append(f"- {key}: {label.strip()}")
+                if missing:
+                    ctx.chunks = [{
+                        "content": f"[미입력 필수 필드 — 다음 질문할 항목]\n" + "\n".join(missing[:3]),
+                        "doc_name": "PR_미입력필드",
+                        "metadata": {},
+                    }]
+
         await self.generation.execute(ctx, self._critical_pool)
 
         # ── 타이밍 로그 ──

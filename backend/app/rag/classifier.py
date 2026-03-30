@@ -383,6 +383,8 @@ def _enrich_bt_gt(out: dict) -> dict:
             out["gt_code"] = entry.gt_code
             out["pr_action"] = store.get_bt_action(l3_code)
             out["dept"] = entry.dept
+            out["branch1_path"] = store.get_branch1_path(l3_code)
+            out["branch2_sourcing"] = store.get_branch2_sourcing(l3_code)
     except Exception as e:
         logger.warning(f"BT/GT enrichment 실패 (l3={l3_code}): {e}")
     return out

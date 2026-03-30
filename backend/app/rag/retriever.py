@@ -289,8 +289,8 @@ def _build_json_chunks(l3_code: str) -> list[dict]:
     try:
         from app.data.routing_data import get_routing_store
         store = get_routing_store()
-        msg = store.get_user_message(l3_code)
-        if not msg:
+        detail = store.l3_detail.get(l3_code)
+        if not detail:
             return []
 
         entry = store.get_routing(l3_code)
@@ -299,19 +299,20 @@ def _build_json_chunks(l3_code: str) -> list[dict]:
             "l3_code": l3_code,
             "bt_type": entry.bt_type if entry else "",
             "gt_code": entry.gt_code if entry else "",
+            "branch1": store.get_branch1_path(l3_code),
+            "branch2": store.get_branch2_sourcing(l3_code),
         }
 
         chunks = []
 
-        # 사용자 안내 메시지 청크
-        user_guide = msg.get("일반사용자_안내", "")
+        # 사용자 안내 메시지 청크 (02_L3_detail_guide)
+        user_guide = detail.get("사용자안내", "")
         if user_guide:
-            # GT 소싱전략 + SLA 정보도 합침
-            gt_info = msg.get("GT_소싱전략_포인트", "")
-            sla_info = msg.get("처리_SLA", "")
+            entry_method = detail.get("진입방법", "")
+            sla_info = detail.get("Confirm_SLA", "")
             content = user_guide
-            if gt_info:
-                content += f"\n\n[소싱전략] {gt_info}"
+            if entry_method:
+                content += f"\n\n[진입방법] {entry_method}"
             if sla_info:
                 content += f"\n[처리 SLA] {sla_info}"
 

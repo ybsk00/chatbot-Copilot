@@ -2551,36 +2551,56 @@ export default function ChatPage() {
                   </div>
                 )}
 
-                {/* BT 라우팅 안내 카드 */}
+                {/* BT 라우팅 안내 카드 (v2: 분기1 5-path + 분기2 소싱) */}
                 {msg.btRouting && !msg.isStreaming && (() => {
                   const bt = msg.btRouting;
+                  const b1 = bt.branch1_path || "";
+                  const b2 = bt.branch2_sourcing || "";
                   const isBlocked = bt.pr_action === "blocked";
                   const isConditional = bt.pr_action === "conditional";
-                  if (!isBlocked && !isConditional) return null;
+                  const isAllowed = bt.pr_action === "allowed";
+
+                  // 분기1별 스타일
+                  const pathStyle = {
+                    "A_카탈로그직접발주": { bg: "linear-gradient(135deg, #ECFDF5, #D1FAE5)", border: "#A7F3D0", badge: "#059669", label: "카탈로그" },
+                    "B_주관부서신청": { bg: "linear-gradient(135deg, #FEF2F2, #FFF7ED)", border: "#FECACA", badge: "#DC2626", label: "주관부서" },
+                    "D_조건부_기존계약확인": { bg: "linear-gradient(135deg, #FFFBEB, #FEF3C7)", border: "#FDE68A", badge: "#D97706", label: "계약확인" },
+                    "E_PR작성_주관부서있음": { bg: "linear-gradient(135deg, #EFF6FF, #DBEAFE)", border: "#BFDBFE", badge: "#2563EB", label: "PR+부서" },
+                    "F_PR작성_주관부서없음": { bg: "linear-gradient(135deg, #EFF6FF, #DBEAFE)", border: "#BFDBFE", badge: "#2563EB", label: "PR" },
+                  }[b1] || { bg: "#F9FAFB", border: "#E5E7EB", badge: "#6B7280", label: bt.bt_type };
+
+                  // 분기2 소싱 라벨
+                  const sourcingLabel = { "2A_PR만": "PR만 (소싱불필요)", "2B_RFQ": "RFQ 3사 경쟁견적", "2C_RFP입찰": "RFP 기술+가격 입찰" }[b2];
+
+                  // blocked/conditional/allowed 중 카드 표시 조건: 항상 표시 (분기 정보 제공)
+                  if (!isBlocked && !isConditional && !sourcingLabel) return null;
+
                   return (
                     <div style={{
                       marginTop: 10, padding: "12px 14px", borderRadius: T.r12,
-                      background: isBlocked
-                        ? "linear-gradient(135deg, #FEF2F2, #FFF7ED)"
-                        : "linear-gradient(135deg, #FFFBEB, #FEF3C7)",
-                      border: `1px solid ${isBlocked ? "#FECACA" : "#FDE68A"}`,
+                      background: pathStyle.bg,
+                      border: `1px solid ${pathStyle.border}`,
                     }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                           <span style={{
                             fontSize: 10, fontWeight: 700, padding: "2px 8px",
-                            borderRadius: T.r6,
-                            background: isBlocked ? "#FEE2E2" : "#FEF3C7",
-                            color: isBlocked ? "#DC2626" : "#D97706",
+                            borderRadius: T.r6, background: `${pathStyle.badge}15`, color: pathStyle.badge,
                           }}>
-                            {bt.bt_type}
+                            {pathStyle.label}
                           </span>
                           <span style={{ fontSize: 10, color: "#6B7280", fontWeight: 500 }}>
-                            {bt.gt_code}
+                            {bt.bt_type} · {bt.gt_code}
                           </span>
                           {bt.dept && bt.dept !== "—" && (
-                            <span style={{ fontSize: 10, color: "#6B7280" }}>
-                              · {bt.dept}
+                            <span style={{ fontSize: 10, color: "#6B7280" }}>· {bt.dept}</span>
+                          )}
+                          {sourcingLabel && isAllowed && (
+                            <span style={{
+                              fontSize: 9, fontWeight: 600, padding: "2px 6px",
+                              borderRadius: T.r6, background: "#DBEAFE", color: "#1D4ED8",
+                            }}>
+                              {sourcingLabel}
                             </span>
                           )}
                         </div>
@@ -2590,15 +2610,15 @@ export default function ChatPage() {
                           </span>
                         )}
                       </div>
-                      {(bt.action_buttons || []).length > 0 && (
+                      {(bt.action_buttons || []).length > 0 && (isBlocked || isConditional) && (
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                           {bt.action_buttons.map((btn, i) => (
                             <button key={i} onClick={() => handleSend(btn)} style={{
                               padding: "7px 14px", borderRadius: T.r8,
                               fontSize: 12, fontWeight: 600, fontFamily: "inherit",
-                              background: i === 0 ? (isBlocked ? "#DC2626" : "#D97706") : "#fff",
-                              color: i === 0 ? "#fff" : (isBlocked ? "#DC2626" : "#D97706"),
-                              border: `1px solid ${isBlocked ? "#FECACA" : "#FDE68A"}`,
+                              background: i === 0 ? pathStyle.badge : "#fff",
+                              color: i === 0 ? "#fff" : pathStyle.badge,
+                              border: `1px solid ${pathStyle.border}`,
                               cursor: "pointer", transition: "all 0.15s",
                             }}
                               onMouseEnter={e => { e.currentTarget.style.opacity = "0.85"; }}

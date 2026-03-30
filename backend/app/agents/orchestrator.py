@@ -315,43 +315,56 @@ class OrchestratorAgent(AgentBase):
         # ── GATE 2: Phase 감지 (~0ms) ──
         ctx.phase_trigger = self._detect_phase_trigger(ctx.message, ctx.phase, ctx.user_role)
 
-        # PR 동의 감지 — BT 라우팅 게이트
+        # PR 동의 감지 — 4-STEP 분기 라우팅 게이트 (v2)
         if ctx.phase_trigger == "pr_agreed":
-            # 직전 분류 결과에서 BT 라우팅 확인
             bt_routing = self._get_bt_routing(ctx)
+            b1 = (bt_routing or {}).get("branch1_path", "")
+            b2 = (bt_routing or {}).get("branch2_sourcing", "")
+            _msg = (bt_routing or {}).get("_user_message") or {}
 
-            if bt_routing and bt_routing["pr_action"] == "blocked":
-                # BT-A/B/C/D: PR 차단 → JSON 안내 메시지 + 액션버튼
-                role_key = "주관부서_처리안내" if ctx.user_role == "procurement" else "일반사용자_안내"
-                msg_dict = bt_routing.get("_user_message") or {}
-                message = msg_dict.get(role_key, "이 품목은 직접 구매요청서 작성이 불가합니다. 주관부서에 문의해 주세요.")
+            # ── 분기1-A: 카탈로그 직접발주 → PO 자동 (프로세스 종료) ──
+            if b1 == "A_카탈로그직접발주":
+                message = _msg.get("사용자안내", "카탈로그에서 직접 발주하세요. PR 작성이 불필요합니다.")
                 yield self._sse("meta", {
                     "sources": [], "rag_score": 0,
                     "phase_trigger": "pr_blocked",
                     "classification": ctx.classification,
-                    "bt_routing": {k: v for k, v in bt_routing.items() if k != "_user_message"},
+                    "bt_routing": {k: v for k, v in bt_routing.items() if k != "_user_message"} if bt_routing else None,
                     "user_role": ctx.user_role,
                 })
                 yield self._sse("token", {"content": message})
                 yield self._sse("done", {})
                 return
 
-            if bt_routing and bt_routing["pr_action"] == "conditional":
-                # BT-J: 조건부 → 기존 계약 확인 안내
-                msg_dict = bt_routing.get("_user_message") or {}
-                message = msg_dict.get("일반사용자_안내", "기존 계약 여부를 먼저 확인해 주세요. 기존 계약이 있으면 PO를 직접 생성하고, 없으면 구매요청서를 작성합니다.")
+            # ── 분기1-B: 주관부서 신청 (PR 대체) ──
+            if b1 == "B_주관부서신청":
+                message = _msg.get("사용자안내", "이 품목은 주관부서를 통해 신청해 주세요. PR 직접 작성이 불가합니다.")
+                yield self._sse("meta", {
+                    "sources": [], "rag_score": 0,
+                    "phase_trigger": "pr_blocked",
+                    "classification": ctx.classification,
+                    "bt_routing": {k: v for k, v in bt_routing.items() if k != "_user_message"} if bt_routing else None,
+                    "user_role": ctx.user_role,
+                })
+                yield self._sse("token", {"content": message})
+                yield self._sse("done", {})
+                return
+
+            # ── 분기1-D: 기존계약 확인 (있으면→PO / 없으면→PR) ──
+            if b1 == "D_조건부_기존계약확인":
+                message = _msg.get("사용자안내", "기존 계약 여부를 먼저 확인해 주세요. 기존 계약이 있으면 PO를 직접 생성하고, 없으면 구매요청서를 작성합니다.")
                 yield self._sse("meta", {
                     "sources": [], "rag_score": 0,
                     "phase_trigger": "pr_conditional",
                     "classification": ctx.classification,
-                    "bt_routing": {k: v for k, v in bt_routing.items() if k != "_user_message"},
+                    "bt_routing": {k: v for k, v in bt_routing.items() if k != "_user_message"} if bt_routing else None,
                     "user_role": ctx.user_role,
                 })
                 yield self._sse("token", {"content": message})
                 yield self._sse("done", {})
                 return
 
-            # BT-E~I 또는 BT 미확인: 기존 PR 플로우 유지
+            # ── 분기1-E/F: PR 작성 진행 → 분기2 소싱방식 메타 포함 ──
             yield self._sse("meta", {
                 "sources": [], "rag_score": 0,
                 "phase_trigger": "pr_agreed",
@@ -513,38 +526,52 @@ class OrchestratorAgent(AgentBase):
                 yield self._sse("token", {
                     "content": f"\n\n[안내] {ctx.post_check_violation}"
                 })
-        # BT 라우팅: PR 차단 품목이면 "구매요청서 작성하기" 제거
+        # BT 라우팅: 분기1/분기2 기반 CTA 후속질문 제어
         bt_routing = self._get_bt_routing(ctx)
         pr_blocked = bt_routing and bt_routing.get("pr_action") == "blocked"
+        b2 = (bt_routing or {}).get("branch2_sourcing", "")
 
         # 역할별 CTA 분기
         if ctx.user_role == "user":
-            # 사용자 → 구매요청서만 (단, PR 차단 시 액션버튼으로 대체)
             ctx.suggestions = [s for s in ctx.suggestions if s != "RFP 작성하기"]
             if pr_blocked:
+                # PR 차단 → 구매요청서 제거 + BT별 액션버튼
                 ctx.suggestions = [s for s in ctx.suggestions if s != "구매요청서 작성하기"]
-                # BT별 액션버튼 최대 2개 추가
                 for btn in (bt_routing.get("action_buttons") or [])[:2]:
                     if btn not in ctx.suggestions:
                         ctx.suggestions.append(btn)
-            elif ctx.cta_intent in ("hot", "warm") and "구매요청서 작성하기" not in ctx.suggestions:
-                ctx.suggestions.append("구매요청서 작성하기")
-        elif ctx.user_role == "procurement":
-            # 구매담당자 → RFP만
-            ctx.suggestions = [s for s in ctx.suggestions if s != "구매요청서 작성하기"]
-            if ctx.cta_intent in ("hot", "warm") and "RFP 작성하기" not in ctx.suggestions:
-                ctx.suggestions.append("RFP 작성하기")
-        else:
-            # 역할 미감지 → CTA hot/warm이면 둘 다 제공 (단, PR 차단 시 제외)
-            if ctx.cta_intent in ("hot", "warm"):
-                if not pr_blocked and "구매요청서 작성하기" not in ctx.suggestions:
+            elif ctx.cta_intent in ("hot", "warm"):
+                if "구매요청서 작성하기" not in ctx.suggestions:
                     ctx.suggestions.append("구매요청서 작성하기")
-                if "RFP 작성하기" not in ctx.suggestions:
+                # 분기2 소싱방식에 따라 RFQ/RFP 후속 안내
+                if b2 == "2B_RFQ" and "견적요청서(RFQ) 작성하기" not in ctx.suggestions:
+                    ctx.suggestions.append("견적요청서(RFQ) 작성하기")
+                elif b2 == "2C_RFP입찰" and "제안요청서(RFP) 작성하기" not in ctx.suggestions:
+                    ctx.suggestions.append("제안요청서(RFP) 작성하기")
+        elif ctx.user_role == "procurement":
+            ctx.suggestions = [s for s in ctx.suggestions if s != "구매요청서 작성하기"]
+            if ctx.cta_intent in ("hot", "warm"):
+                if b2 == "2B_RFQ" and "견적요청서(RFQ) 작성하기" not in ctx.suggestions:
+                    ctx.suggestions.append("견적요청서(RFQ) 작성하기")
+                elif b2 == "2C_RFP입찰" and "제안요청서(RFP) 작성하기" not in ctx.suggestions:
+                    ctx.suggestions.append("제안요청서(RFP) 작성하기")
+                elif "RFP 작성하기" not in ctx.suggestions:
                     ctx.suggestions.append("RFP 작성하기")
+        else:
+            if ctx.cta_intent in ("hot", "warm"):
                 if pr_blocked:
                     for btn in (bt_routing.get("action_buttons") or [])[:2]:
                         if btn not in ctx.suggestions:
                             ctx.suggestions.append(btn)
+                else:
+                    if "구매요청서 작성하기" not in ctx.suggestions:
+                        ctx.suggestions.append("구매요청서 작성하기")
+                    if b2 == "2B_RFQ" and "견적요청서(RFQ) 작성하기" not in ctx.suggestions:
+                        ctx.suggestions.append("견적요청서(RFQ) 작성하기")
+                    elif b2 == "2C_RFP입찰" and "제안요청서(RFP) 작성하기" not in ctx.suggestions:
+                        ctx.suggestions.append("제안요청서(RFP) 작성하기")
+                    elif "RFP 작성하기" not in ctx.suggestions:
+                        ctx.suggestions.append("RFP 작성하기")
 
         yield self._sse("suggestions", {"items": ctx.suggestions})
         yield self._sse("done", {})

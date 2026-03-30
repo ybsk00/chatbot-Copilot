@@ -630,6 +630,18 @@ export default function ChatPage() {
     const text = (typeof directText === "string" ? directText : userInput).trim();
     if (!text || isTyping) return;
 
+    // ── PR 직접 진입: "구매요청서" 키워드 → 백엔드 안 거치고 바로 PR filling ──
+    if (phase !== "pr_filling" && (
+      text.includes("구매요청서 작성") || text.includes("구매요청서") || text === "구매요청서 작성하기"
+    )) {
+      const prKey = lastClassification?.pr_template_key;
+      if (prKey && prKey !== "_generic" && getPrTemplate(prKey)) {
+        setUserInput("");
+        handlePrTypeSelect(prKey);
+        return;
+      }
+    }
+
     const userMsg = { id: msgIdCounter++, role: "user", text };
     setMessages(prev => [...prev, userMsg]);
     setUserInput("");

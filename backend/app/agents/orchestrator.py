@@ -431,9 +431,10 @@ class OrchestratorAgent(AgentBase):
         )
         await asyncio.gather(classification_task, retrieval_task)
 
-        # ── L3 JSON 청크 교체: 분류 성공 시 JSON 데이터로 보강 ──
+        # ── L3 JSON 청크 교체: 분류 성공 + hot/warm CTA 시에만 JSON 보강 ──
         l3_code = (ctx.classification or {}).get("l3_code")
-        if l3_code:
+        cta = (ctx.classification or {}).get("cta", "cold")
+        if l3_code and cta in ("hot", "warm"):
             try:
                 from app.rag.retriever import _build_json_chunks
                 json_chunks = _build_json_chunks(l3_code)

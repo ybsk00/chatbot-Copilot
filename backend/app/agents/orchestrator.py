@@ -478,7 +478,7 @@ class OrchestratorAgent(AgentBase):
         )
 
         # ── Meta 이벤트 전송 ──
-        # bt_routing은 이미 CTA 필터링에서 조회됨 — 재사용
+        _bt_meta = self._get_bt_routing(ctx)
         yield self._sse("meta", {
             "sources": ctx.sources,
             "rag_score": round(ctx.rag_score, 4),
@@ -487,7 +487,7 @@ class OrchestratorAgent(AgentBase):
             "cta_intent": ctx.cta_intent,
             "user_role": ctx.user_role,
             "ask_role": ask_role,
-            "bt_routing": {k: v for k, v in bt_routing.items() if k != "_user_message"} if bt_routing else None,
+            "bt_routing": {k: v for k, v in _bt_meta.items() if k != "_user_message"} if _bt_meta else None,
         })
 
         # ── PHASE 3: 스트리밍 생성 ──

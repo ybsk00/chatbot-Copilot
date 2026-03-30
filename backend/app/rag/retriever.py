@@ -7,6 +7,7 @@ from app.db.supabase_client import get_client
 from app.config import (
     RAG_TOP_K, BM25_WEIGHT, VECTOR_MIN_SIMILARITY,
     RRF_K, RRF_BOOST_FAQ, RRF_BOOST_BM25, RRF_BOOST_VECTOR, RRF_TOP_K,
+    FAQ_FALLBACK_TOP_K, FAQ_ENABLED,
 )
 
 logger = logging.getLogger(__name__)
@@ -281,21 +282,111 @@ def _rrf_fuse(
     return results
 
 
-# ── 하이브리드 검색 (병렬 FAQ + BM25 + Vector → RRF 통합) ──
+# ── JSON 직접 응답용 가상 청크 생성 ──
 
-def hybrid_search(query: str, category: str | None = None, taxonomy_major: str | None = None, top_k: int = RAG_TOP_K, min_similarity: float = VECTOR_MIN_SIMILARITY) -> tuple[list[dict], list[float]]:
-    """하이브리드 검색 — 품목체계 RAG 1순위 + FAQ 폴백
-    1순위: knowledge_chunks (0318 품목체계 구조화 청크) — Vector + BM25
-    폴백: knowledge_faq (기존 FAQ) — 1순위 결과가 부족할 때만
-    Returns: (chunks, query_embedding)"""
+def _build_json_chunks(l3_code: str) -> list[dict]:
+    """L3 JSON 안내 메시지를 가상 청크로 변환 (RAG 스킵, 1순위)"""
+    try:
+        from app.data.routing_data import get_routing_store
+        store = get_routing_store()
+        msg = store.get_user_message(l3_code)
+        if not msg:
+            return []
+
+        entry = store.get_routing(l3_code)
+        metadata = {
+            "source_type": "bsm_routing",
+            "l3_code": l3_code,
+            "bt_type": entry.bt_type if entry else "",
+            "gt_code": entry.gt_code if entry else "",
+        }
+
+        chunks = []
+
+        # 사용자 안내 메시지 청크
+        user_guide = msg.get("일반사용자_안내", "")
+        if user_guide:
+            # GT 소싱전략 + SLA 정보도 합침
+            gt_info = msg.get("GT_소싱전략_포인트", "")
+            sla_info = msg.get("처리_SLA", "")
+            content = user_guide
+            if gt_info:
+                content += f"\n\n[소싱전략] {gt_info}"
+            if sla_info:
+                content += f"\n[처리 SLA] {sla_info}"
+
+            chunks.append({
+                "id": f"bsm-msg-{l3_code}",
+                "content": content,
+                "metadata": {**metadata, "chunk_type": "user_message"},
+                "doc_name": f"BSM_L3_{l3_code}",
+                "category": entry.l1 if entry else "",
+                "similarity": 1.0,
+                "rrf_score": 1.0,
+                "rrf_sources": ["bsm_routing"],
+            })
+
+        # 프로세스 가이드 청크
+        process = store.get_process_guide(l3_code)
+        if process:
+            lines = []
+            for key in sorted(process.keys()):
+                lines.append(f"[{key}] {process[key]}")
+            process_text = "\n".join(lines)
+            chunks.append({
+                "id": f"bsm-proc-{l3_code}",
+                "content": process_text,
+                "metadata": {**metadata, "chunk_type": "process_guide"},
+                "doc_name": f"BSM_Process_{l3_code}",
+                "category": entry.l1 if entry else "",
+                "similarity": 0.99,
+                "rrf_score": 0.95,
+                "rrf_sources": ["bsm_process"],
+            })
+
+        return chunks
+    except Exception as e:
+        logger.warning(f"JSON chunk 생성 실패 (l3={l3_code}): {e}")
+        return []
+
+
+# ── 하이브리드 검색 (JSON 1순위 + BM25/Vector 2순위 + FAQ 3순위 최소폴백) ──
+
+def hybrid_search(
+    query: str,
+    category: str | None = None,
+    taxonomy_major: str | None = None,
+    top_k: int = RAG_TOP_K,
+    min_similarity: float = VECTOR_MIN_SIMILARITY,
+    l3_code: str | None = None,
+) -> tuple[list[dict], list[float]]:
+    """3단계 하이브리드 검색.
+
+    [1순위] L3 JSON 직접 조회 — l3_code가 있으면 JSON 안내 메시지를 가상 청크로 반환 (RAG 스킵)
+    [2순위] knowledge_chunks — Vector + BM25 → RRF 리랭킹
+    [3순위] knowledge_faq — 최소 폴백 (boost 0.5, top_k 2)
+
+    Returns: (chunks, query_embedding)
+    """
     import time
     t0 = time.time()
 
-    # 임베딩 1회만 생성
+    # ── [1순위] L3 JSON 직접 조회 (RAG 스킵) ──
+    if l3_code:
+        json_chunks = _build_json_chunks(l3_code)
+        if json_chunks:
+            # 임베딩은 후속질문/역제안에 필요할 수 있으므로 생성
+            query_embedding = embed_query(query)
+            logger.info(
+                f"hybrid_search: JSON direct hit for {l3_code} "
+                f"({len(json_chunks)} chunks, embed={int((time.time()-t0)*1000)}ms)"
+            )
+            return json_chunks, query_embedding
+
+    # ── [2순위] knowledge_chunks (Vector + BM25 병렬) ──
     query_embedding = embed_query(query)
     t_embed = time.time()
 
-    # ── 1순위: 품목체계 RAG (Vector + BM25 병렬) ──
     bm25_chunks = []
     vector_chunks = []
 
@@ -323,17 +414,21 @@ def hybrid_search(query: str, category: str | None = None, taxonomy_major: str |
 
     t_primary = time.time()
 
-    # 1순위 RRF (BM25 + Vector)
+    # 2순위 RRF (BM25 + Vector, FAQ 없이)
     fused = _rrf_fuse([], bm25_chunks, vector_chunks, top_k=RRF_TOP_K)
 
-    # ── 2순위 폴백: FAQ (1순위 결과가 부족할 때) ──
+    # ── [3순위] FAQ 최소 폴백 (chunks 부족 AND FAQ 활성화 시만) ──
     faq_chunks = []
     primary_max_sim = max((c.get("similarity", 0) for c in fused), default=0)
-    needs_faq_fallback = len(fused) < top_k or primary_max_sim < 0.72
+    needs_faq_fallback = FAQ_ENABLED and (len(fused) < top_k or primary_max_sim < 0.72)
 
     if needs_faq_fallback:
         try:
-            faq_results = faq_search(query_embedding, taxonomy_major, category, top_k=5, min_similarity=0.55)
+            faq_results = faq_search(
+                query_embedding, taxonomy_major, category,
+                top_k=FAQ_FALLBACK_TOP_K,  # 기존 5 → 2
+                min_similarity=0.55,
+            )
             faq_chunks = _format_faq_as_chunks(faq_results) if faq_results else []
         except Exception as e:
             logger.warning(f"FAQ fallback search failed: {e}")

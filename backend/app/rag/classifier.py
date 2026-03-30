@@ -366,9 +366,32 @@ def _keyword_pre_match(question: str) -> dict | None:
     }
 
 
+def _enrich_bt_gt(out: dict) -> dict:
+    """분류 결과에 BT/GT 라우팅 정보 추가.
+
+    추가 필드: bt_type, gt_code, pr_action, dept
+    """
+    l3_code = out.get("l3_code")
+    if not l3_code:
+        return out
+    try:
+        from app.data.routing_data import get_routing_store
+        store = get_routing_store()
+        entry = store.get_routing(l3_code)
+        if entry:
+            out["bt_type"] = entry.bt_type
+            out["gt_code"] = entry.gt_code
+            out["pr_action"] = store.get_bt_action(l3_code)
+            out["dept"] = entry.dept
+    except Exception as e:
+        logger.warning(f"BT/GT enrichment 실패 (l3={l3_code}): {e}")
+    return out
+
+
 def classify_intent(question: str, history: list[dict] | None = None) -> dict | None:
     """사용자 질문을 분류체계(대분류/중분류)에 매칭 + RFP/PR 유형 추천.
-    반환: {"대분류", "중분류", "rfp_type", "cta", "pr_template_key", "l3_code"(옵션)}
+    반환: {"대분류", "중분류", "rfp_type", "cta", "pr_template_key", "l3_code"(옵션),
+           "bt_type", "gt_code", "pr_action", "dept"(BT/GT 라우팅)}
     """
     cache = _load_taxonomy()
     valid_majors = set(cache["l1_map"].values())
@@ -416,7 +439,7 @@ def classify_intent(question: str, history: list[dict] | None = None) -> dict | 
                     cta = "hot"
                 elif kw_cta == "warm" and cta == "cold":
                     cta = "warm"
-                return {
+                return _enrich_bt_gt({
                     "대분류": pre_match["l1_name"],
                     "중분류": pre_match["l2_name"],
                     "rfp_type": pre_match["rfp_type"],
@@ -424,7 +447,7 @@ def classify_intent(question: str, history: list[dict] | None = None) -> dict | 
                     "pr_template_key": pre_match["pr_template_key"],
                     "l3_code": pre_match["l3_code"],
                     "l3_name": pre_match["l3_name"],
-                }
+                })
             return None
 
         middle = result.get("중분류", "")
@@ -462,13 +485,13 @@ def classify_intent(question: str, history: list[dict] | None = None) -> dict | 
         if rfq_template_key:
             out["rfq_template_key"] = rfq_template_key
 
-        return out
+        return _enrich_bt_gt(out)
 
     except Exception as e:
         logger.error(f"classify_intent 오류: {e}")
         # 키워드 매칭 폴백
         if pre_match:
-            return {
+            return _enrich_bt_gt({
                 "대분류": pre_match["l1_name"],
                 "중분류": pre_match["l2_name"],
                 "rfp_type": pre_match["rfp_type"],
@@ -476,5 +499,5 @@ def classify_intent(question: str, history: list[dict] | None = None) -> dict | 
                 "pr_template_key": pre_match["pr_template_key"],
                 "l3_code": pre_match["l3_code"],
                 "l3_name": pre_match["l3_name"],
-            }
+            })
         return None

@@ -126,13 +126,15 @@ class RetrievalAgent(AgentBase):
                     executor, embed_query, ctx.message
                 )
             else:
-                # taxonomy_major 없이 검색 (Classification과 병렬 실행)
+                # L3코드가 있으면 JSON 1순위 검색 활성화
+                _l3 = (ctx.classification or {}).get("l3_code") if ctx.classification else None
                 result = await self.run_in_thread(
                     executor,
                     lambda: hybrid_search(
                         search_query,
                         category=ctx.category,
                         taxonomy_major=None,
+                        l3_code=_l3,
                     )
                 )
                 ctx.chunks, ctx.query_embedding = result

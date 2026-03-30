@@ -743,6 +743,7 @@ export default function ChatPage() {
                 rag_score: meta.rag_score,
                 trigger: meta.phase_trigger,
                 classification: meta.classification,
+                btRouting: meta.bt_routing || m.btRouting,
               } : m
             ));
           },
@@ -750,7 +751,23 @@ export default function ChatPage() {
             setMessages(prev => prev.map(m =>
               m.id === aiMsgId ? { ...m, isStreaming: false } : m
             ));
-            if (metaData.phase_trigger === "pr_agreed") {
+            if (metaData.phase_trigger === "pr_blocked") {
+              // BT-A/B/C/D: PR 차단 → 안내 메시지 + 액션버튼
+              setMessages(prev => prev.map(m =>
+                m.id === aiMsgId ? {
+                  ...m,
+                  btRouting: metaData.bt_routing,
+                } : m
+              ));
+            } else if (metaData.phase_trigger === "pr_conditional") {
+              // BT-J: 조건부 → 기존계약 확인 안내 + 액션버튼
+              setMessages(prev => prev.map(m =>
+                m.id === aiMsgId ? {
+                  ...m,
+                  btRouting: metaData.bt_routing,
+                } : m
+              ));
+            } else if (metaData.phase_trigger === "pr_agreed") {
               // 분류 결과에 pr_template_key가 있으면 자동 선택 (카테고리 선택 스킵)
               const autoKey = metaData.classification?.pr_template_key
                 || lastClassification?.pr_template_key;
@@ -2533,6 +2550,68 @@ export default function ChatPage() {
                     ) : null}
                   </div>
                 )}
+
+                {/* BT 라우팅 안내 카드 */}
+                {msg.btRouting && !msg.isStreaming && (() => {
+                  const bt = msg.btRouting;
+                  const isBlocked = bt.pr_action === "blocked";
+                  const isConditional = bt.pr_action === "conditional";
+                  if (!isBlocked && !isConditional) return null;
+                  return (
+                    <div style={{
+                      marginTop: 10, padding: "12px 14px", borderRadius: T.r12,
+                      background: isBlocked
+                        ? "linear-gradient(135deg, #FEF2F2, #FFF7ED)"
+                        : "linear-gradient(135deg, #FFFBEB, #FEF3C7)",
+                      border: `1px solid ${isBlocked ? "#FECACA" : "#FDE68A"}`,
+                    }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                          <span style={{
+                            fontSize: 10, fontWeight: 700, padding: "2px 8px",
+                            borderRadius: T.r6,
+                            background: isBlocked ? "#FEE2E2" : "#FEF3C7",
+                            color: isBlocked ? "#DC2626" : "#D97706",
+                          }}>
+                            {bt.bt_type}
+                          </span>
+                          <span style={{ fontSize: 10, color: "#6B7280", fontWeight: 500 }}>
+                            {bt.gt_code}
+                          </span>
+                          {bt.dept && bt.dept !== "—" && (
+                            <span style={{ fontSize: 10, color: "#6B7280" }}>
+                              · {bt.dept}
+                            </span>
+                          )}
+                        </div>
+                        {bt.sla && (
+                          <span style={{ fontSize: 9, color: "#9CA3AF", fontWeight: 500 }}>
+                            SLA {bt.sla}
+                          </span>
+                        )}
+                      </div>
+                      {(bt.action_buttons || []).length > 0 && (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                          {bt.action_buttons.map((btn, i) => (
+                            <button key={i} onClick={() => handleSend(btn)} style={{
+                              padding: "7px 14px", borderRadius: T.r8,
+                              fontSize: 12, fontWeight: 600, fontFamily: "inherit",
+                              background: i === 0 ? (isBlocked ? "#DC2626" : "#D97706") : "#fff",
+                              color: i === 0 ? "#fff" : (isBlocked ? "#DC2626" : "#D97706"),
+                              border: `1px solid ${isBlocked ? "#FECACA" : "#FDE68A"}`,
+                              cursor: "pointer", transition: "all 0.15s",
+                            }}
+                              onMouseEnter={e => { e.currentTarget.style.opacity = "0.85"; }}
+                              onMouseLeave={e => { e.currentTarget.style.opacity = "1"; }}
+                            >
+                              {btn}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {/* 추천 질문 버튼 */}
                 {msg.suggestions && msg.suggestions.length > 0 && !msg.isStreaming && (

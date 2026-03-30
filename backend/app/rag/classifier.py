@@ -378,26 +378,28 @@ def _enrich_bt_gt(out: dict) -> dict:
 
         l3_code = out.get("l3_code")
 
-        # l3_code 없으면: 대분류+중분류 이름으로 DB L3에서 폴백 매칭
+        # l3_code 없으면: 대분류+중분류+질문 키워드로 DB L3에서 폴백 매칭
         if not l3_code:
             major = out.get("대분류", "")
             middle = out.get("중분류", "")
-            if major:
-                # bt_type이 있는 항목만 대상 (라우팅 데이터가 있는 152건)
-                candidates = [(c, e) for c, e in store.l3_index.items() if e.branch1_path]
-                # 1순위: 중분류 정확 매칭
-                if middle:
-                    for code, entry in candidates:
-                        if entry.l2 == middle:
-                            l3_code = code
-                            break
-                # 2순위: 중분류 부분 매칭
-                if not l3_code and middle:
-                    for code, entry in candidates:
-                        if entry.l2 and (middle in entry.l2 or entry.l2 in middle):
-                            l3_code = code
-                            break
-                # 3순위: 대분류만으로는 폴백 안 함 (너무 광범위해서 오매칭 위험)
+            question = out.get("_question", "")  # 원본 질문
+            if major and middle:
+                candidates = [(c, e) for c, e in store.l3_index.items()
+                              if e.branch1_path and (e.l2 == middle or middle in e.l2 or e.l2 in middle)]
+                if candidates:
+                    if len(candidates) == 1:
+                        l3_code = candidates[0][0]
+                    else:
+                        # 같은 중분류에 L3가 여러 개면 질문 키워드로 최적 매칭
+                        q_lower = question.lower()
+                        best_code, best_score = None, -1
+                        for code, entry in candidates:
+                            score = sum(1 for kw in entry.l3_name.replace("·", " ").split()
+                                        if len(kw) >= 2 and kw in q_lower)
+                            if score > best_score:
+                                best_score = score
+                                best_code = code
+                        l3_code = best_code
                 if l3_code:
                     out["l3_code"] = l3_code
                     out["l3_name"] = store.l3_index[l3_code].l3_name
@@ -515,6 +517,7 @@ def classify_intent(question: str, history: list[dict] | None = None) -> dict | 
         if rfq_template_key:
             out["rfq_template_key"] = rfq_template_key
 
+        out["_question"] = question  # 폴백 매칭에서 질문 키워드 사용
         return _enrich_bt_gt(out)
 
     except Exception as e:

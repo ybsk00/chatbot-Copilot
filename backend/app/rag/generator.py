@@ -173,31 +173,22 @@ def _get_filling_prompt(intent: str, user_role: str | None = None) -> str:
     return BASE_RULES + role_layer + _TEMPLATES.get(intent, _TEMPLATES["field_input"])
 
 def _get_pr_filling_prompt(intent: str, user_role: str | None = None) -> str:
-    """PR(구매요청서) filling 의도별 프롬프트 (역할 레이어 + 역제안 포함)."""
+    """PR(구매요청서) filling 의도별 프롬프트 — 짧은 확인 + 다음 필드 질문."""
     role_layer = _get_role_layer(user_role)
-    _COUNTER_PROPOSAL = """
-[역제안 규칙 — 구매 컨설턴트 모드]
-- 사용자가 입력한 값을 확인한 뒤, 참조 문서에 근거한 전략적 제안을 1~2개 추가하세요.
-- "좋은 선택입니다" 등 긍정 피드백으로 시작하되, 더 나은 대안이 있으면 제시하세요.
-- 예: "3년 약정이시군요. 참고로 5년 약정 시 렌탈료가 20~35% 절감됩니다." / "65대 통합 시 B2B 볼륨 할인(-35%)이 적용됩니다."
-- 예: "복합기 30대 기준이면, 토너 포함 All-in 계약이 연간 300만원 이상 절감됩니다."
-- 데이터를 자연스럽게 녹여서 제시. "참조 문서에 따르면" 금지.
-- 사용자가 언급하지 않은 예산/금액을 임의로 가정하지 마세요.
-- 역제안 후 다음 미입력 필드를 자연스럽게 요청하세요.
-"""
     _TEMPLATES = {
-        "field_input": """[단계: 구매요청서 필드 확인 + 역제안] 섹션: {rfp_sections}
-200~400자. "확인했습니다"로 시작.
-""" + _COUNTER_PROPOSAL + """
-미입력 필드 중 다음 항목을 요청하세요. 현재 채워진 필드: {filled_keys}""",
-        "question": """[단계: 구매요청서 중 질문 + 역제안] 섹션: {rfp_sections}
-300~600자. 질문에 답변하면서 관련 시장 데이터나 협상 포인트를 함께 제시하세요.
-""" + _COUNTER_PROPOSAL + """
-"다음으로 (미입력 필드)를 입력해 주십시오."로 마무리. 현재 채워진 필드: {filled_keys}""",
-        "rfp_question": """[단계: 구매요청서 필드 개념 + 역제안] 섹션: {rfp_sections}
-200~500자. 해당 필드 설명 + 입력 예시 1~2개 + 전략적 조언.
-""" + _COUNTER_PROPOSAL + """
-"위 내용을 참고하여 입력해 주십시오."로 마무리. 현재 채워진 필드: {filled_keys}""",
+        "field_input": """[구매요청서 작성 모드] 섹션: {rfp_sections}
+50~100자. 입력값을 한 줄로 확인하고, 바로 다음 미입력 필드를 질문하세요.
+형식: "{{필드명}} 확인했습니다. 다음으로 {{다음 필드명}}을(를) 입력해 주세요."
+장문 설명, 역제안, 시장 데이터 제시 금지. 확인+질문만.
+현재 채워진 필드: {filled_keys}""",
+        "question": """[구매요청서 작성 모드 — 질문 응답] 섹션: {rfp_sections}
+100~150자. 질문에 간결하게 답변 후 다음 미입력 필드를 질문하세요.
+"다음으로 {{필드명}}을(를) 입력해 주세요."로 마무리.
+현재 채워진 필드: {filled_keys}""",
+        "rfp_question": """[구매요청서 작성 모드 — 필드 설명] 섹션: {rfp_sections}
+100~150자. 해당 필드 설명 + 입력 예시 1개.
+"입력해 주세요."로 마무리.
+현재 채워진 필드: {filled_keys}""",
     }
     return BASE_RULES + role_layer + _TEMPLATES.get(intent, _TEMPLATES["field_input"])
 

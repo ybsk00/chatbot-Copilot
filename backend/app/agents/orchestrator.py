@@ -567,11 +567,11 @@ class OrchestratorAgent(AgentBase):
             for btn in (bt_routing.get("action_buttons") or [])[:2]:
                 if btn not in ctx.suggestions:
                     ctx.suggestions.append(btn)
-        elif has_l3 and pr_allowed and ctx.cta_intent in ("hot", "warm"):
-            # PR 허용 (BT-E~I): 구매요청서만 추가 (RFP/RFQ는 PR 완료 후 안내)
+        elif has_l3 and pr_allowed:
+            # PR 허용 (BT-E~I): CTA 무관하게 구매요청서 항상 추가
             if ctx.user_role != "procurement" and "구매요청서 작성하기" not in ctx.suggestions:
                 ctx.suggestions.append("구매요청서 작성하기")
-        # L3 미매칭 또는 cold CTA 또는 conditional: FAQ 후속질문만
+        # L3 미매칭 또는 conditional: FAQ 후속질문만
 
         yield self._sse("suggestions", {"items": ctx.suggestions})
         yield self._sse("done", {})

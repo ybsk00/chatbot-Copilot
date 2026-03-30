@@ -747,8 +747,10 @@ class OrchestratorAgent(AgentBase):
             self.pr.extract_fields(ctx, self._critical_pool),
         )
 
-        # ── Retrieval: PR에서는 field_input 포함 모든 의도에서 RAG 검색 (역제안용) ──
-        await self.retrieval.execute(ctx, self._critical_pool)
+        # ── Retrieval: PR 작성 중에는 RAG 검색 안 함 (단답형 질문만) ──
+        # (역제안 제거: 현업 요청 — 구매요청서 시작되면 RAG 참조 금지)
+        ctx.chunks = []
+        ctx.rag_score = 0
 
         # ── PHASE 3: 새 필드 머지 + 완성 여부 판단 ──
         trigger = None
@@ -794,10 +796,9 @@ class OrchestratorAgent(AgentBase):
                 missing = required_keys - all_filled
                 logger.info(f"[Orchestrator:PR] PR not complete. missing={missing}")
 
-        # ── PHASE 4: 답변 생성 (역제안을 위해 항상 헌법 주입) ──
-        if ctx.query_embedding:
-            await self.constitution.inject_rules(ctx, self._background_pool)
-
+        # ── PHASE 4: 답변 생성 (RAG/헌법/화법 전부 차단, 단답형 질문만) ──
+        ctx.constitution_text = ""
+        ctx.script_text = ""
         await self.generation.execute(ctx, self._critical_pool)
 
         # ── 타이밍 로그 ──

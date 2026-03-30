@@ -317,6 +317,12 @@ class OrchestratorAgent(AgentBase):
 
         # PR 동의 감지 — 4-STEP 분기 라우팅 게이트 (v2)
         if ctx.phase_trigger == "pr_agreed":
+            # BT 분기를 위해 Classification 선행 실행 (L3코드 필요)
+            if not ctx.classification:
+                try:
+                    await self.classification.execute(ctx, self._critical_pool)
+                except Exception as e:
+                    self.logger.warning(f"PR agree pre-classification failed: {e}")
             bt_routing = self._get_bt_routing(ctx)
             b1 = (bt_routing or {}).get("branch1_path", "")
             b2 = (bt_routing or {}).get("branch2_sourcing", "")

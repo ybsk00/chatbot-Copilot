@@ -561,21 +561,21 @@ class OrchestratorAgent(AgentBase):
         has_l3 = bool((ctx.classification or {}).get("l3_code"))
 
         # 역할별 CTA 분기 — L3 매칭 시에만 구매요청서/RFP 추가
+        # 먼저 기존 구매요청서/RFP 버튼 전부 제거 (필요한 것만 아래서 추가)
+        ctx.suggestions = [s for s in ctx.suggestions
+                           if s not in ("구매요청서 작성하기", "RFP 작성하기",
+                                        "견적요청서(RFQ) 작성하기", "제안요청서(RFP) 작성하기")]
+
         if pr_blocked:
-            # PR 차단 (BT-A/B/C/D): 구매요청서/RFP 제거 + BT 액션버튼
-            ctx.suggestions = [s for s in ctx.suggestions if s not in ("구매요청서 작성하기", "RFP 작성하기")]
+            # PR 차단 (BT-A/B/C/D): BT 액션버튼만
             for btn in (bt_routing.get("action_buttons") or [])[:2]:
                 if btn not in ctx.suggestions:
                     ctx.suggestions.append(btn)
         elif has_l3 and pr_allowed and ctx.cta_intent in ("hot", "warm"):
-            # PR 허용 (BT-E~I) + L3 매칭 성공: 분기2에 따라 적절한 CTA 추가
+            # PR 허용 (BT-E~I): 구매요청서만 추가 (RFP/RFQ는 PR 완료 후 안내)
             if ctx.user_role != "procurement" and "구매요청서 작성하기" not in ctx.suggestions:
                 ctx.suggestions.append("구매요청서 작성하기")
-            if b2 == "2B_RFQ" and "견적요청서(RFQ) 작성하기" not in ctx.suggestions:
-                ctx.suggestions.append("견적요청서(RFQ) 작성하기")
-            elif b2 == "2C_RFP입찰" and "제안요청서(RFP) 작성하기" not in ctx.suggestions:
-                ctx.suggestions.append("제안요청서(RFP) 작성하기")
-        # L3 미매칭 또는 cold CTA: FAQ 후속질문만 (구매요청서/RFP 자동 추가 안 함)
+        # L3 미매칭 또는 cold CTA 또는 conditional: FAQ 후속질문만
 
         yield self._sse("suggestions", {"items": ctx.suggestions})
         yield self._sse("done", {})

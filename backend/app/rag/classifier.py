@@ -397,12 +397,7 @@ def _enrich_bt_gt(out: dict) -> dict:
                         if entry.l2 and (middle in entry.l2 or entry.l2 in middle):
                             l3_code = code
                             break
-                # 3순위: 대분류만 매칭 (첫 번째 L3)
-                if not l3_code:
-                    for code, entry in candidates:
-                        if entry.l1 == major:
-                            l3_code = code
-                            break
+                # 3순위: 대분류만으로는 폴백 안 함 (너무 광범위해서 오매칭 위험)
                 if l3_code:
                     out["l3_code"] = l3_code
                     out["l3_name"] = store.l3_index[l3_code].l3_name

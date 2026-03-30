@@ -2617,10 +2617,14 @@ export default function ChatPage() {
                   );
                 })()}
 
-                {/* 추천 질문 버튼 — BT 카드 액션버튼과 중복되는 것만 제거 */}
-                {msg.suggestions && msg.suggestions.length > 0 && !msg.isStreaming && (
+                {/* 추천 질문 버튼 — 질문형("~하나요?", "~인가요?")만 최대 2개 표시 */}
+                {msg.suggestions && msg.suggestions.length > 0 && !msg.isStreaming && (() => {
+                  const questions = msg.suggestions.filter(s => s.includes("?") || s.includes("하나요") || s.includes("인가요") || s.includes("될까요") || s.includes("드릴까요"));
+                  const display = questions.slice(0, 2);
+                  if (display.length === 0) return null;
+                  return (
                   <div style={{ display:"flex", flexDirection:"column", gap:6, marginTop:4 }}>
-                    {msg.suggestions.map((item, i) => (
+                    {display.map((item, i) => (
                       <button key={i} onClick={() => handleSend(item)} style={{
                         padding:"9px 14px", borderRadius: T.r10,
                         border:`1px solid ${item.includes("RFP") || item.includes("제안요청서") ? 'rgba(14,165,160,0.3)' : 'rgba(14,165,160,0.12)'}`,
@@ -2640,7 +2644,8 @@ export default function ChatPage() {
                       </button>
                     ))}
                   </div>
-                )}
+                  );
+                })()}
 
                 {/* 역할 선택 카드 */}
                 {msg.roleSelect && !userRole && (

@@ -2638,8 +2638,8 @@ export default function ChatPage() {
                   );
                 })()}
 
-                {/* 추천 질문 버튼 */}
-                {msg.suggestions && msg.suggestions.length > 0 && !msg.isStreaming && (
+                {/* 추천 질문 버튼 — BT 카드가 있으면 숨김 (카드 액션버튼으로 대체) */}
+                {msg.suggestions && msg.suggestions.length > 0 && !msg.isStreaming && !msg.btRouting && (
                   <div style={{ display:"flex", flexDirection:"column", gap:6, marginTop:4 }}>
                     {msg.suggestions.map((item, i) => (
                       <button key={i} onClick={() => handleSend(item)} style={{

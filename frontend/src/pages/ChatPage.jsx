@@ -1151,75 +1151,68 @@ export default function ChatPage() {
   const renderPrInlineTabs = () => {
     if (!prType || !prFields || Object.keys(prFields).length === 0) return null;
     // 사용자가 아직 확인하지 않은 필수 필드 (c1~c5 제외)
-    // → default로 채워진 필드도 사용자가 클릭으로 확인해야 함
     const unconfirmed = Object.entries(prFields)
       .filter(([k, f]) => f.required !== false && !PR_SKIP_KEYS.has(k) && !prUserFilledKeys.has(k));
     if (unconfirmed.length === 0) return null;
 
-    // 옵션이 있는 필드 우선, 최대 5개
+    // 1개만 표시 (옵션 있는 필드 우선)
     const withOpts = unconfirmed.filter(([k, f]) => getPrFieldOptions(k, f).length > 0);
-    const noOpts = unconfirmed.filter(([k, f]) => getPrFieldOptions(k, f).length === 0);
-    const display = [...withOpts.slice(0, 5), ...noOpts.slice(0, Math.max(0, 5 - withOpts.length))].slice(0, 5);
+    const [fk, f] = withOpts.length > 0 ? withOpts[0] : unconfirmed[0];
+    const opts = getPrFieldOptions(fk, f);
+    const currentVal = (f.value || "").trim();
 
     return (
-      <div style={{ marginTop:10, display:"flex", flexDirection:"column", gap:8 }}>
-        <div style={{ fontSize:10, fontWeight:600, color: T.sub }}>
-          아래 항목을 선택하거나 채팅으로 입력하세요 ({unconfirmed.length}개 남음)
+      <div style={{ marginTop:10 }}>
+        <div style={{ fontSize:10, fontWeight:600, color: T.sub, marginBottom:6 }}>
+          다음 항목을 입력해 주세요 ({unconfirmed.length}개 남음)
         </div>
-        {display.map(([fk, f]) => {
-          const opts = getPrFieldOptions(fk, f);
-          const currentVal = (f.value || "").trim();
-          return (
-            <div key={fk} style={{
-              background: currentVal ? "rgba(14,165,160,0.04)" : "rgba(6,182,212,0.04)",
-              border: `1px solid ${currentVal ? "rgba(14,165,160,0.12)" : "rgba(6,182,212,0.12)"}`,
-              borderRadius: 10, padding:"8px 12px",
-            }}>
-              <div style={{ fontSize:11, fontWeight:700, color: T.primary, marginBottom:5, display:"flex", alignItems:"center", gap:4 }}>
-                <span style={{ color: T.red, fontSize:10 }}>*</span>
-                {f.label}
-                {currentVal && <span style={{ fontSize:10, fontWeight:500, color: T.sub, marginLeft:"auto" }}>현재: {currentVal}</span>}
-              </div>
-              <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
-                {opts.map((opt, i) => (
-                  <button
-                    key={i}
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      applyPrFills({ [fk]: opt });
-                    }}
-                    style={{
-                      padding:"5px 11px", borderRadius:14, fontSize:11, fontWeight:600,
-                      border: `1px solid ${opt === currentVal ? T.primary : "rgba(6,182,212,0.2)"}`,
-                      background: opt === currentVal ? "rgba(14,165,160,0.1)" : "rgba(255,255,255,0.8)",
-                      color: opt === currentVal ? T.primary : T.text,
-                      cursor:"pointer", fontFamily:"inherit", transition:"all 0.15s",
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.background = "rgba(6,182,212,0.1)"; e.currentTarget.style.borderColor = T.primary; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = opt === currentVal ? "rgba(14,165,160,0.1)" : "rgba(255,255,255,0.8)"; e.currentTarget.style.borderColor = opt === currentVal ? T.primary : "rgba(6,182,212,0.2)"; }}
-                  >{opt}</button>
-                ))}
-                {/* 직접 입력 버튼 — 탭 옵션에 없는 값을 입력하고 싶을 때 */}
-                <button
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setActivePrFieldKey(fk);
-                    inputRef.current?.focus();
-                  }}
-                  style={{
-                    padding:"5px 11px", borderRadius:14, fontSize:11, fontWeight:600,
-                    border:`1px dashed ${activePrFieldKey === fk ? T.primary : "rgba(100,116,139,0.3)"}`,
-                    background: activePrFieldKey === fk ? "rgba(14,165,160,0.08)" : "transparent",
-                    color: activePrFieldKey === fk ? T.primary : T.muted,
-                    cursor:"pointer", fontFamily:"inherit", transition:"all 0.15s",
-                  }}
-                >✎ 직접 입력</button>
-              </div>
-            </div>
-          );
-        })}
+        <div style={{
+          background: "rgba(6,182,212,0.04)",
+          border: "1px solid rgba(6,182,212,0.12)",
+          borderRadius: 10, padding:"8px 12px",
+        }}>
+          <div style={{ fontSize:11, fontWeight:700, color: T.primary, marginBottom:5, display:"flex", alignItems:"center", gap:4 }}>
+            <span style={{ color: T.red, fontSize:10 }}>*</span>
+            {f.label}
+            {currentVal && <span style={{ fontSize:10, fontWeight:500, color: T.sub, marginLeft:"auto" }}>현재: {currentVal}</span>}
+          </div>
+          <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
+            {opts.map((opt, i) => (
+              <button
+                key={i}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  applyPrFills({ [fk]: opt });
+                }}
+                style={{
+                  padding:"5px 11px", borderRadius:14, fontSize:11, fontWeight:600,
+                  border: `1px solid ${opt === currentVal ? T.primary : "rgba(6,182,212,0.2)"}`,
+                  background: opt === currentVal ? "rgba(14,165,160,0.1)" : "rgba(255,255,255,0.8)",
+                  color: opt === currentVal ? T.primary : T.text,
+                  cursor:"pointer", fontFamily:"inherit", transition:"all 0.15s",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = "rgba(6,182,212,0.1)"; e.currentTarget.style.borderColor = T.primary; }}
+                onMouseLeave={e => { e.currentTarget.style.background = opt === currentVal ? "rgba(14,165,160,0.1)" : "rgba(255,255,255,0.8)"; e.currentTarget.style.borderColor = opt === currentVal ? T.primary : "rgba(6,182,212,0.2)"; }}
+              >{opt}</button>
+            ))}
+            <button
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setActivePrFieldKey(fk);
+                inputRef.current?.focus();
+              }}
+              style={{
+                padding:"5px 11px", borderRadius:14, fontSize:11, fontWeight:600,
+                border:`1px dashed ${activePrFieldKey === fk ? T.primary : "rgba(100,116,139,0.3)"}`,
+                background: activePrFieldKey === fk ? "rgba(14,165,160,0.08)" : "transparent",
+                color: activePrFieldKey === fk ? T.primary : T.muted,
+                cursor:"pointer", fontFamily:"inherit", transition:"all 0.15s",
+              }}
+            >직접 입력</button>
+          </div>
+        </div>
       </div>
     );
   };
@@ -1227,67 +1220,53 @@ export default function ChatPage() {
   // ── PR 퀵필 카드: 필수 항목을 탭 형태로 선택 (c1~c5 제외) ──
   const renderPrQuickFillCards = () => {
     if (!prType || !prFields || Object.keys(prFields).length === 0) return null;
-    // c1~c5 제외, 필수 필드만
-    const targetFields = Object.entries(prFields)
-      .filter(([k, f]) => f.required !== false && !PR_SKIP_KEYS.has(k));
-    if (targetFields.length === 0) return null;
+    // c1~c5 제외, 필수 필드 중 미완성만
+    const unfilledFields = Object.entries(prFields)
+      .filter(([k, f]) => f.required !== false && !PR_SKIP_KEYS.has(k) && !(f.value || "").trim());
+    if (unfilledFields.length === 0) return null;
+
+    // 첫 번째 미완 필드 1개만 표시
+    const [fk, f] = unfilledFields[0];
+    const opts = getPrFieldOptions(fk, f);
 
     return (
-      <div style={{ marginTop:12, display:"flex", flexDirection:"column", gap:10 }}>
-        {targetFields.map(([fk, f]) => {
-          const opts = getPrFieldOptions(fk, f);
-          const isFilled = (f.value || "").trim();
-          return (
-            <div key={fk} style={{
-              background: isFilled ? "rgba(16,185,129,0.06)" : "rgba(6,182,212,0.04)",
-              border: `1px solid ${isFilled ? "rgba(16,185,129,0.15)" : "rgba(6,182,212,0.12)"}`,
-              borderRadius: 10, padding:"10px 14px",
-            }}>
-              <div style={{ fontSize:11, fontWeight:700, color: isFilled ? T.greenDark : T.primary, marginBottom:6, display:"flex", alignItems:"center", gap:4 }}>
-                {isFilled ? <IconCheck size={11} /> : <span style={{ color: T.red, fontSize:10 }}>*</span>}
-                {f.label}
-                {isFilled && <span style={{ fontSize:10, fontWeight:600, color: T.greenDark, marginLeft:"auto" }}>{f.value}</span>}
-              </div>
-              {!isFilled && opts.length > 0 && (
-                <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                  {opts.map((opt, i) => (
-                    <button
-                      key={i}
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        applyPrFills({ [fk]: opt });
-                      }}
-                      style={{
-                        padding:"6px 12px", borderRadius:16, fontSize:11, fontWeight:600,
-                        border:`1px solid rgba(6,182,212,0.2)`, background:"rgba(255,255,255,0.8)",
-                        color: T.text, cursor:"pointer", fontFamily:"inherit", transition:"all 0.15s",
-                      }}
-                      onMouseEnter={e => { e.currentTarget.style.background = "rgba(6,182,212,0.1)"; e.currentTarget.style.borderColor = T.primary; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.8)"; e.currentTarget.style.borderColor = "rgba(6,182,212,0.2)"; }}
-                    >{opt}</button>
-                  ))}
-                </div>
-              )}
-              {!isFilled && opts.length === 0 && (
-                <div style={{ fontSize:10, color: T.muted }}>채팅으로 입력하거나 패널에서 직접 입력해 주세요</div>
-              )}
+      <div style={{ marginTop:12 }}>
+        <div style={{ fontSize:10, color: T.sub, marginBottom:6 }}>
+          필수 항목 {unfilledFields.length}개 남음
+        </div>
+        <div style={{
+          background: "rgba(6,182,212,0.04)",
+          border: "1px solid rgba(6,182,212,0.12)",
+          borderRadius: 10, padding:"10px 14px",
+        }}>
+          <div style={{ fontSize:11, fontWeight:700, color: T.primary, marginBottom:6, display:"flex", alignItems:"center", gap:4 }}>
+            <span style={{ color: T.red, fontSize:10 }}>*</span>
+            {f.label}
+          </div>
+          {opts.length > 0 ? (
+            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+              {opts.map((opt, i) => (
+                <button
+                  key={i}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    applyPrFills({ [fk]: opt });
+                  }}
+                  style={{
+                    padding:"6px 12px", borderRadius:16, fontSize:11, fontWeight:600,
+                    border:"1px solid rgba(6,182,212,0.2)", background:"rgba(255,255,255,0.8)",
+                    color: T.text, cursor:"pointer", fontFamily:"inherit", transition:"all 0.15s",
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = "rgba(6,182,212,0.1)"; e.currentTarget.style.borderColor = T.primary; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.8)"; e.currentTarget.style.borderColor = "rgba(6,182,212,0.2)"; }}
+                >{opt}</button>
+              ))}
             </div>
-          );
-        })}
-        {/* 패널 열기 버튼 */}
-        <button
-          onMouseDown={(e) => { e.preventDefault(); setPrRightVisible(true); }}
-          style={{
-            padding:"10px 16px", borderRadius:10, border:`1.5px solid ${T.border}`,
-            background: T.card, color: T.sub, fontSize:11, fontWeight:600,
-            cursor:"pointer", fontFamily:"inherit", textAlign:"center", transition:"all 0.15s",
-          }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = T.primary; e.currentTarget.style.color = T.primary; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.color = T.sub; }}
-        >
-          전체 항목 보기 (패널 열기)
-        </button>
+          ) : (
+            <div style={{ fontSize:10, color: T.muted }}>채팅으로 입력해 주세요</div>
+          )}
+        </div>
       </div>
     );
   };

@@ -635,7 +635,12 @@ export default function ChatPage() {
     setUserInput("");
     setIsTyping(true);
 
-    const history = messages.map(m => ({ role: m.role, content: m.text }));
+    const history = messages.map(m => {
+      const h = { role: m.role, content: m.text };
+      // classification 메타데이터를 history에 포함 (BT 라우팅 맥락 유지)
+      if (m.classification) h.classification = m.classification;
+      return h;
+    });
 
     try {
       if (phase === "pr_filling" && activePrFieldKey) {

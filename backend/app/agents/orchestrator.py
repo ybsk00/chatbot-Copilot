@@ -227,12 +227,18 @@ class OrchestratorAgent(AgentBase):
         # 1순위: 현재 classification의 l3_code
         l3_code = (ctx.classification or {}).get("l3_code")
 
-        # 2순위: 대화 이력에서 가장 최근 l3_code 추출
+        # 2순위: 대화 이력에서 가장 최근 l3_code 추출 (AI 메시지의 classification 포함)
         if not l3_code and ctx.history:
             for msg in reversed(ctx.history):
-                meta = msg.get("metadata") or msg.get("classification") or {}
-                if meta.get("l3_code"):
-                    l3_code = meta["l3_code"]
+                cls = msg.get("classification") or msg.get("metadata") or {}
+                if cls.get("l3_code"):
+                    l3_code = cls["l3_code"]
+                    # 현재 classification에도 반영 (후속 로직에서 사용)
+                    if not ctx.classification:
+                        ctx.classification = cls
+                    elif not ctx.classification.get("l3_code"):
+                        ctx.classification["l3_code"] = l3_code
+                        ctx.classification["l3_name"] = cls.get("l3_name", "")
                     break
 
         if not l3_code:

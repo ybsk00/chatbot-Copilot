@@ -555,50 +555,27 @@ class OrchestratorAgent(AgentBase):
         # BT 라우팅: 분기1/분기2 기반 CTA 후속질문 제어
         bt_routing = self._get_bt_routing(ctx)
         pr_blocked = bt_routing and bt_routing.get("pr_action") == "blocked"
+        pr_allowed = bt_routing and bt_routing.get("pr_action") == "allowed"
         b2 = (bt_routing or {}).get("branch2_sourcing", "")
+        # L3 매칭 안 된 일반 질문에서는 구매요청서/RFP 자동 추가 안 함
+        has_l3 = bool((ctx.classification or {}).get("l3_code"))
 
-        # 역할별 CTA 분기
-        if ctx.user_role == "user":
-            ctx.suggestions = [s for s in ctx.suggestions if s != "RFP 작성하기"]
-            if pr_blocked:
-                # PR 차단 → 구매요청서 제거 + BT별 액션버튼
-                ctx.suggestions = [s for s in ctx.suggestions if s != "구매요청서 작성하기"]
-                for btn in (bt_routing.get("action_buttons") or [])[:2]:
-                    if btn not in ctx.suggestions:
-                        ctx.suggestions.append(btn)
-            elif ctx.cta_intent in ("hot", "warm"):
-                if "구매요청서 작성하기" not in ctx.suggestions:
-                    ctx.suggestions.append("구매요청서 작성하기")
-                # 분기2 소싱방식에 따라 RFQ/RFP 후속 안내
-                if b2 == "2B_RFQ" and "견적요청서(RFQ) 작성하기" not in ctx.suggestions:
-                    ctx.suggestions.append("견적요청서(RFQ) 작성하기")
-                elif b2 == "2C_RFP입찰" and "제안요청서(RFP) 작성하기" not in ctx.suggestions:
-                    ctx.suggestions.append("제안요청서(RFP) 작성하기")
-        elif ctx.user_role == "procurement":
-            ctx.suggestions = [s for s in ctx.suggestions if s != "구매요청서 작성하기"]
-            if ctx.cta_intent in ("hot", "warm"):
-                if b2 == "2B_RFQ" and "견적요청서(RFQ) 작성하기" not in ctx.suggestions:
-                    ctx.suggestions.append("견적요청서(RFQ) 작성하기")
-                elif b2 == "2C_RFP입찰" and "제안요청서(RFP) 작성하기" not in ctx.suggestions:
-                    ctx.suggestions.append("제안요청서(RFP) 작성하기")
-                elif "RFP 작성하기" not in ctx.suggestions:
-                    ctx.suggestions.append("RFP 작성하기")
-        else:
-            if pr_blocked:
-                # 역할 미감지 + PR 차단: 구매요청서/RFP 제거 + 액션버튼
-                ctx.suggestions = [s for s in ctx.suggestions if s not in ("구매요청서 작성하기", "RFP 작성하기")]
-                for btn in (bt_routing.get("action_buttons") or [])[:2]:
-                    if btn not in ctx.suggestions:
-                        ctx.suggestions.append(btn)
-            elif ctx.cta_intent in ("hot", "warm"):
-                if "구매요청서 작성하기" not in ctx.suggestions:
-                    ctx.suggestions.append("구매요청서 작성하기")
-                if b2 == "2B_RFQ" and "견적요청서(RFQ) 작성하기" not in ctx.suggestions:
-                    ctx.suggestions.append("견적요청서(RFQ) 작성하기")
-                elif b2 == "2C_RFP입찰" and "제안요청서(RFP) 작성하기" not in ctx.suggestions:
-                    ctx.suggestions.append("제안요청서(RFP) 작성하기")
-                elif "RFP 작성하기" not in ctx.suggestions:
-                    ctx.suggestions.append("RFP 작성하기")
+        # 역할별 CTA 분기 — L3 매칭 시에만 구매요청서/RFP 추가
+        if pr_blocked:
+            # PR 차단 (BT-A/B/C/D): 구매요청서/RFP 제거 + BT 액션버튼
+            ctx.suggestions = [s for s in ctx.suggestions if s not in ("구매요청서 작성하기", "RFP 작성하기")]
+            for btn in (bt_routing.get("action_buttons") or [])[:2]:
+                if btn not in ctx.suggestions:
+                    ctx.suggestions.append(btn)
+        elif has_l3 and pr_allowed and ctx.cta_intent in ("hot", "warm"):
+            # PR 허용 (BT-E~I) + L3 매칭 성공: 분기2에 따라 적절한 CTA 추가
+            if ctx.user_role != "procurement" and "구매요청서 작성하기" not in ctx.suggestions:
+                ctx.suggestions.append("구매요청서 작성하기")
+            if b2 == "2B_RFQ" and "견적요청서(RFQ) 작성하기" not in ctx.suggestions:
+                ctx.suggestions.append("견적요청서(RFQ) 작성하기")
+            elif b2 == "2C_RFP입찰" and "제안요청서(RFP) 작성하기" not in ctx.suggestions:
+                ctx.suggestions.append("제안요청서(RFP) 작성하기")
+        # L3 미매칭 또는 cold CTA: FAQ 후속질문만 (구매요청서/RFP 자동 추가 안 함)
                     if b2 == "2B_RFQ" and "견적요청서(RFQ) 작성하기" not in ctx.suggestions:
                         ctx.suggestions.append("견적요청서(RFQ) 작성하기")
                     elif b2 == "2C_RFP입찰" and "제안요청서(RFP) 작성하기" not in ctx.suggestions:

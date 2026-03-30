@@ -440,7 +440,8 @@ class OrchestratorAgent(AgentBase):
                 if json_chunks:
                     # JSON 청크를 맨 앞에 삽입 (기존 RAG 청크보다 우선)
                     ctx.chunks = json_chunks + (ctx.chunks or [])
-                    ctx.rag_score = max(ctx.rag_score, 1.0)
+                    ctx.rag_score = max(ctx.rag_score, 0.85)
+                    ctx.confidence_rejected = False  # JSON 데이터가 있으면 거부 해제
                     logger.info(f"[Orchestrator] L3 JSON chunks injected: {l3_code} ({len(json_chunks)}개)")
             except Exception as e:
                 logger.warning(f"L3 JSON chunk injection failed: {e}")

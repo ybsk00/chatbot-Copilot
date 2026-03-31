@@ -877,30 +877,13 @@ export default function ChatPage() {
                 m.id === aiMsgId ? { ...m, rfpTypeSelect: true } : m
               ));
             } else if (metaData.phase_trigger === "rfq_agreed") {
-              // 소싱담당자 RFQ 직행 — L3 코드 기반 RFQ 템플릿 자동 선택
+              // 소싱담당자 RFQ — handleRfqTypeSelect로 통일 (대화형 수집, 30% 자동오픈)
               const l3Code = metaData.classification?.l3_code;
               const prKey = metaData.classification?.pr_template_key;
               const rfqKey = prKey || l3Code;
-              const rfqTpl = rfqKey && dbRfqTemplates?.[rfqKey];
-              if (rfqTpl) {
-                // RFQ 템플릿 있음 → 바로 rfq_filling 진입
-                const rfqTemplateFields = {};
-                Object.entries(rfqTpl.fields).forEach(([k, v]) => {
-                  rfqTemplateFields[k] = { ...v };
-                });
-                setRfqType(rfqKey);
-                setRfqFields(rfqTemplateFields);
-                setPhase("rfq_filling");
-                setRfqRightVisible(true);
-                setPrRightVisible(false);
-                setMessages(prev => prev.map(m =>
-                  m.id === aiMsgId ? {
-                    ...m,
-                    text: `**${rfqTpl.name}** 견적서(RFQ) 작성을 시작합니다.\n소싱담당자 필수 항목을 채워주세요.`,
-                  } : m
-                ));
+              if (rfqKey && dbRfqTemplates?.[rfqKey]) {
+                handleRfqTypeSelect(rfqKey);
               } else {
-                // RFQ 템플릿 자동매칭 실패 → 카테고리 선택기 표시
                 setMessages(prev => prev.map(m =>
                   m.id === aiMsgId ? {
                     ...m,

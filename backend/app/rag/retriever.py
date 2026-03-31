@@ -427,17 +427,9 @@ def hybrid_search(
     import time
     t0 = time.time()
 
-    # ── [1순위] L3 JSON 직접 조회 (RAG 스킵) ──
-    if l3_code:
-        json_chunks = _build_json_chunks(l3_code)
-        if json_chunks:
-            # 임베딩은 후속질문/역제안에 필요할 수 있으므로 생성
-            query_embedding = embed_query(query)
-            logger.info(
-                f"hybrid_search: JSON direct hit for {l3_code} "
-                f"({len(json_chunks)} chunks, embed={int((time.time()-t0)*1000)}ms)"
-            )
-            return json_chunks, query_embedding
+    # ── [1순위] L3 JSON 직접 조회 — 비활성화 (데이터는 DB에 시딩 완료) ──
+    # _build_json_chunks는 BSM JSON 시딩 파일을 직접 읽는 레거시 코드.
+    # 모든 데이터가 knowledge_chunks에 시딩되었으므로 DB 검색으로 통일.
 
     # ── [2순위] knowledge_chunks (Vector + BM25 병렬) ──
     query_embedding = embed_query(query)

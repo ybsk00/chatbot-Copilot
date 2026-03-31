@@ -540,20 +540,9 @@ class OrchestratorAgent(AgentBase):
         await asyncio.gather(classification_task, retrieval_task)
         # Constitution/Script는 Generation 시작 전까지만 완료되면 됨 (아래서 await)
 
-        # ── L3 JSON 청크 교체: 분류 성공 + hot/warm CTA 시에만 JSON 보강 ──
+        # ── L3 JSON 직접 주입 제거 — 모든 데이터는 DB(knowledge_chunks)에서 검색 ──
         l3_code = (ctx.classification or {}).get("l3_code")
         cta = (ctx.classification or {}).get("cta", "cold")
-        if l3_code and cta in ("hot", "warm"):
-            try:
-                from app.rag.retriever import _build_json_chunks
-                json_chunks = _build_json_chunks(l3_code)
-                if json_chunks:
-                    ctx.chunks = json_chunks + (ctx.chunks or [])
-                    ctx.rag_score = max(ctx.rag_score, 0.85)
-                    ctx.confidence_rejected = False
-                    logger.info(f"[Orchestrator] L3 JSON chunks injected: {l3_code} ({len(json_chunks)}개)")
-            except Exception as e:
-                logger.warning(f"L3 JSON chunk injection failed: {e}")
 
         # ── 사후 필터링: 분류 결과로 관련 없는 청크 제거 ──
         self._filter_chunks_by_classification(ctx)

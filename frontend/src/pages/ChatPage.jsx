@@ -710,30 +710,8 @@ export default function ChatPage() {
     const text = (typeof directText === "string" ? directText : userInput).trim();
     if (!text || isTyping) return;
 
-    // ── PR 직접 진입: "구매요청서" 키워드 → 백엔드 안 거치고 바로 PR filling ──
-    if (phase !== "pr_filling" && phase !== "rfq_filling" && (
-      text.includes("구매요청서 작성") || text.includes("구매요청서") || text === "구매요청서 작성하기"
-    )) {
-      const prKey = lastClassification?.pr_template_key;
-      if (prKey && prKey !== "_generic" && getPrTemplate(prKey)) {
-        setUserInput("");
-        handlePrTypeSelect(prKey);
-        return;
-      }
-      // fallback: 스트리밍 우회 → 카테고리 선택 UI 바로 표시
-      setUserInput("");
-      setMessages(prev => [...prev,
-        { id: msgIdCounter++, role: "user", text },
-        { id: msgIdCounter++, role: "assistant",
-          text: "구매요청서 작성을 진행하겠습니다. 아래에서 구매 카테고리를 선택해 주십시오.",
-          prTypeSelect: true },
-      ]);
-      return;
-    }
-
-    // ── RFQ/RFP 직접 진입은 백엔드 분류기에 위임 (키워드 매칭 제거) ──
-    // 소싱담당자의 "견적서 작성", "RFP 작성" 등은 백엔드 스트리밍으로 보내서
-    // classifier가 L3 분류 + branch2_sourcing으로 RFQ vs RFP 판단
+    // ── PR/RFQ/RFP 모두 백엔드 LLM 분류기에 위임 (키워드 인터셉트 제거) ──
+    // 분류기가 L3 분류 + CTA(hot/warm) + branch2_sourcing + user_role로 자동 분기
 
     const userMsg = { id: msgIdCounter++, role: "user", text };
     setMessages(prev => [...prev, userMsg]);

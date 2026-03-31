@@ -540,28 +540,46 @@ class OrchestratorAgent(AgentBase):
         await asyncio.gather(classification_task, retrieval_task)
         # Constitution/Script는 Generation 시작 전까지만 완료되면 됨 (아래서 await)
 
-        # ── 소싱담당자 자동 분기: 분류 성공 + hot CTA → RFQ/RFP 직행 ──
+        # ── 의도 기반 자동 분기: 분류 성공 + hot/warm CTA → 역할별 문서 작성 직행 ──
         l3_code = (ctx.classification or {}).get("l3_code")
         cta = (ctx.classification or {}).get("cta", "cold")
         b2_cls = (ctx.classification or {}).get("branch2_sourcing", "")
+        pr_action = (ctx.classification or {}).get("pr_action", "")
 
-        if ctx.user_role == "procurement" and cta == "hot" and l3_code and b2_cls in ("2B_RFQ", "2C_RFP입찰"):
-            if b2_cls == "2B_RFQ":
-                trigger = "rfq_agreed"
-                msg_text = f"이 품목은 RFQ(경쟁견적) 방식으로 소싱합니다. 견적서(RFQ) 작성을 진행하겠습니다."
-            else:
-                trigger = "rfp_agreed"
-                msg_text = f"이 품목은 RFP(기술+가격 입찰) 방식으로 소싱합니다. 제안요청서(RFP) 작성을 진행하겠습니다."
-            yield self._sse("meta", {
-                "sources": [], "rag_score": 0,
-                "phase_trigger": trigger,
-                "classification": ctx.classification,
-                "user_role": ctx.user_role,
-            })
-            yield self._sse("token", {"content": msg_text})
-            yield self._sse("done", {})
-            logger.info(f"[Orchestrator] Procurement auto-branch: {b2_cls} → {trigger} (l3={l3_code})")
-            return
+        if cta in ("hot", "warm") and l3_code:
+            # 소싱담당자: branch2로 RFQ/RFP 자동 분기
+            if ctx.user_role == "procurement" and b2_cls in ("2B_RFQ", "2C_RFP입찰"):
+                if b2_cls == "2B_RFQ":
+                    trigger = "rfq_agreed"
+                    msg_text = "이 품목은 RFQ(경쟁견적) 방식으로 소싱합니다. 견적서(RFQ) 작성을 진행하겠습니다."
+                else:
+                    trigger = "rfp_agreed"
+                    msg_text = "이 품목은 RFP(기술+가격 입찰) 방식으로 소싱합니다. 제안요청서(RFP) 작성을 진행하겠습니다."
+                yield self._sse("meta", {
+                    "sources": [], "rag_score": 0,
+                    "phase_trigger": trigger,
+                    "classification": ctx.classification,
+                    "user_role": ctx.user_role,
+                })
+                yield self._sse("token", {"content": msg_text})
+                yield self._sse("done", {})
+                logger.info(f"[Orchestrator] Procurement auto-branch: {b2_cls} → {trigger} (l3={l3_code})")
+                return
+
+            # 사용자: PR 허용이면 구매요청서 자동 진입
+            if ctx.user_role in ("user", None) and pr_action != "blocked":
+                yield self._sse("meta", {
+                    "sources": [], "rag_score": 0,
+                    "phase_trigger": "pr_agreed",
+                    "classification": ctx.classification,
+                    "user_role": ctx.user_role,
+                })
+                yield self._sse("token", {
+                    "content": "구매요청서 작성을 진행하겠습니다. 아래에서 구매 카테고리를 선택해 주십시오."
+                })
+                yield self._sse("done", {})
+                logger.info(f"[Orchestrator] User auto-branch: pr_agreed (l3={l3_code}, cta={cta})")
+                return
 
         # ── 사후 필터링: 분류 결과로 관련 없는 청크 제거 ──
         self._filter_chunks_by_classification(ctx)

@@ -527,14 +527,38 @@ class OrchestratorAgent(AgentBase):
         pr_action = (ctx.classification or {}).get("pr_action", "")
 
         if cta in ("hot", "warm") and l3_code:
-            # 소싱담당자: branch2로 RFQ/RFP 자동 분기
-            if ctx.user_role == "procurement" and b2_cls in ("2B_RFQ", "2C_RFP입찰"):
+            # 소싱담당자: 어떤 품목이든 hot/warm이면 작성 진입
+            if ctx.user_role == "procurement":
                 if b2_cls == "2B_RFQ":
                     trigger = "rfq_agreed"
                     msg_text = "이 품목은 RFQ(경쟁견적) 방식으로 소싱합니다. 견적서(RFQ) 작성을 진행하겠습니다."
-                else:
+                elif b2_cls == "2C_RFP입찰":
                     trigger = "rfp_agreed"
                     msg_text = "이 품목은 RFP(기술+가격 입찰) 방식으로 소싱합니다. 제안요청서(RFP) 작성을 진행하겠습니다."
+                elif b2_cls in ("SKIP", "SKIP_or_PR"):
+                    # 카탈로그/주관부서 품목 → 단가계약 안내 + 견적 필요 여부 확인
+                    l3_name = (ctx.classification or {}).get("l3_name", "해당 품목")
+                    yield self._sse("meta", {
+                        "sources": [], "rag_score": 0,
+                        "phase_trigger": None,
+                        "classification": ctx.classification,
+                        "user_role": ctx.user_role,
+                    })
+                    yield self._sse("token", {"content": (
+                        f"**{l3_name}**은(는) 단가계약이 체결된 카탈로그 품목입니다.\n"
+                        f"기존 계약 조건으로 직접 발주가 가능합니다.\n\n"
+                        f"재계약·신규 공급사 선정을 위한 견적서가 필요하시면 아래에서 선택해 주십시오."
+                    )})
+                    yield self._sse("suggestions", {
+                        "items": ["견적요청서(RFQ) 작성하기", "제안요청서(RFP) 작성하기"]
+                    })
+                    yield self._sse("done", {})
+                    logger.info(f"[Orchestrator] Procurement catalog guidance: {b2_cls} (l3={l3_code})")
+                    return
+                else:
+                    # 2A_PR만 등 → RFQ 기본 진입
+                    trigger = "rfq_agreed"
+                    msg_text = "견적서(RFQ) 작성을 진행하겠습니다."
                 yield self._sse("meta", {
                     "sources": [], "rag_score": 0,
                     "phase_trigger": trigger,

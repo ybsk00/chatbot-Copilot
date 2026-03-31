@@ -553,6 +553,8 @@ export default function ChatPage() {
     setFields(rfpTemplateFields);
     setPhase("filling");
     setRightVisible(true);
+    setRfqRightVisible(false);
+    setPrRightVisible(false);
 
     setMessages(prev => [...prev, {
       id: msgIdCounter++, role: "assistant",
@@ -644,6 +646,8 @@ export default function ChatPage() {
     });
     setFields(templateFields);
     setRightVisible(true);
+    setRfqRightVisible(false);  // RFQ 패널 닫기
+    setPrRightVisible(false);   // PR 패널 닫기
     setPhase("filling");
 
     const tmpl = RFP_TEMPLATES[type];
@@ -1251,7 +1255,8 @@ export default function ChatPage() {
     setRfqFields(templateFields);
     setPhase("rfq_filling");
     setRfqRightVisible(true);
-    setPrRightVisible(false);
+    setRightVisible(false);     // RFP 패널 닫기
+    setPrRightVisible(false);   // PR 패널 닫기
     setMessages(prev => [...prev, {
       id: msgIdCounter++, role: "assistant",
       text: `**${tpl.name}** 견적서(RFQ) 작성을 시작합니다.\n소싱담당자 필수 항목을 채워주세요. 채팅으로 입력하시면 자동 매핑됩니다.`,
@@ -2148,96 +2153,133 @@ export default function ChatPage() {
 
   const RfqPanelFilling = () => (
     <div className="custom-scroll" style={{ flex:1, overflowY:"auto", padding:"20px 22px" }}>
-      {/* 진행률 */}
+      {/* 진행률 — RFP와 동일 디자인 */}
       <div style={{
-        background: `linear-gradient(135deg, rgba(99,102,241,0.06) 0%, rgba(129,140,248,0.04) 100%)`,
+        background: `linear-gradient(135deg, rgba(14,165,160,0.06) 0%, rgba(6,182,212,0.04) 100%)`,
         borderRadius: T.r16, padding:"16px 20px", marginBottom:16,
-        border: `1px solid rgba(99,102,241,0.12)`,
+        border: `1px solid rgba(14,165,160,0.12)`,
+        boxShadow: '0 2px 8px rgba(14,165,160,0.06)',
       }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
-          <span style={{ fontSize:12, fontWeight:700, color: T.text }}>견적서(RFQ) 완성도</span>
+          <span style={{ fontSize:12, fontWeight:700, color: T.text }}>RFQ 완성도</span>
           <span style={{
             fontSize:11, fontWeight:700, padding:"4px 12px", borderRadius:20,
             background: rfqPct >= 80 ? T.greenLight : 'rgba(255,255,255,0.8)',
-            color: rfqPct >= 80 ? T.greenDark : '#6366f1',
-          }}>필수 {rfqRequiredFilled}/{rfqRequiredTotal} · {rfqPct}%</span>
+            color: rfqPct >= 80 ? T.greenDark : T.primary,
+            border: `1px solid ${rfqPct >= 80 ? T.greenMid : 'rgba(14,165,160,0.15)'}`,
+            boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+          }}>{rfqRequiredFilled} / {rfqRequiredTotal} · {rfqPct}%</span>
         </div>
+        {rfqPct < 100 && (
+          <div style={{ fontSize:11, color: T.red, marginBottom:8, display:"flex", alignItems:"center", gap:4 }}>
+            <IconAlert size={12} /> 미완료 항목이 있습니다. 직접 입력하거나 채팅으로 입력해 주세요.
+          </div>
+        )}
         <div style={{ height:8, background:"rgba(255,255,255,0.7)", borderRadius:4, overflow:"hidden" }}>
           <div style={{
             height:"100%", width:`${rfqPct}%`, borderRadius:4,
-            background: `linear-gradient(90deg, #6366f1, #818cf8)`,
+            background: `linear-gradient(90deg, ${T.primary}, ${T.teal})`,
+            backgroundSize:"200% 100%",
+            animation: rfqPct > 0 && rfqPct < 100 ? "shimmer 2s linear infinite" : "none",
             transition:"width 0.6s ease",
           }} />
         </div>
       </div>
 
-      {/* 섹션 아코디언 */}
+      {/* 섹션 아코디언 — RFP와 동일 디자인 */}
       {rfqSections.map((sec, si) => {
         const isSupplier = sec.supplier_zone;
-        const isCommon = sec.common;
-        const secDone = sec.fields.every(f => rfqFields[f]?.value);
-        const headerBg = isSupplier ? 'rgba(245,158,11,0.06)' : isCommon ? 'rgba(14,165,160,0.06)' : secDone ? 'rgba(16,185,129,0.04)' : 'rgba(99,102,241,0.04)';
-        const headerBorder = isSupplier ? 'rgba(245,158,11,0.2)' : isCommon ? 'rgba(14,165,160,0.2)' : secDone ? 'rgba(16,185,129,0.15)' : 'rgba(99,102,241,0.12)';
+        const sectionDone = sec.fields.every(fk => (rfqFields[fk]?.value || "").trim());
+        const filledCnt = sec.fields.filter(fk => (rfqFields[fk]?.value || "").trim()).length;
         return (
           <div key={si} style={{ marginBottom:10 }}>
+            {/* 섹션 헤더 — RFP 동일 */}
             <div
               onClick={() => setRfqOpenSec(p => ({...p,[si]:!p[si]}))}
               style={{
-                display:"flex", alignItems:"center", gap:8, padding:"10px 16px",
-                background: headerBg,
-                borderRadius: rfqOpenSec[si] ? `${T.r10}px ${T.r10}px 0 0` : T.r10,
-                cursor:"pointer", border:`1px solid ${headerBorder}`,
-                transition:"all 0.2s",
+                background: 'rgba(255,255,255,0.7)',
+                padding:"12px 16px",
+                border: `1px solid rgba(14,165,160,0.08)`,
+                borderRadius: rfqOpenSec[si] ? `${T.r12}px ${T.r12}px 0 0` : T.r12,
+                display:"flex", alignItems:"center", gap:10,
+                cursor:"pointer", transition:"all 0.2s ease",
+                backdropFilter:"blur(6px)", WebkitBackdropFilter:"blur(6px)",
               }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(14,165,160,0.04)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.7)'}
             >
-              <span style={{ fontSize:10, transform: rfqOpenSec[si] ? "rotate(90deg)" : "rotate(0)", transition:"0.2s" }}>▶</span>
-              <span style={{ flex:1, fontSize:12, fontWeight:700, color: isSupplier ? '#92400E' : T.navy }}>{sec.title}</span>
-              {!isSupplier && secDone && <span style={{ fontSize:10, color: T.greenDark, fontWeight:700 }}>✓</span>}
-              {isSupplier && <span style={{ fontSize:9, color: '#92400E', fontWeight:600 }}>선택</span>}
-              <span style={{ fontSize:10, color: T.sub }}>
-                {sec.fields.filter(f => (rfqFields[f]?.value || "").trim()).length}/{sec.fields.length}
-              </span>
+              {/* 상태 아이콘 */}
+              <div style={{
+                width:24, height:24, borderRadius:"50%",
+                display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
+                background: isSupplier ? '#FEF3C7' : sectionDone ? T.greenLight : T.redLight,
+                color: isSupplier ? '#92400E' : sectionDone ? T.greenDark : T.red,
+                fontSize:11,
+              }}>
+                {isSupplier ? '📦' : sectionDone ? <IconCheck size={12} /> : <IconAlert size={12} />}
+              </div>
+              <span style={{ fontSize:12, fontWeight:700, flex:1, color: T.text }}>{sec.title}</span>
+              {/* 상태 칩 */}
+              {isSupplier ? (
+                <span style={{ fontSize:9, padding:"2px 8px", borderRadius:10, background:'#FEF3C7', color:'#92400E', fontWeight:600 }}>선택</span>
+              ) : sectionDone ? (
+                <span style={{ fontSize:9, padding:"2px 8px", borderRadius:10, background:T.greenLight, color:T.greenDark, fontWeight:600, border:`1px solid ${T.greenMid}` }}>완료</span>
+              ) : (
+                <span style={{ fontSize:9, padding:"2px 8px", borderRadius:10, background:T.redLight, color:T.red, fontWeight:600, border:`1px solid ${T.redMid}` }}>미완료</span>
+              )}
+              <span style={{ fontSize:10, color: T.sub }}>{filledCnt}/{sec.fields.length}</span>
+              <span style={{ color: T.muted, fontSize:12, transform: rfqOpenSec[si] ? "rotate(180deg)" : "rotate(0)", transition:"0.2s" }}>▾</span>
             </div>
+            {/* 섹션 내용 — RFP 필드 테이블 동일 */}
             {rfqOpenSec[si] && (
               <div style={{
-                border:`1px solid ${isSupplier ? 'rgba(245,158,11,0.15)' : 'rgba(99,102,241,0.08)'}`, borderTop:"none",
-                borderRadius:`0 0 ${T.r10}px ${T.r10}px`, overflow:"hidden",
+                background: 'rgba(255,255,255,0.65)',
+                border: `1px solid rgba(14,165,160,0.08)`,
+                borderTop:"none",
+                borderRadius:`0 0 ${T.r12}px ${T.r12}px`,
+                overflow:"hidden",
               }}>
-                {/* 공급업체 섹션 안내 배너 */}
                 {isSupplier && (
                   <div style={{ padding:"10px 16px", background:"#FEF3C7", fontSize:11, color:"#92400E", borderBottom:`1px solid #FDE68A` }}>
                     📦 이 영역은 공급업체가 작성하는 란입니다. 소싱담당자는 입력하지 않아도 됩니다.
                   </div>
                 )}
-                {sec.fields.map(fk => {
+                {sec.fields.map((fk, fi) => {
                   const f = rfqFields[fk];
                   if (!f) return null;
                   return (
                     <div key={fk} style={{
-                      padding:"10px 16px", borderBottom:`1px solid ${T.border}`,
-                      background: isSupplier ? 'rgba(254,243,199,0.15)' : (f.value || "").trim() ? 'rgba(16,185,129,0.02)' : '#fff',
+                      display:"flex",
+                      borderBottom: fi < sec.fields.length - 1 ? `1px solid ${T.borderLight}` : "none",
+                      background: fi % 2 === 1 ? "rgba(14,165,160,0.02)" : "transparent",
                     }}>
-                      <div style={{ fontSize:11, fontWeight:600, color: isSupplier ? '#92400E' : T.navy, marginBottom:4, display:"flex", alignItems:"center", gap:4 }}>
+                      {/* 라벨 */}
+                      <div style={{
+                        width:136, padding:"10px 14px", flexShrink:0,
+                        background: isSupplier ? "rgba(254,243,199,0.2)" : "rgba(14,165,160,0.03)",
+                        borderRight:`1px solid rgba(14,165,160,0.06)`,
+                        fontSize:11, fontWeight:700, color: isSupplier ? '#92400E' : T.sub,
+                        display:"flex", alignItems:"center", minHeight:40,
+                      }}>
                         {f.label}
-                        {!isSupplier && f.required !== false && <span style={{ color: T.red, fontSize:10 }}>*</span>}
+                        {!isSupplier && f.required !== false && <span style={{ color:T.red, marginLeft:2 }}>*</span>}
                       </div>
-                      {f.description && <div style={{ fontSize:10, color: T.sub, marginBottom:4 }}>{f.description.slice(0, 80)}</div>}
-                      <input
-                        value={f.value || ""}
-                        onChange={e => {
-                          const val = e.target.value;
-                          setRfqFields(prev => ({ ...prev, [fk]: { ...prev[fk], value: val } }));
-                        }}
-                        placeholder={isSupplier ? "공급업체 기재란" : (f.default || "입력하세요")}
-                        style={{
-                          width:"100%", padding:"8px 10px", fontSize:12, border:`1px solid ${T.border}`,
-                          borderRadius:6, outline:"none", fontFamily:"inherit",
-                          background: isSupplier ? '#FFFBEB' : '#fff',
-                          boxSizing:"border-box",
-                        }}
-                        onFocus={e => e.target.style.borderColor = isSupplier ? '#F59E0B' : '#6366f1'}
-                        onBlur={e => e.target.style.borderColor = T.border}
-                      />
+                      {/* 입력 */}
+                      <div style={{ flex:1, padding:"4px 8px", display:"flex", alignItems:"center", minHeight:40 }}>
+                        <input
+                          value={f.value || ""}
+                          onChange={e => setRfqFields(prev => ({ ...prev, [fk]: { ...prev[fk], value: e.target.value } }))}
+                          placeholder={isSupplier ? "공급업체 기재란" : "직접 입력 또는 채팅으로 입력"}
+                          style={{
+                            width:"100%", border:"none", outline:"none",
+                            background:"transparent", fontSize:12, color: T.text,
+                            padding:"6px 8px", borderRadius:4, fontFamily:"inherit",
+                            transition:"background 0.2s",
+                          }}
+                          onFocus={e => e.target.style.background = isSupplier ? "rgba(254,243,199,0.3)" : "rgba(14,165,160,0.06)"}
+                          onBlur={e => e.target.style.background = "transparent"}
+                        />
+                      </div>
                     </div>
                   );
                 })}
@@ -3988,44 +4030,67 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* ══ RFQ 우측 패널 ══ */}
-      {(phase === "rfq_filling" || phase === "rfq_complete") && (
+      {/* ══ RFQ 우측 패널 (RFP와 동일 디자인) ══ */}
+      {(phase === "rfq_filling" || phase === "rfq_complete") && rfqRightVisible && (
         <div style={{
-          width: 440, maxWidth:440, height:"85vh",
+          width:440, maxWidth:440, height:"85vh",
           display:"flex", flexDirection:"column",
           background: 'rgba(255,255,255,0.72)',
-          backdropFilter:"blur(20px)", WebkitBackdropFilter:"blur(20px)",
-          borderLeft:`1px solid ${T.border}`,
-          position:"relative",
-          boxShadow: "-4px 0 20px rgba(0,0,0,0.03)",
-          overflow:"hidden",
+          backdropFilter: "blur(30px) saturate(1.4)",
+          WebkitBackdropFilter: "blur(30px) saturate(1.4)",
+          borderRadius: T.r24,
+          border: `1px solid rgba(14,165,160,0.12)`,
+          boxShadow: '0 4px 24px rgba(14,165,160,0.08), 0 1px 3px rgba(0,0,0,0.06)',
+          animation:"panel-slide-in 0.45s cubic-bezier(0.16, 1, 0.3, 1)",
+          flexShrink:0, overflow:"hidden",
+          position:"relative", zIndex:1,
         }}>
-          {/* 헤더 */}
+          {/* RFQ 헤더 (RFP와 동일 글래스 디자인) */}
           <div style={{
-            padding:"16px 22px", borderBottom:`1px solid ${T.border}`,
-            display:"flex", alignItems:"center", justifyContent:"space-between",
-            background: "linear-gradient(135deg, rgba(99,102,241,0.03), rgba(129,140,248,0.02))",
+            background: "rgba(255,255,255,0.75)",
+            backdropFilter: "blur(10px)",
+            WebkitBackdropFilter: "blur(10px)",
+            borderBottom:`1px solid rgba(14,165,160,0.08)`,
+            padding:"14px 20px",
+            display:"flex", alignItems:"center", gap:12, flexShrink:0,
           }}>
-            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-              <div style={{
-                width:28, height:28, borderRadius:8,
-                background: "linear-gradient(135deg, #6366f1, #818cf8)",
-                display:"flex", alignItems:"center", justifyContent:"center",
-                fontSize:13, color:"#fff",
-              }}>📋</div>
-              <div>
-                <div style={{ fontSize:13, fontWeight:800, color: T.navy }}>견적요청서 (RFQ)</div>
-                <div style={{ fontSize:10, color: T.sub }}>{rfqTemplate?.name || ""}</div>
+            <div style={{
+              width:38, height:38, borderRadius: T.r10,
+              background: T.gradNavy,
+              display:"flex", alignItems:"center", justifyContent:"center",
+              color:"#fff",
+              boxShadow: T.shadowSm,
+            }}>
+              <IconDoc size={18} />
+            </div>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:13, fontWeight:800, color: T.text }}>
+                견적요청서 (RFQ) — {rfqTemplate?.name || ""}
+              </div>
+              <div style={{ fontSize:10, color: T.sub, marginTop:2 }}>
+                {phase === "rfq_filling" ? "작성 진행 중" : "작성 완료"}
+                {" · "}표준 견적서 양식 기준
               </div>
             </div>
+            <span style={{
+              fontSize:10, padding:"4px 10px", borderRadius:20, fontWeight:600,
+              background: phase === "rfq_complete" ? T.greenLight : T.primaryLight,
+              color: phase === "rfq_complete" ? T.greenDark : T.primary,
+              border: `1px solid ${phase === "rfq_complete" ? T.greenMid : T.primaryMid}`,
+            }}>
+              {phase === "rfq_complete" ? "작성 완료" : "작성 중"}
+            </span>
             <button
               onClick={() => setRfqRightVisible(false)}
               style={{
                 width:28, height:28, borderRadius:8, border:"none",
                 background:"rgba(100,116,139,0.08)", cursor:"pointer",
                 display:"flex", alignItems:"center", justifyContent:"center",
-                fontSize:14, color: T.muted,
+                color: T.muted, fontSize:16, lineHeight:1, marginLeft:4, flexShrink:0,
+                transition:"all 0.15s",
               }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(239,68,68,0.1)"; e.currentTarget.style.color = "#ef4444"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "rgba(100,116,139,0.08)"; e.currentTarget.style.color = T.muted; }}
             >✕</button>
           </div>
           {phase === "rfq_filling" && RfqPanelFilling()}

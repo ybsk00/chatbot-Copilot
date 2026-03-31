@@ -47,21 +47,26 @@ def vector_search_with_embedding(query_embedding: list[float], category: str | N
         if row["similarity"] >= min_similarity
     ]
 
-    # ── 역할별 청크 필터링 ──
+    # ── 역할별 청크 필터링 (엄격 허용 목록) ──
     if user_role == "procurement":
-        # 소싱담당자: 견적서(QUOTE_*) + 분기정보(BSM_Branch) + 단가영향 만 포함
-        # BSM_Detail (사용자 안내), 구매요청서 청크 제외
-        rows = [r for r in rows
-                if r["doc_name"].startswith("QUOTE_")
-                or r["doc_name"].startswith("BSM_Branch")
-                or r["category"].startswith("quote_")
-                or "단가영향" in r["doc_name"]
-                or r["doc_name"].startswith("GT_")
-                or r["doc_name"].startswith("BT_")]
+        # 소싱담당자: 견적서 청크 + GT/BT 정의만 허용
+        # BSM_Detail, BSM_Process, BSM_L3, 구매요청서 등 사용자 안내 전부 제외
+        def _is_procurement_chunk(r):
+            dn = r["doc_name"]
+            cat = r["category"]
+            return (cat.startswith("quote_")
+                    or dn.startswith("QUOTE_")
+                    or dn.startswith("SOURCING_")
+                    or dn.startswith("GT_")
+                    or dn.startswith("BT_BT-")
+                    or dn.startswith("BT_Process_BT-"))
+        rows = [r for r in rows if _is_procurement_chunk(r)]
     elif user_role == "user":
-        # 사용자: 견적서(quote_*) 카테고리 완전 제외
-        rows = [r for r in rows if not r["category"].startswith("quote_")
-                and not r["doc_name"].startswith("QUOTE_")]
+        # 사용자: 견적서(quote_*) + 소싱 전용 완전 제외
+        rows = [r for r in rows
+                if not r["category"].startswith("quote_")
+                and not r["doc_name"].startswith("QUOTE_")
+                and not r["doc_name"].startswith("SOURCING_")]
 
     return rows
 
@@ -256,18 +261,20 @@ def bm25_keyword_search(query: str, category: str | None = None, top_k: int = RA
         candidates = [c for c in candidates if c["bm25_score"] > 0]
         candidates.sort(key=lambda x: x["bm25_score"], reverse=True)
 
-        # ── 역할별 필터링 ──
+        # ── 역할별 필터링 (엄격 허용 목록) ──
         if user_role == "procurement":
             candidates = [c for c in candidates
-                          if c["doc_name"].startswith("QUOTE_")
-                          or c["doc_name"].startswith("BSM_Branch")
-                          or c["category"].startswith("quote_")
-                          or "단가영향" in c["doc_name"]
+                          if c["category"].startswith("quote_")
+                          or c["doc_name"].startswith("QUOTE_")
+                          or c["doc_name"].startswith("SOURCING_")
                           or c["doc_name"].startswith("GT_")
-                          or c["doc_name"].startswith("BT_")]
+                          or c["doc_name"].startswith("BT_BT-")
+                          or c["doc_name"].startswith("BT_Process_BT-")]
         elif user_role == "user":
-            candidates = [c for c in candidates if not c["category"].startswith("quote_")
-                          and not c["doc_name"].startswith("QUOTE_")]
+            candidates = [c for c in candidates
+                          if not c["category"].startswith("quote_")
+                          and not c["doc_name"].startswith("QUOTE_")
+                          and not c["doc_name"].startswith("SOURCING_")]
 
         logger.info(f"BM25 search: {len(candidates)}개 결과 (query={query[:30]}, role={user_role})")
         return candidates[:top_k]

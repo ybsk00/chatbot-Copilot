@@ -653,17 +653,17 @@ class OrchestratorAgent(AgentBase):
 
         # ── suggestions 최종 구성 ──
         if ctx.user_role == "procurement":
-            # 소싱담당자: 소싱 FAQ 추천질문(최대2) + RFQ/RFP CTA
-            # suggestion agent가 이미 소싱 FAQ 기반으로 생성했으므로 사용자 키워드만 제거
-            ctx.suggestions = [s for s in ctx.suggestions
-                               if "구매요청서" not in s][:2]  # 추천질문 최대 2개
+            # 소싱담당자: 추천질문(최대2) + CTA (중복 제거)
+            _CTA = {"견적요청서(RFQ) 작성하기", "제안요청서(RFP) 작성하기", "RFP 작성하기", "구매요청서 작성하기"}
+            recs = [s for s in ctx.suggestions if s not in _CTA and "구매요청서" not in s][:2]
+            cta = []
             if b2 == "2B_RFQ":
-                ctx.suggestions.append("견적요청서(RFQ) 작성하기")
+                cta = ["견적요청서(RFQ) 작성하기"]
             elif b2 == "2C_RFP입찰":
-                ctx.suggestions.append("제안요청서(RFP) 작성하기")
+                cta = ["제안요청서(RFP) 작성하기"]
             else:
-                ctx.suggestions.append("견적요청서(RFQ) 작성하기")
-                ctx.suggestions.append("제안요청서(RFP) 작성하기")
+                cta = ["견적요청서(RFQ) 작성하기", "제안요청서(RFP) 작성하기"]
+            ctx.suggestions = recs + cta
         else:
             # 일반 사용자: 기존 로직 유지
             ctx.suggestions = [s for s in ctx.suggestions

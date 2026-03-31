@@ -587,8 +587,9 @@ class OrchestratorAgent(AgentBase):
         # ── Constitution/Script 완료 대기 (이미 병렬 진행 중) ──
         await asyncio.gather(constitution_task, script_task)
 
-        # ── Meta 이벤트 전송 (TTFT 단축: Constitution 기다린 후 바로) ──
-        _bt_meta = self._get_bt_routing(ctx)
+        # ── Meta 이벤트 전송 ──
+        # 소싱담당자: BT 라우팅 카드 숨김 (사용자 안내용이므로)
+        _bt_meta = None if ctx.user_role == "procurement" else self._get_bt_routing(ctx)
         yield self._sse("meta", {
             "sources": ctx.sources,
             "rag_score": round(ctx.rag_score, 4),

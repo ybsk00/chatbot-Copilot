@@ -848,6 +848,8 @@ export default function ChatPage() {
         setIsTyping(false);
         setMessages(prev => [...prev, { id: aiMsgId, role: "assistant", text: "", isStreaming: true }]);
 
+        const _sendRole = userRoleRef.current || userRole;
+        console.log(`[STREAM] role=${_sendRole}, ref=${userRoleRef.current}, state=${userRole}, msg=${text.slice(0,30)}`);
         await api.streamChat(
           sessionId, text, null, history, phase, getFilledFields(),
           (token) => {
@@ -973,7 +975,7 @@ export default function ChatPage() {
             }
           },
           rfpType,
-          userRoleRef.current || userRole,
+          _sendRole,
           roleTurnCount,
           prType,
         );
@@ -2895,8 +2897,8 @@ export default function ChatPage() {
                   </div>
                 )}
 
-                {/* BT 라우팅 안내 카드 (v2: 분기1 5-path + 분기2 소싱) */}
-                {msg.btRouting && !msg.isStreaming && (() => {
+                {/* BT 라우팅 안내 카드 — 사용자만 표시 (소싱담당자는 숨김) */}
+                {msg.btRouting && !msg.isStreaming && userRole !== "procurement" && (() => {
                   const bt = msg.btRouting;
                   const b1 = bt.branch1_path || "";
                   const b2 = bt.branch2_sourcing || "";

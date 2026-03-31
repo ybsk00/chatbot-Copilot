@@ -347,6 +347,7 @@ export default function ChatPage() {
         const map = {};
         arr.forEach(t => { map[t.type_key] = t; });
         setDbRfqTemplates(map);
+        console.log(`[RFQ] ${arr.length}개 템플릿 로드. 키: ${Object.keys(map).slice(0,5).join(",")}...`);
       }
     }).catch(() => {});
   }, []);
@@ -722,6 +723,42 @@ export default function ChatPage() {
         { id: msgIdCounter++, role: "assistant",
           text: "구매요청서 작성을 진행하겠습니다. 아래에서 구매 카테고리를 선택해 주십시오.",
           prTypeSelect: true },
+      ]);
+      return;
+    }
+
+    // ── RFQ 직접 진입: "견적서"/"견적요청"/"RFQ" 키워드 → 백엔드 안 거치고 바로 처리 ──
+    if (phase !== "pr_filling" && phase !== "rfq_filling" && (
+      text.includes("견적서 작성") || text.includes("견적요청서") || text.includes("RFQ 작성") ||
+      text === "견적요청서(RFQ) 작성하기" || text === "RFQ 작성하기"
+    )) {
+      const rfqAutoKey = lastClassification?.pr_template_key;
+      if (rfqAutoKey && rfqAutoKey !== "_generic" && dbRfqTemplates?.[rfqAutoKey]) {
+        setUserInput("");
+        handleRfqTypeSelect(rfqAutoKey);
+        return;
+      }
+      setUserInput("");
+      setMessages(prev => [...prev,
+        { id: msgIdCounter++, role: "user", text },
+        { id: msgIdCounter++, role: "assistant",
+          text: "견적서(RFQ) 작성을 진행합니다. 아래에서 견적서 유형을 선택해 주십시오.",
+          rfqTypeSelect: true },
+      ]);
+      return;
+    }
+
+    // ── RFP 직접 진입: "RFP"/"제안요청서" 키워드 → 백엔드 안 거치고 바로 처리 ──
+    if (phase !== "pr_filling" && phase !== "rfq_filling" && phase !== "filling" && (
+      text.includes("RFP 작성") || text.includes("제안요청서 작성") ||
+      text === "제안요청서(RFP) 작성하기" || text === "RFP 작성하기"
+    )) {
+      setUserInput("");
+      setMessages(prev => [...prev,
+        { id: msgIdCounter++, role: "user", text },
+        { id: msgIdCounter++, role: "assistant",
+          text: "제안요청서(RFP) 작성을 진행합니다. 아래에서 RFP 유형을 선택해 주십시오.",
+          rfpTypeSelect: true },
       ]);
       return;
     }
@@ -1194,7 +1231,16 @@ export default function ChatPage() {
 
   const handleRfqTypeSelect = (key) => {
     const tpl = dbRfqTemplates?.[key];
-    if (!tpl) return;
+    if (!tpl) {
+      // 템플릿 없음 → 카테고리 선택기 폴백
+      console.warn(`[RFQ] Template not found for key: ${key}, available: ${Object.keys(dbRfqTemplates || {}).slice(0, 5).join(",")}`);
+      setMessages(prev => [...prev, {
+        id: msgIdCounter++, role: "assistant",
+        text: "견적서(RFQ) 작성을 진행합니다. 아래에서 견적서 유형을 선택해 주십시오.",
+        rfqTypeSelect: true,
+      }]);
+      return;
+    }
     const templateFields = {};
     Object.entries(tpl.fields).forEach(([k, v]) => {
       templateFields[k] = { ...v };

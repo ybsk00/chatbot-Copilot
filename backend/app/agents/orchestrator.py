@@ -523,14 +523,22 @@ class OrchestratorAgent(AgentBase):
             logger.info(f"[Orchestrator] Freeform detected: '{ctx.message}' → skip RAG")
             return
 
-        # ── PHASE 1: Classification + Retrieval 병렬 (~1000ms) ──
+        # ── PHASE 1: Classification + Retrieval + Constitution + Script 4중 병렬 ──
+        # (Constitution/Script는 임베딩 재사용하므로 Retrieval과 동시 시작 가능)
         classification_task = asyncio.create_task(
             self.classification.execute(ctx, self._critical_pool)
         )
         retrieval_task = asyncio.create_task(
             self.retrieval.execute(ctx, self._critical_pool)
         )
+        constitution_task = asyncio.create_task(
+            self.constitution.inject_rules(ctx, self._background_pool)
+        )
+        script_task = asyncio.create_task(
+            self.script.inject_scripts(ctx, self._background_pool)
+        )
         await asyncio.gather(classification_task, retrieval_task)
+        # Constitution/Script는 Generation 시작 전까지만 완료되면 됨 (아래서 await)
 
         # ── L3 JSON 청크 교체: 분류 성공 + hot/warm CTA 시에만 JSON 보강 ──
         l3_code = (ctx.classification or {}).get("l3_code")
@@ -540,10 +548,9 @@ class OrchestratorAgent(AgentBase):
                 from app.rag.retriever import _build_json_chunks
                 json_chunks = _build_json_chunks(l3_code)
                 if json_chunks:
-                    # JSON 청크를 맨 앞에 삽입 (기존 RAG 청크보다 우선)
                     ctx.chunks = json_chunks + (ctx.chunks or [])
                     ctx.rag_score = max(ctx.rag_score, 0.85)
-                    ctx.confidence_rejected = False  # JSON 데이터가 있으면 거부 해제
+                    ctx.confidence_rejected = False
                     logger.info(f"[Orchestrator] L3 JSON chunks injected: {l3_code} ({len(json_chunks)}개)")
             except Exception as e:
                 logger.warning(f"L3 JSON chunk injection failed: {e}")
@@ -558,7 +565,6 @@ class OrchestratorAgent(AgentBase):
 
         # ── GATE 3: 신뢰도 거부 ──
         if ctx.confidence_rejected:
-            # 근거 부족이어도 user 역할이면 구매요청서 진입은 허용
             rejected_cta = ["구매요청서 작성하기"] if ctx.user_role == "user" else []
 
             yield self._sse("meta", {
@@ -589,13 +595,10 @@ class OrchestratorAgent(AgentBase):
             yield self._sse("done", {})
             return
 
-        # ── PHASE 2: 헌법 규칙 + 화법 스크립트 주입 (병렬, 임베딩 재사용) ──
-        await asyncio.gather(
-            self.constitution.inject_rules(ctx, self._critical_pool),
-            self.script.inject_scripts(ctx, self._critical_pool),
-        )
+        # ── Constitution/Script 완료 대기 (이미 병렬 진행 중) ──
+        await asyncio.gather(constitution_task, script_task)
 
-        # ── Meta 이벤트 전송 ──
+        # ── Meta 이벤트 전송 (TTFT 단축: Constitution 기다린 후 바로) ──
         _bt_meta = self._get_bt_routing(ctx)
         yield self._sse("meta", {
             "sources": ctx.sources,

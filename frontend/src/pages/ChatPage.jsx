@@ -247,7 +247,9 @@ export default function ChatPage() {
   const [rfpHistory, setRfpHistory]     = useState([]);
   const [showHistory, setShowHistory]   = useState(false);
   // PR (구매요청서) state
-  const [userRole, setUserRole]         = useState(null);    // "user" | "procurement"
+  const [userRole, _setUserRole]         = useState(null);    // "user" | "procurement"
+  const userRoleRef = useRef(null);
+  const setUserRole = (role) => { if (!userRoleRef.current || !role) { userRoleRef.current = role; _setUserRole(role); } };
   const [roleTurnCount, setRoleTurnCount] = useState(0);
   const [prType, setPrType]             = useState(null);
   const [prFields, setPrFields]         = useState({});
@@ -818,8 +820,8 @@ export default function ChatPage() {
           },
           (meta) => {
             metaData = meta;
-            // 역할 감지 결과 반영 — 백엔드 감지 결과를 항상 저장
-            if (meta.user_role) {
+            // 역할 감지 결과 반영 — 한번 설정되면 변경 안 함 (역할 전환 방지)
+            if (meta.user_role && !userRole) {
               setUserRole(meta.user_role);
             }
             if (meta.ask_role) {
@@ -934,7 +936,7 @@ export default function ChatPage() {
             }
           },
           rfpType,
-          userRole,
+          userRoleRef.current || userRole,
           roleTurnCount,
           prType,
         );

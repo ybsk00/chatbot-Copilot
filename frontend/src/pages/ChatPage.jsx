@@ -520,6 +520,78 @@ export default function ChatPage() {
     ]);
   };
 
+  // ── 업로드된 PR → RFP 변환 ──
+  const convertUploadToRfp = (uploadResult) => {
+    const prType_ = uploadResult.pr_type || "_generic";
+    const mapping = getPrToRfpMapping(prType_);
+    const rfpTypeKey = mapping?.rfpType || "service_contract";
+    const tpl = RFP_TEMPLATES[rfpTypeKey];
+    if (!tpl) return;
+
+    const rfpTemplateFields = {};
+    Object.entries(tpl.fields).forEach(([k, v]) => {
+      rfpTemplateFields[k] = { ...v };
+    });
+
+    // 추출 필드 매핑
+    const extracted = uploadResult.extracted_fields || {};
+    if (mapping?.fieldMap) {
+      Object.entries(mapping.fieldMap).forEach(([prKey, rfpKey]) => {
+        if (extracted[prKey] && rfpTemplateFields[rfpKey]) {
+          rfpTemplateFields[rfpKey] = { ...rfpTemplateFields[rfpKey], value: extracted[prKey] };
+        }
+      });
+    }
+    if (uploadResult.department && rfpTemplateFields.s2) rfpTemplateFields.s2 = { ...rfpTemplateFields.s2, value: uploadResult.department };
+    if (uploadResult.requester && rfpTemplateFields.s3) rfpTemplateFields.s3 = { ...rfpTemplateFields.s3, value: uploadResult.requester };
+    if (uploadResult.title && rfpTemplateFields.s6 && !rfpTemplateFields.s6.value) rfpTemplateFields.s6 = { ...rfpTemplateFields.s6, value: uploadResult.title };
+
+    setRfpType(rfpTypeKey);
+    setFields(rfpTemplateFields);
+    setPhase("filling");
+    setRightVisible(true);
+
+    setMessages(prev => [...prev, {
+      id: msgIdCounter++, role: "assistant",
+      text: `업로드된 구매요청서를 기반으로 **${tpl.label}** 제안요청서(RFP)를 준비했습니다.\n자동 매핑된 항목을 확인하시고, 추가 정보를 입력해 주세요.`,
+    }]);
+  };
+
+  // ── 업로드된 PR → RFQ 변환 ──
+  const convertUploadToRfq = (uploadResult) => {
+    const prType_ = uploadResult.pr_type || "_generic";
+    const rfqTpl = dbRfqTemplates?.[prType_];
+    if (!rfqTpl) {
+      setMessages(prev => [...prev, {
+        id: msgIdCounter++, role: "assistant",
+        text: "이 품목은 아직 견적서(RFQ) 양식이 준비되지 않았습니다.\n현재 L01(사무·총무), L02(인사·복리후생), L03(시설·건물관리) 카테고리만 지원됩니다.",
+      }]);
+      return;
+    }
+
+    const rfqTemplateFields = {};
+    Object.entries(rfqTpl.fields).forEach(([k, v]) => {
+      rfqTemplateFields[k] = { ...v };
+    });
+
+    // 추출 필드에서 기본 매핑 (품목명→q1, 수량→q2 등)
+    const extracted = uploadResult.extracted_fields || {};
+    if (uploadResult.title && rfqTemplateFields.q1) rfqTemplateFields.q1 = { ...rfqTemplateFields.q1, value: uploadResult.title };
+    if (extracted.c10 && rfqTemplateFields.q2) rfqTemplateFields.q2 = { ...rfqTemplateFields.q2, value: extracted.c10 };
+    if (extracted.c9 && rfqTemplateFields.q4) rfqTemplateFields.q4 = { ...rfqTemplateFields.q4, value: extracted.c9 };
+
+    setRfqType(prType_);
+    setRfqFields(rfqTemplateFields);
+    setPhase("rfq_filling");
+    setRfqRightVisible(true);
+    setPrRightVisible(false);
+
+    setMessages(prev => [...prev, {
+      id: msgIdCounter++, role: "assistant",
+      text: `업로드된 구매요청서를 기반으로 **${rfqTpl.name}** 견적서(RFQ)를 준비했습니다.\n소싱담당자 필수 항목을 채워주세요.`,
+    }]);
+  };
+
   const getPrFilledFields = () => {
     const result = {};
     Object.entries(prFields).forEach(([k, v]) => {
@@ -746,8 +818,8 @@ export default function ChatPage() {
           },
           (meta) => {
             metaData = meta;
-            // 역할 감지 결과 반영
-            if (meta.user_role && !userRole) {
+            // 역할 감지 결과 반영 — 백엔드 감지 결과를 항상 저장
+            if (meta.user_role) {
               setUserRole(meta.user_role);
             }
             if (meta.ask_role) {
@@ -817,6 +889,38 @@ export default function ChatPage() {
               setMessages(prev => prev.map(m =>
                 m.id === aiMsgId ? { ...m, rfpTypeSelect: true } : m
               ));
+            } else if (metaData.phase_trigger === "rfq_agreed") {
+              // 소싱담당자 RFQ 직행 — L3 코드 기반 RFQ 템플릿 자동 선택
+              const l3Code = metaData.classification?.l3_code;
+              const prKey = metaData.classification?.pr_template_key;
+              const rfqKey = prKey || l3Code;
+              const rfqTpl = rfqKey && dbRfqTemplates?.[rfqKey];
+              if (rfqTpl) {
+                // RFQ 템플릿 있음 → 바로 rfq_filling 진입
+                const rfqTemplateFields = {};
+                Object.entries(rfqTpl.fields).forEach(([k, v]) => {
+                  rfqTemplateFields[k] = { ...v };
+                });
+                setRfqType(rfqKey);
+                setRfqFields(rfqTemplateFields);
+                setPhase("rfq_filling");
+                setRfqRightVisible(true);
+                setPrRightVisible(false);
+                setMessages(prev => prev.map(m =>
+                  m.id === aiMsgId ? {
+                    ...m,
+                    text: `**${rfqTpl.name}** 견적서(RFQ) 작성을 시작합니다.\n소싱담당자 필수 항목을 채워주세요.`,
+                  } : m
+                ));
+              } else {
+                // RFQ 템플릿 없음 → 카테고리 선택 안내
+                setMessages(prev => prev.map(m =>
+                  m.id === aiMsgId ? {
+                    ...m,
+                    text: "이 품목은 아직 견적서(RFQ) 양식이 준비되지 않았습니다.\n현재 L01(사무·총무), L02(인사·복리후생), L03(시설·건물관리) 카테고리만 지원됩니다.",
+                  } : m
+                ));
+              }
             } else if (metaData.phase_trigger === "complete") {
               setTimeout(() => setPhase("complete"), 800);
             }
@@ -2673,7 +2777,6 @@ export default function ChatPage() {
                           if (prKey && prKey !== "_generic" && getPrTemplate(prKey)) {
                             handlePrTypeSelect(prKey);
                           } else {
-                            // 카테고리 선택 UI 바로 표시 (스트리밍/BT분기 우회)
                             setMessages(prev => [...prev,
                               { id: msgIdCounter++, role: "user", text: item },
                               { id: msgIdCounter++, role: "assistant",
@@ -2681,22 +2784,28 @@ export default function ChatPage() {
                                 prTypeSelect: true },
                             ]);
                           }
+                        } else if (item === "견적요청서(RFQ) 작성하기" || item === "RFQ 작성하기") {
+                          // RFQ 직접 진입 (소싱담당자)
+                          handleSend(item);
+                        } else if (item === "제안요청서(RFP) 작성하기" || item === "RFP 작성하기") {
+                          // RFP 직접 진입 (소싱담당자)
+                          handleSend(item);
                         } else {
                           handleSend(item);
                         }
                       }} style={{
                         padding:"9px 14px", borderRadius: T.r10,
-                        border:`1px solid ${item.includes("RFP") || item.includes("제안요청서") ? 'rgba(14,165,160,0.3)' : 'rgba(14,165,160,0.12)'}`,
-                        background: item.includes("RFP") || item.includes("제안요청서")
+                        border:`1px solid ${item.includes("RFP") || item.includes("제안요청서") || item.includes("RFQ") || item.includes("견적") ? 'rgba(14,165,160,0.3)' : 'rgba(14,165,160,0.12)'}`,
+                        background: item.includes("RFP") || item.includes("제안요청서") || item.includes("RFQ") || item.includes("견적")
                           ? 'linear-gradient(135deg, rgba(14,165,160,0.08), rgba(14,165,160,0.04))'
                           : 'rgba(255,255,255,0.7)',
-                        color: T.text, fontSize:12, fontWeight: item.includes("RFP") || item.includes("제안요청서") ? 600 : 500,
+                        color: T.text, fontSize:12, fontWeight: item.includes("RFP") || item.includes("제안요청서") || item.includes("RFQ") || item.includes("견적") ? 600 : 500,
                         cursor:"pointer", textAlign:"left", fontFamily:"inherit",
                         transition:"all 0.15s", display:"flex", alignItems:"center", gap:6,
                         backdropFilter:"blur(4px)", WebkitBackdropFilter:"blur(4px)",
                       }}
                         onMouseEnter={e => { e.currentTarget.style.borderColor = T.primary; e.currentTarget.style.background = 'rgba(14,165,160,0.06)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = item.includes("RFP") || item.includes("제안요청서") ? 'rgba(14,165,160,0.3)' : 'rgba(14,165,160,0.12)'; e.currentTarget.style.background = item.includes("RFP") || item.includes("제안요청서") ? 'linear-gradient(135deg, rgba(14,165,160,0.08), rgba(14,165,160,0.04))' : 'rgba(255,255,255,0.7)'; }}
+                        onMouseLeave={e => { const hl = item.includes("RFP") || item.includes("제안요청서") || item.includes("RFQ") || item.includes("견적"); e.currentTarget.style.borderColor = hl ? 'rgba(14,165,160,0.3)' : 'rgba(14,165,160,0.12)'; e.currentTarget.style.background = hl ? 'linear-gradient(135deg, rgba(14,165,160,0.08), rgba(14,165,160,0.04))' : 'rgba(255,255,255,0.7)'; }}
                       >
                         <span style={{ color: T.primary, fontSize:13 }}>›</span>
                         {item}
@@ -2752,6 +2861,26 @@ export default function ChatPage() {
 
                 {/* RFP 유형 선택 카드 */}
                 {msg.rfpTypeSelect && !rfpType && renderRfpTypeSelector()}
+
+                {/* PR 업로드 결과 → RFP/RFQ 변환 버튼 (procurement만) */}
+                {msg.prUploadResult && userRole === "procurement" && phase === "chat" && (
+                  <div style={{ display:"flex", gap:8, marginTop:10 }}>
+                    <button onClick={() => convertUploadToRfp(msg.prUploadResult)} style={{
+                      flex:1, padding:"12px 16px", borderRadius: T.r10,
+                      background: T.gradPrimary, color:"#fff",
+                      border:"none", cursor:"pointer", fontWeight:600, fontSize:13,
+                    }}>
+                      RFP(제안요청서)로 변환
+                    </button>
+                    <button onClick={() => convertUploadToRfq(msg.prUploadResult)} style={{
+                      flex:1, padding:"12px 16px", borderRadius: T.r10,
+                      background:"linear-gradient(135deg, #6366f1, #818cf8)", color:"#fff",
+                      border:"none", cursor:"pointer", fontWeight:600, fontSize:13,
+                    }}>
+                      RFQ(견적서)로 변환
+                    </button>
+                  </div>
+                )}
 
                 {/* 출처 표시 */}
                 {msg.sources && msg.sources.length > 0 && !msg.isStreaming && (

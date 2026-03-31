@@ -160,6 +160,12 @@ class OrchestratorAgent(AgentBase):
         "rfp작성", "rfp생성", "rfp만들", "rfp시작", "rfp진행",
         "제안요청서 작성", "제안요청서 생성", "제안요청서 만들",
     ]
+    _RFQ_DIRECT_PATTERNS = [
+        "rfq 작성", "rfq 생성", "rfq 만들", "rfq 시작", "rfq 진행",
+        "rfq작성", "rfq생성", "rfq만들", "rfq시작", "rfq진행",
+        "견적서 작성", "견적서 생성", "견적 요청", "견적요청",
+        "경쟁견적", "3사 견적",
+    ]
     _RFP_QUESTION_MARKERS = ["뭐", "무엇", "어떻게", "왜", "?", "인가요", "인지", "알려"]
 
     # 자유발화 (인사/감사/잡담) → RAG 스킵
@@ -257,36 +263,44 @@ class OrchestratorAgent(AgentBase):
             return None
 
     def _detect_phase_trigger(self, message: str, phase: str, user_role: str | None = None) -> str | None:
-        """키워드 기반 phase 전환 감지 (0ms)."""
+        """키워드 기반 phase 전환 감지 (0ms).
+
+        우선순위: PR 구체적 → RFQ 구체적 → RFP 구체적 → RFP 일반동의
+        (구체적 패턴을 먼저 체크해야 "견적서 작성해주세요"가 RFP로 빠지지 않음)
+        """
         msg = message.strip()
+        msg_lower = msg.lower()
         if phase in ("chat", "asked", "pr_asked"):
-            # PR 동의 감지 — PR 키워드는 충분히 구체적이므로 역할 무관하게 먼저 체크
+            # ── 1순위: PR 동의 (가장 구체적) ──
             if any(kw in msg for kw in PR_AGREE_KEYWORDS):
                 return "pr_agreed"
-            # pr_asked 상태에서 짧은 동의 응답
             if phase == "pr_asked" and any(kw in msg for kw in RFP_AGREE_KEYWORDS):
                 return "pr_agreed"
 
-            # 1. 기존 동의 키워드 (짧은 응답만 — 긴 문장은 일반 질문일 가능성)
+            # ── 2순위: RFQ 직접 요청 (RFP보다 먼저 — "견적서 작성"이 RFP로 빠지지 않도록) ──
+            if any(p in msg_lower for p in self._RFQ_DIRECT_PATTERNS):
+                if not any(q in msg for q in self._RFP_QUESTION_MARKERS):
+                    return "rfq_agreed"
+            if msg_lower.replace(" ", "") in ("rfq", "rfq!"):
+                return "rfq_agreed"
+
+            # ── 3순위: RFP 직접 요청 ("rfp 작성해줘" 등) ──
+            if any(p in msg_lower for p in self._RFP_DIRECT_PATTERNS):
+                if not any(q in msg for q in self._RFP_QUESTION_MARKERS):
+                    return "rfp_agreed"
+            if msg_lower.replace(" ", "") in ("rfp", "rfp!"):
+                return "rfp_agreed"
+
+            # ── 4순위: RFP 일반 동의 ("작성해", "네", "좋아요" 등 짧은 응답) ──
             if any(kw in msg for kw in RFP_AGREE_KEYWORDS):
-                # 질문형이거나 긴 문장이면 RFP 동의가 아닌 일반 질문으로 판단
                 is_question = any(q in msg for q in self._RFP_QUESTION_MARKERS)
                 is_long = len(msg) > 15
                 if is_question and is_long:
-                    pass  # 일반 질문 → RFP 트리거 안 함
+                    pass
                 elif is_long and not any(kw in msg for kw in ("RFP", "rfp", "제안요청서", "작성해", "작성할", "작성하")):
-                    pass  # 긴 문장인데 RFP/작성 언급 없음 → 일반 질문
+                    pass
                 else:
                     return "rfp_agreed"
-            # 2. RFP 직접 요청 ("rfp 작성해줘", "rfp 할게" 등)
-            msg_lower = msg.lower()
-            if any(p in msg_lower for p in self._RFP_DIRECT_PATTERNS):
-                # 질문 형태면 제외 ("rfp 작성 어떻게 하나요?")
-                if not any(q in msg for q in self._RFP_QUESTION_MARKERS):
-                    return "rfp_agreed"
-            # 3. "rfp" 단독 입력 (3글자 이하)
-            if msg_lower.replace(" ", "") in ("rfp", "rfp!"):
-                return "rfp_agreed"
         return None
 
     async def execute_stream(self, ctx: AgentContext) -> AsyncGenerator[str, None]:
@@ -376,12 +390,35 @@ class OrchestratorAgent(AgentBase):
                 yield self._sse("done", {})
                 return
 
-            # ── 분기1-E/F: PR 작성 진행 → 분기2 소싱방식 메타 포함 ──
+            # ── 분기1-E/F: PR 작성 진행 → 소싱담당자는 branch2로 추가 분기 ──
+            _bt_clean = {k: v for k, v in bt_routing.items() if k != "_user_message"} if bt_routing else None
+
+            # 소싱담당자(procurement)이고 branch2가 RFQ/RFP이면 직행
+            if ctx.user_role == "procurement" and b2 in ("2B_RFQ", "2C_RFP입찰"):
+                if b2 == "2B_RFQ":
+                    phase_trigger = "rfq_agreed"
+                    msg_text = "이 품목은 RFQ(3사 경쟁견적) 방식으로 소싱합니다. 견적서(RFQ) 작성을 진행하겠습니다."
+                else:  # 2C_RFP입찰
+                    phase_trigger = "rfp_agreed"
+                    msg_text = "이 품목은 RFP(기술+가격 입찰) 방식으로 소싱합니다. 제안요청서(RFP) 작성을 진행하겠습니다."
+
+                yield self._sse("meta", {
+                    "sources": [], "rag_score": 0,
+                    "phase_trigger": phase_trigger,
+                    "classification": ctx.classification,
+                    "bt_routing": _bt_clean,
+                    "user_role": ctx.user_role,
+                })
+                yield self._sse("token", {"content": msg_text})
+                yield self._sse("done", {})
+                return
+
+            # 일반 사용자 또는 2A_PR만 → 기존 PR 플로우
             yield self._sse("meta", {
                 "sources": [], "rag_score": 0,
                 "phase_trigger": "pr_agreed",
                 "classification": ctx.classification,
-                "bt_routing": {k: v for k, v in bt_routing.items() if k != "_user_message"} if bt_routing else None,
+                "bt_routing": _bt_clean,
                 "user_role": ctx.user_role,
             })
             yield self._sse("token", {
@@ -402,6 +439,25 @@ class OrchestratorAgent(AgentBase):
             yield self._sse("done", {})
             return
 
+        if ctx.phase_trigger == "rfq_agreed":
+            # RFQ 직접 요청 — Classification 선행 실행 (L3코드 필요)
+            if not ctx.classification:
+                try:
+                    await self.classification.execute(ctx, self._critical_pool)
+                except Exception as e:
+                    self.logger.warning(f"RFQ agree pre-classification failed: {e}")
+            yield self._sse("meta", {
+                "sources": [], "rag_score": 0,
+                "phase_trigger": "rfq_agreed",
+                "classification": ctx.classification,
+                "user_role": ctx.user_role,
+            })
+            yield self._sse("token", {
+                "content": "견적서(RFQ) 작성을 진행하겠습니다. 아래에서 견적서 유형을 선택해 주십시오."
+            })
+            yield self._sse("done", {})
+            return
+
         # ── GATE 3: 자유발화 감지 (~0ms, RAG 스킵) ──
         freeform_reply = self._detect_freeform(ctx.message, ctx.user_role)
         if freeform_reply:
@@ -414,7 +470,7 @@ class OrchestratorAgent(AgentBase):
             if ctx.user_role == "user":
                 freeform_cta = ["구매요청서 작성하기"]
             elif ctx.user_role == "procurement":
-                freeform_cta = ["RFP 작성하기"]
+                freeform_cta = ["RFP 작성하기", "RFQ 작성하기"]
             else:
                 freeform_cta = ["구매요청서 작성하기", "RFP 작성하기"]
             yield self._sse("suggestions", {"items": freeform_cta})
@@ -568,10 +624,15 @@ class OrchestratorAgent(AgentBase):
 
         # 2) pr_action에 따라 분기 — blocked만 아니면 구매요청서 버튼 표시
         if not pr_blocked:
-            # PR 허용 또는 BT 미매칭: "구매요청서 작성하기" 추가
-            if ctx.user_role in ("user", None):
-                ctx.suggestions.append("구매요청서 작성하기")
-            elif ctx.user_role == "procurement":
+            if ctx.user_role == "procurement":
+                # 소싱담당자: branch2에 따라 RFQ/RFP/PR 분기
+                if b2 == "2B_RFQ":
+                    ctx.suggestions.append("견적요청서(RFQ) 작성하기")
+                elif b2 == "2C_RFP입찰":
+                    ctx.suggestions.append("제안요청서(RFP) 작성하기")
+                else:
+                    ctx.suggestions.append("구매요청서 작성하기")
+            elif ctx.user_role in ("user", None):
                 ctx.suggestions.append("구매요청서 작성하기")
         # pr_blocked: 아무것도 추가 안 함 (BT 카드 액션버튼이 이미 표시)
 

@@ -217,6 +217,15 @@ export const api = {
     return res.json();
   },
 
+  // ── PR PDF → RFP/RFQ 변환 업로드 ──
+  async uploadPrConvert(formData, target) {
+    const res = await fetch(`${API_URL}/chat/upload-pr-convert?target=${target}`, {
+      method: "POST",
+      body: formData,
+    });
+    return res.json();
+  },
+
   // ── RFP 양식 관리 ──
   async getRfpTemplates() {
     const res = await fetch(`${API_URL}/admin/rfp-templates`);

@@ -39,7 +39,7 @@ class GroundingValidator:
         # CTA hot/warm: 역제안·비교분석은 문서를 재구성한 답변이므로 오버랩 검증 스킵
         answer_tokens = self._tokenize(answer)
         overlap = self.compute_overlap(answer, chunks)
-        if cta_intent not in ("hot", "warm") and len(answer_tokens) >= 20 and overlap < 0.30:
+        if cta_intent not in ("hot", "warm") and len(answer_tokens) >= 20 and overlap < 0.15:
             issues.append(
                 f"답변의 근거 문서 기반율이 낮습니다 ({overlap:.0%}). "
                 "참조 문서를 재확인하시기 바랍니다."

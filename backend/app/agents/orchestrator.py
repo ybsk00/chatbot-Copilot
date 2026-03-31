@@ -197,6 +197,32 @@ class OrchestratorAgent(AgentBase):
         "default": "네, 어떤 업무를 도와드릴까요?",
     }
 
+    # 역할 선언 패턴 ("소싱 담당자입니다", "구매담당입니다" 등)
+    _ROLE_DECLARE_PATTERNS = [
+        "담당자입니다", "담당입니다", "담당자예요", "담당이에요",
+        "담당자 입니다", "담당 입니다",
+    ]
+
+    def _detect_role_declaration(self, ctx) -> str | None:
+        """역할 선언만 한 메시지 감지 → RAG 스킵 + 역할별 안내 반환.
+
+        "소싱 담당자입니다", "구매담당입니다" 등 역할만 밝히고
+        구체적 질문이 없는 짧은 메시지를 감지.
+        """
+        msg = ctx.message.strip()
+        if len(msg) > 30:
+            return None  # 긴 메시지는 역할 선언이 아님
+        if not any(p in msg for p in self._ROLE_DECLARE_PATTERNS):
+            return None
+
+        # 역할이 감지되었으면 해당 역할의 인사말 반환
+        if ctx.user_role == "procurement":
+            return "안녕하세요. 구매업무 지원 어시스턴트입니다. RFQ(견적서) 또는 RFP(제안요청서) 작성이 가능합니다. 필요한 업무를 말씀해 주십시오."
+        elif ctx.user_role == "user":
+            return "안녕하세요! 구매를 도와드리는 IP Assist입니다. 어떤 물건이나 서비스가 필요하신가요?"
+        else:
+            return "안녕하세요. 역할을 미리 알려주시면 더 정확한 안내가 가능합니다."
+
     def _detect_freeform(self, message: str, user_role: str | None = None) -> str | None:
         """자유발화 감지 → RAG 스킵용 응답 반환 (0ms). None이면 일반 처리."""
         msg = message.strip()
@@ -331,6 +357,25 @@ class OrchestratorAgent(AgentBase):
         # ── GATE 1.5: 역할 감지 (~0ms) ──
         await self.role_detector.execute(ctx, self._critical_pool)
         ask_role = RoleDetectorAgent.should_ask_role(ctx)
+
+        # ── GATE 1.6: 역할 선언 감지 — "소싱 담당자입니다" 같은 역할만 밝히는 메시지 ──
+        _role_declare = self._detect_role_declaration(ctx)
+        if _role_declare:
+            yield self._sse("meta", {
+                "sources": [], "rag_score": 0,
+                "phase_trigger": None, "classification": None,
+                "user_role": ctx.user_role, "ask_role": False,
+            })
+            yield self._sse("token", {"content": _role_declare})
+            if ctx.user_role == "procurement":
+                yield self._sse("suggestions", {"items": ["견적요청서(RFQ) 작성하기", "제안요청서(RFP) 작성하기"]})
+            elif ctx.user_role == "user":
+                yield self._sse("suggestions", {"items": ["구매요청서 작성하기"]})
+            else:
+                yield self._sse("suggestions", {"items": ["구매요청서 작성하기", "RFP 작성하기"]})
+            yield self._sse("done", {})
+            logger.info(f"[Orchestrator] Role declaration: '{ctx.message}' → {ctx.user_role}")
+            return
 
         # ── GATE 2: Phase 감지 (~0ms) ──
         ctx.phase_trigger = self._detect_phase_trigger(ctx.message, ctx.phase, ctx.user_role)

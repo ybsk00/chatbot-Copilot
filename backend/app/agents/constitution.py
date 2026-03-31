@@ -56,8 +56,9 @@ class ConstitutionAgent(AgentBase):
         filling/complete phase에서는 문서 기반 검증이 불필요하므로 스킵."""
         start = time.time()
 
-        # RFP 작성 단계에서는 사용자 정보 수집/확인이므로 문서 근거 검증 불필요
-        if ctx.phase in ("filling", "complete"):
+        # RFP/PR/RFQ 작성 단계에서는 문서 근거 검증 불필요
+        if ctx.phase in ("filling", "complete", "pr_filling", "pr_complete",
+                          "rfq_filling", "rfq_complete"):
             ctx.timings["constitution_postcheck_ms"] = 0
             return self._timed_result(start)
 

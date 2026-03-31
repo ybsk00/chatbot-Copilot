@@ -731,42 +731,9 @@ export default function ChatPage() {
       return;
     }
 
-    // ── RFQ 직접 진입: "견적서"/"견적요청"/"RFQ" 키워드 → 백엔드 안 거치고 바로 처리 ──
-    if (phase !== "pr_filling" && phase !== "rfq_filling" && (
-      text.includes("견적서") && (text.includes("작성") || text.includes("만들") || text.includes("시작"))
-      || text.includes("견적요청서") || text.includes("RFQ 작성") || text.includes("RFQ") && text.includes("작성")
-      || text === "견적요청서(RFQ) 작성하기" || text === "RFQ 작성하기"
-    )) {
-      const rfqAutoKey = lastClassification?.pr_template_key;
-      if (rfqAutoKey && rfqAutoKey !== "_generic" && dbRfqTemplates?.[rfqAutoKey]) {
-        setUserInput("");
-        handleRfqTypeSelect(rfqAutoKey);
-        return;
-      }
-      setUserInput("");
-      setMessages(prev => [...prev,
-        { id: msgIdCounter++, role: "user", text },
-        { id: msgIdCounter++, role: "assistant",
-          text: "견적서(RFQ) 작성을 진행합니다. 아래에서 견적서 유형을 선택해 주십시오.",
-          rfqTypeSelect: true },
-      ]);
-      return;
-    }
-
-    // ── RFP 직접 진입: "RFP"/"제안요청서" 키워드 → 백엔드 안 거치고 바로 처리 ──
-    if (phase !== "pr_filling" && phase !== "rfq_filling" && phase !== "filling" && (
-      text.includes("RFP 작성") || text.includes("제안요청서 작성") ||
-      text === "제안요청서(RFP) 작성하기" || text === "RFP 작성하기"
-    )) {
-      setUserInput("");
-      setMessages(prev => [...prev,
-        { id: msgIdCounter++, role: "user", text },
-        { id: msgIdCounter++, role: "assistant",
-          text: "제안요청서(RFP) 작성을 진행합니다. 아래에서 RFP 유형을 선택해 주십시오.",
-          rfpTypeSelect: true },
-      ]);
-      return;
-    }
+    // ── RFQ/RFP 직접 진입은 백엔드 분류기에 위임 (키워드 매칭 제거) ──
+    // 소싱담당자의 "견적서 작성", "RFP 작성" 등은 백엔드 스트리밍으로 보내서
+    // classifier가 L3 분류 + branch2_sourcing으로 RFQ vs RFP 판단
 
     const userMsg = { id: msgIdCounter++, role: "user", text };
     setMessages(prev => [...prev, userMsg]);

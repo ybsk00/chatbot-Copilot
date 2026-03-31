@@ -540,9 +540,28 @@ class OrchestratorAgent(AgentBase):
         await asyncio.gather(classification_task, retrieval_task)
         # Constitution/Script는 Generation 시작 전까지만 완료되면 됨 (아래서 await)
 
-        # ── L3 JSON 직접 주입 제거 — 모든 데이터는 DB(knowledge_chunks)에서 검색 ──
+        # ── 소싱담당자 자동 분기: 분류 성공 + hot CTA → RFQ/RFP 직행 ──
         l3_code = (ctx.classification or {}).get("l3_code")
         cta = (ctx.classification or {}).get("cta", "cold")
+        b2_cls = (ctx.classification or {}).get("branch2_sourcing", "")
+
+        if ctx.user_role == "procurement" and cta == "hot" and l3_code and b2_cls in ("2B_RFQ", "2C_RFP입찰"):
+            if b2_cls == "2B_RFQ":
+                trigger = "rfq_agreed"
+                msg_text = f"이 품목은 RFQ(경쟁견적) 방식으로 소싱합니다. 견적서(RFQ) 작성을 진행하겠습니다."
+            else:
+                trigger = "rfp_agreed"
+                msg_text = f"이 품목은 RFP(기술+가격 입찰) 방식으로 소싱합니다. 제안요청서(RFP) 작성을 진행하겠습니다."
+            yield self._sse("meta", {
+                "sources": [], "rag_score": 0,
+                "phase_trigger": trigger,
+                "classification": ctx.classification,
+                "user_role": ctx.user_role,
+            })
+            yield self._sse("token", {"content": msg_text})
+            yield self._sse("done", {})
+            logger.info(f"[Orchestrator] Procurement auto-branch: {b2_cls} → {trigger} (l3={l3_code})")
+            return
 
         # ── 사후 필터링: 분류 결과로 관련 없는 청크 제거 ──
         self._filter_chunks_by_classification(ctx)

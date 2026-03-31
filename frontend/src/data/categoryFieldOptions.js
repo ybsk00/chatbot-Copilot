@@ -72,13 +72,31 @@ export const CATEGORY_FIELD_OPTIONS = {
   },
 };
 
+/**
+ * pr_template_key 접두사 → L1 카테고리 매핑
+ * L1xxx=사무·총무, L2xxx=인사·복리후생, L3xxx=시설·건물관리, ...
+ */
+const PREFIX_TO_L1 = {
+  "L1": "사무·총무",
+  "L2": "인사·복리후생",
+  "L3": "시설·건물관리",
+  "L4": "차량·출장",
+  "L5": "보험 서비스",
+  "L6": "전문용역·컨설팅",
+  "L7": "마케팅",
+  "L8": "IT/ICT",
+  "L9": "물류",
+  "M1": "생산관리",
+  "R2": "연구개발",
+};
+
 /** prType(템플릿 키) → L1 카테고리 그룹 역매핑 */
 export function getCategoryGroup(prType, dbPrTemplates, prCategories) {
-  // 1순위: DB 템플릿의 category_group
-  if (dbPrTemplates && dbPrTemplates[prType]?.category_group) {
-    return dbPrTemplates[prType].category_group;
-  }
-  // 2순위: 프론트엔드 PR_CATEGORIES에서 역매핑
+  if (!prType) return null;
+  // 1순위: type_key 접두사로 L1 매핑 (Lxxxx, Mxxxx, Rxxxx)
+  const prefix = prType.substring(0, 2);
+  if (PREFIX_TO_L1[prefix]) return PREFIX_TO_L1[prefix];
+  // 2순위: 프론트엔드 PR_CATEGORIES에서 역매핑 (레거시 키)
   if (prCategories) {
     for (const [cat, keys] of Object.entries(prCategories)) {
       if (keys.includes(prType)) return cat;

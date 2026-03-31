@@ -661,18 +661,10 @@ class OrchestratorAgent(AgentBase):
         # L3 매칭 안 된 일반 질문에서는 구매요청서/RFP 자동 추가 안 함
         has_l3 = bool((ctx.classification or {}).get("l3_code"))
 
-        # ── suggestions 최종 구성 (단순 명확한 분기) ──
-        # 1) 기존 구매요청서/RFP/액션 버튼 전부 제거 (아래서 필요한 것만 추가)
-        ctx.suggestions = [s for s in ctx.suggestions
-                           if s not in ("구매요청서 작성하기", "RFP 작성하기",
-                                        "견적요청서(RFQ) 작성하기", "제안요청서(RFP) 작성하기")]
-        # BT 카드 액션버튼도 제거 (카드에서 이미 표시)
-        bt_action_btns = set((bt_routing or {}).get("action_buttons") or [])
-        ctx.suggestions = [s for s in ctx.suggestions if s not in bt_action_btns]
-
-        # 2) 역할별 CTA 버튼 분기
+        # ── suggestions 최종 구성 ──
         if ctx.user_role == "procurement":
-            # 소싱담당자: pr_blocked 여부와 무관하게 항상 RFQ+RFP 표시
+            # 소싱담당자: RAG 추천 질문 제거 → RFQ/RFP CTA만 표시
+            ctx.suggestions = []
             if b2 == "2B_RFQ":
                 ctx.suggestions.append("견적요청서(RFQ) 작성하기")
             elif b2 == "2C_RFP입찰":
@@ -680,11 +672,16 @@ class OrchestratorAgent(AgentBase):
             else:
                 ctx.suggestions.append("견적요청서(RFQ) 작성하기")
                 ctx.suggestions.append("제안요청서(RFP) 작성하기")
-        elif not pr_blocked:
-            # 일반 사용자: pr_blocked 아닐 때만 구매요청서
-            if ctx.user_role in ("user", None):
+        else:
+            # 일반 사용자: 기존 로직 유지
+            ctx.suggestions = [s for s in ctx.suggestions
+                               if s not in ("구매요청서 작성하기", "RFP 작성하기",
+                                            "견적요청서(RFQ) 작성하기", "제안요청서(RFP) 작성하기")]
+            bt_action_btns = set((bt_routing or {}).get("action_buttons") or [])
+            ctx.suggestions = [s for s in ctx.suggestions if s not in bt_action_btns]
+            if not pr_blocked:
                 ctx.suggestions.append("구매요청서 작성하기")
-        # 일반 사용자 + pr_blocked: 아무것도 추가 안 함 (BT 카드 액션버튼이 이미 표시)
+            # pr_blocked: 아무것도 추가 안 함 (BT 카드 액션버튼이 이미 표시)
 
         yield self._sse("suggestions", {"items": ctx.suggestions})
         yield self._sse("done", {})

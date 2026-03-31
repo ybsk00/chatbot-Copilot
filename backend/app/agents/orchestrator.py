@@ -457,7 +457,8 @@ class OrchestratorAgent(AgentBase):
 
         # ── GATE 3: 신뢰도 거부 ──
         if ctx.confidence_rejected:
-            rejected_cta = []  # 근거 부족 시 구매요청서/RFP 버튼 추가 안 함
+            # 근거 부족이어도 user 역할이면 구매요청서 진입은 허용
+            rejected_cta = ["구매요청서 작성하기"] if ctx.user_role == "user" else []
 
             yield self._sse("meta", {
                 "sources": [],
@@ -565,13 +566,14 @@ class OrchestratorAgent(AgentBase):
         bt_action_btns = set((bt_routing or {}).get("action_buttons") or [])
         ctx.suggestions = [s for s in ctx.suggestions if s not in bt_action_btns]
 
-        # 2) pr_action에 따라 정확히 분기
-        if has_l3 and pr_allowed:
-            # PR 허용 (BT-E~I): "구매요청서 작성하기" 추가
-            ctx.suggestions.append("구매요청서 작성하기")
+        # 2) pr_action에 따라 분기 — blocked만 아니면 구매요청서 버튼 표시
+        if not pr_blocked:
+            # PR 허용 또는 BT 미매칭: "구매요청서 작성하기" 추가
+            if ctx.user_role in ("user", None):
+                ctx.suggestions.append("구매요청서 작성하기")
+            elif ctx.user_role == "procurement":
+                ctx.suggestions.append("구매요청서 작성하기")
         # pr_blocked: 아무것도 추가 안 함 (BT 카드 액션버튼이 이미 표시)
-        # conditional: 아무것도 추가 안 함 (BT-J 카드가 이미 표시)
-        # L3 미매칭: 아무것도 추가 안 함 (FAQ 추천질문만)
 
         yield self._sse("suggestions", {"items": ctx.suggestions})
         yield self._sse("done", {})

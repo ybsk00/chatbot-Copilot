@@ -5,6 +5,7 @@ import { RFP_TEMPLATES } from "../data/rfpTemplates";
 import { PR_TEMPLATES, PR_CATEGORIES } from "../data/prTemplates";
 import { COMMON_SECTIONS } from "../data/commonFields";
 import { PR_TO_RFP_MAPPING, getPrToRfpMapping } from "../data/fieldMapping";
+import { CATEGORY_FIELD_OPTIONS, getCategoryGroup } from "../data/categoryFieldOptions";
 import { downloadRfpPdf } from "../utils/rfpExport";
 import { downloadPrPdf } from "../utils/prExport";
 import { previewRfq } from "../utils/rfqExport";
@@ -631,7 +632,7 @@ export default function ChatPage() {
     if (!text || isTyping) return;
 
     // ── PR 직접 진입: "구매요청서" 키워드 → 백엔드 안 거치고 바로 PR filling ──
-    if (phase !== "pr_filling" && (
+    if (phase !== "pr_filling" && phase !== "rfq_filling" && (
       text.includes("구매요청서 작성") || text.includes("구매요청서") || text === "구매요청서 작성하기"
     )) {
       const prKey = lastClassification?.pr_template_key;
@@ -640,6 +641,15 @@ export default function ChatPage() {
         handlePrTypeSelect(prKey);
         return;
       }
+      // fallback: 스트리밍 우회 → 카테고리 선택 UI 바로 표시
+      setUserInput("");
+      setMessages(prev => [...prev,
+        { id: msgIdCounter++, role: "user", text },
+        { id: msgIdCounter++, role: "assistant",
+          text: "구매요청서 작성을 진행하겠습니다. 아래에서 구매 카테고리를 선택해 주십시오.",
+          prTypeSelect: true },
+      ]);
+      return;
     }
 
     const userMsg = { id: msgIdCounter++, role: "user", text };
@@ -1063,33 +1073,37 @@ export default function ChatPage() {
     // c1~c5 요청자 정보: 탭 불필요
     if (["c1","c2","c3","c4","c5"].includes(key)) return [];
 
+    // 카테고리별 특화 옵션 조회
+    const catGroup = prType ? getCategoryGroup(prType, dbPrTemplates, PR_CATEGORIES) : null;
+    const catOpts = catGroup ? CATEGORY_FIELD_OPTIONS[catGroup] : null;
+
     // ── 공통 필드 (c6~c20) ──
     // c6 서비스/품목명
     if (key === "c6") return f.default ? [f.default] : [];
     // c7 구매/계약 목적
     if (key === "c7") return f.default ? [f.default] : [];
-    // c8 계약 유형
+    // c8 계약 유형 — 카테고리별 특화
     if (key === "c8")
-      return ["순수 렌탈 (반납)", "리스 (인수 옵션)", "단가 계약", "연간 구독/위탁"];
+      return catOpts?.c8 || ["단가 계약", "연간 구독/위탁", "렌탈", "도급 계약"];
     // c9 계약 기간
     if (key === "c9")
       return ["12개월", "24개월", "36개월", "48개월"];
-    // c10 대상 규모/수량 — 디폴트 자동입력 금지
+    // c10 대상 규모/수량 — 카테고리별 특화
     if (key === "c10")
-      return ["5대 미만", "10대 미만", "20대 미만", "기타"];
+      return catOpts?.c10 || ["5대 미만", "10대 미만", "20대 미만", "기타"];
     // c11 서비스 범위/요구 사양
     if (key === "c11") return f.default ? [f.default] : [];
     // c12 제공/수행 방식
     if (key === "c12") return f.default ? [f.default] : [];
-    // c13 품질/SLA 기준
+    // c13 품질/SLA 기준 — 카테고리별 특화
     if (key === "c13")
-      return ["24시간 내 대응", "99.9% 가용성", "월간 리포트 제공"];
+      return catOpts?.c13 || ["24시간 내 대응", "월간 리포트 제공", "정기 평가"];
     // c14 보안/법적 요건
     if (key === "c14")
       return ["개인정보보호법 준수", "보안서약서 징구", "해당 없음"];
-    // c15 단가 산정 방식
+    // c15 단가 산정 방식 — 카테고리별 특화
     if (key === "c15")
-      return ["월 정액제", "건당 단가", "인건비 기반", "실비 정산"];
+      return catOpts?.c15 || ["월 정액제", "건당 단가", "인건비 기반", "실비 정산"];
     // c16 구간 할인
     if (key === "c16")
       return ["수량 할인 적용", "연간 계약 할인", "해당 없음"];
@@ -1198,6 +1212,7 @@ export default function ChatPage() {
                   e.preventDefault();
                   e.stopPropagation();
                   applyPrFills({ [fk]: opt });
+                  setPrFillingTurns(prev => prev + 1);
                 }}
                 style={{
                   padding:"5px 11px", borderRadius:14, fontSize:11, fontWeight:600,
@@ -1239,8 +1254,9 @@ export default function ChatPage() {
       .filter(([k, f]) => f.required !== false && !PR_SKIP_KEYS.has(k) && !(f.value || "").trim());
     if (unfilledFields.length === 0) return null;
 
-    // 첫 번째 미완 필드 1개만 표시
-    const [fk, f] = unfilledFields[0];
+    // 옵션 있는 필드 우선 표시 (탭 선택 가능한 항목 먼저)
+    const withOpts = unfilledFields.filter(([k, f]) => getPrFieldOptions(k, f).length > 0);
+    const [fk, f] = withOpts.length > 0 ? withOpts[0] : unfilledFields[0];
     const opts = getPrFieldOptions(fk, f);
 
     return (
@@ -1257,29 +1273,41 @@ export default function ChatPage() {
             <span style={{ color: T.red, fontSize:10 }}>*</span>
             {f.label}
           </div>
-          {opts.length > 0 ? (
-            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-              {opts.map((opt, i) => (
-                <button
-                  key={i}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    applyPrFills({ [fk]: opt });
-                  }}
-                  style={{
-                    padding:"6px 12px", borderRadius:16, fontSize:11, fontWeight:600,
-                    border:"1px solid rgba(6,182,212,0.2)", background:"rgba(255,255,255,0.8)",
-                    color: T.text, cursor:"pointer", fontFamily:"inherit", transition:"all 0.15s",
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.background = "rgba(6,182,212,0.1)"; e.currentTarget.style.borderColor = T.primary; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.8)"; e.currentTarget.style.borderColor = "rgba(6,182,212,0.2)"; }}
-                >{opt}</button>
-              ))}
-            </div>
-          ) : (
-            <div style={{ fontSize:10, color: T.muted }}>채팅으로 입력해 주세요</div>
-          )}
+          <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+            {opts.map((opt, i) => (
+              <button
+                key={i}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  applyPrFills({ [fk]: opt });
+                  setPrFillingTurns(prev => prev + 1);
+                }}
+                style={{
+                  padding:"6px 12px", borderRadius:16, fontSize:11, fontWeight:600,
+                  border:"1px solid rgba(6,182,212,0.2)", background:"rgba(255,255,255,0.8)",
+                  color: T.text, cursor:"pointer", fontFamily:"inherit", transition:"all 0.15s",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = "rgba(6,182,212,0.1)"; e.currentTarget.style.borderColor = T.primary; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.8)"; e.currentTarget.style.borderColor = "rgba(6,182,212,0.2)"; }}
+              >{opt}</button>
+            ))}
+            <button
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setActivePrFieldKey(fk);
+                inputRef.current?.focus();
+              }}
+              style={{
+                padding:"6px 12px", borderRadius:16, fontSize:11, fontWeight:600,
+                border:`1px dashed ${activePrFieldKey === fk ? T.primary : "rgba(100,116,139,0.3)"}`,
+                background: activePrFieldKey === fk ? "rgba(14,165,160,0.08)" : "transparent",
+                color: activePrFieldKey === fk ? T.primary : T.muted,
+                cursor:"pointer", fontFamily:"inherit", transition:"all 0.15s",
+              }}
+            >직접 입력</button>
+          </div>
         </div>
       </div>
     );
@@ -2640,12 +2668,18 @@ export default function ChatPage() {
                     {display.map((item, i) => (
                       <button key={i} onClick={() => {
                         if (item === "구매요청서 작성하기") {
-                          // PR 직접 진입: lastClassification의 pr_template_key 사용
+                          // PR 직접 진입: 스트리밍 우회 → 바로 PR 모드
                           const prKey = lastClassification?.pr_template_key;
                           if (prKey && prKey !== "_generic" && getPrTemplate(prKey)) {
                             handlePrTypeSelect(prKey);
                           } else {
-                            handleSend(item); // 폴백: 카테고리 선택
+                            // 카테고리 선택 UI 바로 표시 (스트리밍/BT분기 우회)
+                            setMessages(prev => [...prev,
+                              { id: msgIdCounter++, role: "user", text: item },
+                              { id: msgIdCounter++, role: "assistant",
+                                text: "구매요청서 작성을 진행하겠습니다. 아래에서 구매 카테고리를 선택해 주십시오.",
+                                prTypeSelect: true },
+                            ]);
                           }
                         } else {
                           handleSend(item);

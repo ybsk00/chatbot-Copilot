@@ -224,7 +224,7 @@ export default function ChatPage() {
   const [phase, setPhase]               = useState("chat");
   const [rfpType, setRfpType]           = useState(null);
   const [messages, setMessages]         = useState([
-    { id: msgIdCounter++, role: "assistant", text: "안녕하세요! 간접구매 상담도우미입니다.\n\n구매하려는 품목이나 서비스를 말씀해 주세요.\n견적 요청부터 공급업체 추천까지 함께 도와드립니다.\n\n💡 **물건·서비스를 구매하시는 분**이라면 구매요청서 작성을,\n**구매 업무를 담당하시는 분**이라면 RFP 작성을 도와드립니다.\n역할을 미리 알려주시면 더 정확한 안내가 가능합니다." }
+    { id: msgIdCounter++, role: "assistant", text: "안녕하세요! 업무마켓9 간접구매 도우미입니다.\n\n구매하려는 품목이나 서비스를 말씀해 주세요.\n품목 안내부터 구매요청서 작성, 공급업체 추천까지 도와드립니다.\n\n💡 **소싱담당자**이신 경우, 먼저 \"소싱담당자입니다\"라고 말씀해 주세요.\n견적서(RFQ)·제안요청서(RFP) 작성을 도와드립니다.", roleSelect: true }
   ]);
   const [fields, setFields]             = useState({});
   const [justFilled, setJustFilled]     = useState(new Set());
@@ -758,22 +758,18 @@ export default function ChatPage() {
           setPrRightVisible(true);
         }
       } else if (phase === "rfq_filling") {
-        // RFQ 필드 추출
+        // RFQ 필드 추출 (PR과 동일 패턴)
+        setRfqFillingTurns(prev => prev + 1);
         const rfqFilled = {};
         Object.entries(rfqFields).forEach(([k, v]) => { if ((v.value || "").trim()) rfqFilled[k] = v.value; });
         const data = await api.chat(sessionId, text, null, history, phase, {}, rfpType, prType, {}, userRole, roleTurnCount, rfqType, rfqFilled);
         if (data.rfq_fields && Object.keys(data.rfq_fields).length > 0) {
-          setRfqFields(prev => {
-            const updated = { ...prev };
-            Object.entries(data.rfq_fields).forEach(([k, v]) => {
-              if (updated[k] && v) updated[k] = { ...updated[k], value: v };
-            });
-            return updated;
-          });
+          applyRfqFills(data.rfq_fields);
         }
         setMessages(prev => [...prev, {
           id: msgIdCounter++, role: "assistant",
           text: data.answer, sources: data.sources,
+          rfqInlineTabs: true,
         }]);
         if (data.phase_trigger === "rfq_complete") {
           if (data.rfq_request_id) setRfqRequestId(data.rfq_request_id);
@@ -1194,18 +1190,22 @@ export default function ChatPage() {
       return;
     }
     const templateFields = {};
+    // 비필수 필드에 기본값 채우기 (수정 가능)
     Object.entries(tpl.fields).forEach(([k, v]) => {
-      templateFields[k] = { ...v };
+      templateFields[k] = { ...v, value: v.default || "" };
     });
     setRfqType(key);
     setRfqFields(templateFields);
     setPhase("rfq_filling");
-    setRfqRightVisible(true);
-    setRightVisible(false);     // RFP 패널 닫기
-    setPrRightVisible(false);   // PR 패널 닫기
+    setRfqRightVisible(false);  // 대화로 수집 후 30%/3턴 자동오픈 (PR 동일)
+    setRightVisible(false);
+    setPrRightVisible(false);
+    setRfqUserFilledKeys(new Set());
+    setRfqFillingTurns(0);
     setMessages(prev => [...prev, {
       id: msgIdCounter++, role: "assistant",
-      text: `**${tpl.name}** 견적서(RFQ) 작성을 시작합니다.\n소싱담당자 필수 항목을 채워주세요. 채팅으로 입력하시면 자동 매핑됩니다.`,
+      text: `**${tpl.name}** 견적서(RFQ) 작성을 시작합니다.\n아래 항목들을 확인하시고, 채팅으로 내용을 알려주시면 자동으로 채워드립니다.`,
+      rfqQuickFill: true,
     }]);
   };
 
@@ -2096,6 +2096,34 @@ export default function ChatPage() {
   const rfqRequiredTotal = Object.entries(rfqFields).filter(([, f]) => f.zone !== "supplier" && f.required !== false).length;
 
   const [rfqOpenSec, setRfqOpenSec] = useState({0:true,1:true,2:true,3:true,4:true});
+  const [rfqUserFilledKeys, setRfqUserFilledKeys] = useState(new Set());
+  const [rfqFillingTurns, setRfqFillingTurns] = useState(0);
+  const RFQ_AUTO_OPEN_PCT = 30;
+
+  // RFQ 자동오픈 (PR과 동일 패턴: 30% 또는 3턴)
+  const rfqRequiredFields = Object.entries(rfqFields).filter(([, f]) => f.zone !== "supplier" && f.required !== false);
+  const rfqUserFilledPct = rfqRequiredTotal > 0
+    ? Math.round(rfqRequiredFields.filter(([k]) => rfqUserFilledKeys.has(k)).length / rfqRequiredTotal * 100) : 0;
+
+  useEffect(() => {
+    if (phase === "rfq_filling" && !rfqRightVisible) {
+      if (rfqUserFilledPct >= RFQ_AUTO_OPEN_PCT || rfqFillingTurns >= 3) {
+        setRfqRightVisible(true);
+      }
+    }
+  }, [rfqUserFilledPct, rfqFillingTurns, phase, rfqRightVisible]);
+
+  const applyRfqFills = (fills) => {
+    if (!fills || !Object.keys(fills).length) return;
+    setRfqUserFilledKeys(prev => new Set([...prev, ...Object.keys(fills)]));
+    setRfqFields(prev => {
+      const updated = { ...prev };
+      Object.entries(fills).forEach(([k, v]) => {
+        if (updated[k] && v) updated[k] = { ...updated[k], value: v };
+      });
+      return updated;
+    });
+  };
 
   const RfqPanelFilling = () => (
     <div className="custom-scroll" style={{ flex:1, overflowY:"auto", padding:"20px 22px" }}>
@@ -3089,6 +3117,29 @@ export default function ChatPage() {
                 {/* RFQ 견적서 카테고리 선택 카드 */}
                 {msg.rfqTypeSelect && !rfqType && renderRfqTypeSelector()}
 
+                {/* RFQ 퀵필 카드 — 초기 필수 항목 안내 */}
+                {msg.rfqQuickFill && phase === "rfq_filling" && (
+                  <div style={{ marginTop:8, padding:"12px 16px", borderRadius: T.r12,
+                    background:"rgba(14,165,160,0.04)", border:`1px solid rgba(14,165,160,0.12)` }}>
+                    <div style={{ fontSize:11, fontWeight:700, color: T.primary, marginBottom:6 }}>
+                      필수 항목 {rfqRequiredTotal - rfqRequiredFilled}개 남음
+                    </div>
+                    <div style={{ fontSize:11, color: T.sub }}>
+                      발주기관 정보(기관명, 부서, 담당자, 연락처, 이메일)를 먼저 알려주세요.
+                    </div>
+                  </div>
+                )}
+
+                {/* RFQ 인라인 탭 — AI 응답마다 미완 필드 안내 */}
+                {msg.rfqInlineTabs && phase === "rfq_filling" && (
+                  <div style={{ marginTop:8, padding:"10px 14px", borderRadius: T.r10,
+                    background:"rgba(6,182,212,0.04)", border:`1px dashed rgba(14,165,160,0.2)` }}>
+                    <div style={{ fontSize:11, color: T.primary, fontWeight:600 }}>
+                      미입력 필수항목 {rfqRequiredTotal - rfqRequiredFilled}개 · 채팅으로 입력하거나 우측 패널에서 직접 입력하세요
+                    </div>
+                  </div>
+                )}
+
                 {/* PR 업로드 결과 → RFP/RFQ 변환 버튼 (procurement만) */}
                 {msg.prUploadResult && userRole === "procurement" && phase === "chat" && (
                   <div style={{ display:"flex", gap:8, marginTop:10 }}>
@@ -4027,7 +4078,7 @@ export default function ChatPage() {
               {phase === "rfq_complete" ? "작성 완료" : "작성 중"}
             </span>
             <button
-              onClick={() => setRfqRightVisible(false)}
+              onClick={() => { setRfqRightVisible(false); setPhase("chat"); }}
               style={{
                 width:28, height:28, borderRadius:8, border:"none",
                 background:"rgba(100,116,139,0.08)", cursor:"pointer",

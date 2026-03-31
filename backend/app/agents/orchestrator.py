@@ -288,45 +288,25 @@ class OrchestratorAgent(AgentBase):
             self.logger.warning(f"BT routing lookup failed (l3={l3_code}): {e}")
             return None
 
+    # ── CTA 버튼 정확 매칭 (프론트엔드 suggestions 버튼 클릭 전용) ──
+    _CTA_EXACT = {
+        "구매요청서 작성하기": "pr_agreed",
+        "견적요청서(RFQ) 작성하기": "rfq_agreed",
+        "RFQ 작성하기": "rfq_agreed",
+        "제안요청서(RFP) 작성하기": "rfp_agreed",
+        "RFP 작성하기": "rfp_agreed",
+    }
+
     def _detect_phase_trigger(self, message: str, phase: str, user_role: str | None = None) -> str | None:
-        """키워드 기반 phase 전환 감지 (0ms).
-
-        우선순위: PR 구체적 → RFQ 구체적 → RFP 구체적 → RFP 일반동의
-        (구체적 패턴을 먼저 체크해야 "견적서 작성해주세요"가 RFP로 빠지지 않음)
-        """
+        """CTA 버튼 정확 매칭만 수행. 자연어 분기는 LLM 분류기에 위임."""
         msg = message.strip()
-        msg_lower = msg.lower()
         if phase in ("chat", "asked", "pr_asked"):
-            # ── 1순위: PR 동의 (가장 구체적) ──
-            if any(kw in msg for kw in PR_AGREE_KEYWORDS):
+            # CTA 버튼 정확 매칭 (suggestions 클릭)
+            if msg in self._CTA_EXACT:
+                return self._CTA_EXACT[msg]
+            # pr_asked 상태에서 짧은 동의 ("네", "좋아요" 등)
+            if phase == "pr_asked" and len(msg) <= 10 and any(kw in msg for kw in RFP_AGREE_KEYWORDS):
                 return "pr_agreed"
-            if phase == "pr_asked" and any(kw in msg for kw in RFP_AGREE_KEYWORDS):
-                return "pr_agreed"
-
-            # ── 2순위: RFQ 직접 요청 (RFP보다 먼저 — "견적서 작성"이 RFP로 빠지지 않도록) ──
-            if any(p in msg_lower for p in self._RFQ_DIRECT_PATTERNS):
-                if not any(q in msg for q in self._RFP_QUESTION_MARKERS):
-                    return "rfq_agreed"
-            if msg_lower.replace(" ", "") in ("rfq", "rfq!"):
-                return "rfq_agreed"
-
-            # ── 3순위: RFP 직접 요청 ("rfp 작성해줘" 등) ──
-            if any(p in msg_lower for p in self._RFP_DIRECT_PATTERNS):
-                if not any(q in msg for q in self._RFP_QUESTION_MARKERS):
-                    return "rfp_agreed"
-            if msg_lower.replace(" ", "") in ("rfp", "rfp!"):
-                return "rfp_agreed"
-
-            # ── 4순위: RFP 일반 동의 ("작성해", "네", "좋아요" 등 짧은 응답) ──
-            if any(kw in msg for kw in RFP_AGREE_KEYWORDS):
-                is_question = any(q in msg for q in self._RFP_QUESTION_MARKERS)
-                is_long = len(msg) > 15
-                if is_question and is_long:
-                    pass
-                elif is_long and not any(kw in msg for kw in ("RFP", "rfp", "제안요청서", "작성해", "작성할", "작성하")):
-                    pass
-                else:
-                    return "rfp_agreed"
         return None
 
     async def execute_stream(self, ctx: AgentContext) -> AsyncGenerator[str, None]:

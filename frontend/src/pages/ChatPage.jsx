@@ -2979,7 +2979,12 @@ export default function ChatPage() {
 
                 {/* 추천 질문/액션 버튼 — 백엔드 suggestions 그대로 표시 */}
                 {msg.suggestions && msg.suggestions.length > 0 && !msg.isStreaming && (() => {
-                  const display = msg.suggestions;
+                  // 역할 침범 방지 이중 가드
+                  const display = msg.suggestions.filter(s => {
+                    if (userRole === "procurement") return !s.includes("구매요청서");
+                    if (userRole === "user") return !s.includes("RFQ") && !s.includes("RFP") && !s.includes("견적요청서") && !s.includes("제안요청서");
+                    return true;
+                  });
                   if (display.length === 0) return null;
                   return (
                   <div style={{ display:"flex", flexDirection:"column", gap:6, marginTop:4 }}>

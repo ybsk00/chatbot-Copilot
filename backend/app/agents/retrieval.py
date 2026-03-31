@@ -128,6 +128,7 @@ class RetrievalAgent(AgentBase):
             else:
                 # L3코드가 있으면 JSON 1순위 검색 활성화
                 _l3 = (ctx.classification or {}).get("l3_code") if ctx.classification else None
+                _role = ctx.user_role
                 result = await self.run_in_thread(
                     executor,
                     lambda: hybrid_search(
@@ -135,6 +136,7 @@ class RetrievalAgent(AgentBase):
                         category=ctx.category,
                         taxonomy_major=None,
                         l3_code=_l3,
+                        user_role=_role,
                     )
                 )
                 ctx.chunks, ctx.query_embedding = result

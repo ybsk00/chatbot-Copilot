@@ -21,20 +21,20 @@ def vector_search(query: str, category: str | None = None, top_k: int = RAG_TOP_
     return vector_search_with_embedding(query_embedding, category, top_k, min_similarity)
 
 
-def vector_search_with_embedding(query_embedding: list[float], category: str | None = None, top_k: int = RAG_TOP_K, min_similarity: float = 0.70) -> list[dict]:
-    """Supabase pgvector 유사도 검색 (임베딩 재사용)"""
+def vector_search_with_embedding(query_embedding: list[float], category: str | None = None, top_k: int = RAG_TOP_K, min_similarity: float = 0.70, user_role: str | None = None) -> list[dict]:
+    """Supabase pgvector 유사도 검색 (임베딩 재사용 + 역할 필터)"""
     supabase = get_client()
 
     result = supabase.rpc(
         "match_chunks",
         {
             "query_embedding": query_embedding,
-            "match_count": top_k * 2,
+            "match_count": top_k * 3,  # 역할 필터링 후 줄어들 수 있으므로 여유분
             "category_filter": category,
         },
     ).execute()
 
-    return [
+    rows = [
         {
             "id": row["id"],
             "content": row["content"],
@@ -46,6 +46,18 @@ def vector_search_with_embedding(query_embedding: list[float], category: str | N
         for row in (result.data or [])
         if row["similarity"] >= min_similarity
     ]
+
+    # ── 역할별 청크 필터링 ──
+    if user_role == "procurement":
+        # 소싱담당자: quote_* + bt_gt_routing 카테고리만
+        rows = [r for r in rows if r["category"].startswith("quote_") or r["category"] == "bt_gt_routing"
+                or r["doc_name"].startswith("QUOTE_") or r["doc_name"].startswith("BSM_")]
+    elif user_role == "user":
+        # 사용자: quote_* 카테고리 제외
+        rows = [r for r in rows if not r["category"].startswith("quote_")
+                and not r["doc_name"].startswith("QUOTE_")]
+
+    return rows
 
 
 # ── BM25 재순위 ──
@@ -70,21 +82,21 @@ def bm25_rerank(query: str, chunks: list[dict]) -> list[dict]:
 
 # ── FAQ 검색 (knowledge_faq) ──
 
-def faq_search(query_embedding: list[float], taxonomy_major: str | None = None, category: str | None = None, top_k: int = 3, min_similarity: float = 0.70) -> list[dict]:
-    """FAQ 벡터 검색 (대분류 필터 지원)"""
+def faq_search(query_embedding: list[float], taxonomy_major: str | None = None, category: str | None = None, top_k: int = 3, min_similarity: float = 0.70, user_role: str | None = None) -> list[dict]:
+    """FAQ 벡터 검색 (대분류 필터 + 역할 필터 지원)"""
     try:
         supabase = get_client()
         result = supabase.rpc(
             "match_faq",
             {
                 "query_embedding": query_embedding,
-                "match_count": top_k,
+                "match_count": top_k * 3,  # 역할 필터링 후 줄어들 수 있으므로 여유분
                 "category_filter": category,
                 "taxonomy_major_filter": taxonomy_major,
             },
         ).execute()
 
-        return [
+        rows = [
             {
                 "id": row["id"],
                 "question": row["question"],
@@ -96,10 +108,19 @@ def faq_search(query_embedding: list[float], taxonomy_major: str | None = None, 
                 "chunk_id": row["chunk_id"],
                 "similarity": row["similarity"],
                 "source_type": "faq",
+                "metadata": row.get("metadata", {}),
             }
             for row in (result.data or [])
             if row["similarity"] >= min_similarity
         ]
+
+        # ── 역할별 FAQ 필터링 (metadata.target_role 기반) ──
+        if user_role == "procurement":
+            rows = [r for r in rows if r.get("metadata", {}).get("target_role") in ("procurement", "all", None)]
+        elif user_role == "user":
+            rows = [r for r in rows if r.get("metadata", {}).get("target_role") in ("user", "all", None)]
+
+        return rows[:top_k]
     except Exception as e:
         logger.warning(f"FAQ search failed (table may not exist): {e}")
         return []
@@ -127,7 +148,7 @@ def _is_similar_text(a: str, b: str, threshold: float = 0.55) -> bool:
     return SequenceMatcher(None, a, b).ratio() > threshold
 
 
-def get_faq_suggestions(query_embedding: list[float], taxonomy_major: str | None = None, exclude_ids: list[int] | None = None, top_k: int = 3, min_similarity: float = 0.65, current_query: str = "", history_queries: list[str] | None = None, answered_text: str = "") -> list[str]:
+def get_faq_suggestions(query_embedding: list[float], taxonomy_major: str | None = None, exclude_ids: list[int] | None = None, top_k: int = 3, min_similarity: float = 0.65, current_query: str = "", history_queries: list[str] | None = None, answered_text: str = "", user_role: str | None = None) -> list[str]:
     """유사도 기반 FAQ 후속질문 반환 (이미 물어본 질문 + AI 답변과 겹치는 FAQ 제외)"""
     try:
         supabase = get_client()
@@ -155,6 +176,13 @@ def get_faq_suggestions(query_embedding: list[float], taxonomy_major: str | None
             # 유사도 임계값 미만이면 무시 (주제가 다른 FAQ 방지)
             if row["similarity"] < min_similarity:
                 continue
+            # ── 역할별 FAQ 필터링 ──
+            meta = row.get("metadata") or {}
+            target = meta.get("target_role")
+            if user_role == "procurement" and target not in ("procurement", "all", None):
+                continue
+            if user_role == "user" and target not in ("user", "all", None):
+                continue
             # 이미 사용된 FAQ 제외
             if exclude_ids and row["id"] in exclude_ids:
                 continue
@@ -181,7 +209,7 @@ def get_faq_suggestions(query_embedding: list[float], taxonomy_major: str | None
 
 # ── BM25 키워드 우선 검색 ──
 
-def bm25_keyword_search(query: str, category: str | None = None, top_k: int = RAG_TOP_K) -> list[dict]:
+def bm25_keyword_search(query: str, category: str | None = None, top_k: int = RAG_TOP_K, user_role: str | None = None) -> list[dict]:
     """BM25 키워드 검색: DB에서 키워드 매칭 후보를 가져와 BM25 스코어링"""
     # 쿼리에서 2글자 이상 키워드 추출
     keywords = [w for w in query.split() if len(w) >= 2]
@@ -222,7 +250,15 @@ def bm25_keyword_search(query: str, category: str | None = None, top_k: int = RA
         candidates = [c for c in candidates if c["bm25_score"] > 0]
         candidates.sort(key=lambda x: x["bm25_score"], reverse=True)
 
-        logger.info(f"BM25 search: {len(candidates)}개 결과 (query={query[:30]})")
+        # ── 역할별 필터링 ──
+        if user_role == "procurement":
+            candidates = [c for c in candidates if c["category"].startswith("quote_") or c["category"] == "bt_gt_routing"
+                          or c["doc_name"].startswith("QUOTE_") or c["doc_name"].startswith("BSM_")]
+        elif user_role == "user":
+            candidates = [c for c in candidates if not c["category"].startswith("quote_")
+                          and not c["doc_name"].startswith("QUOTE_")]
+
+        logger.info(f"BM25 search: {len(candidates)}개 결과 (query={query[:30]}, role={user_role})")
         return candidates[:top_k]
 
     except Exception as e:
@@ -360,6 +396,7 @@ def hybrid_search(
     top_k: int = RAG_TOP_K,
     min_similarity: float = VECTOR_MIN_SIMILARITY,
     l3_code: str | None = None,
+    user_role: str | None = None,
 ) -> tuple[list[dict], list[float]]:
     """3단계 하이브리드 검색.
 
@@ -392,10 +429,10 @@ def hybrid_search(
     vector_chunks = []
 
     def _do_bm25():
-        return bm25_keyword_search(query, category, top_k=10)
+        return bm25_keyword_search(query, category, top_k=10, user_role=user_role)
 
     def _do_vector():
-        return vector_search_with_embedding(query_embedding, category, top_k=10, min_similarity=min_similarity)
+        return vector_search_with_embedding(query_embedding, category, top_k=10, min_similarity=min_similarity, user_role=user_role)
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         futures = {
@@ -427,8 +464,9 @@ def hybrid_search(
         try:
             faq_results = faq_search(
                 query_embedding, taxonomy_major, category,
-                top_k=FAQ_FALLBACK_TOP_K,  # 기존 5 → 2
+                top_k=FAQ_FALLBACK_TOP_K,
                 min_similarity=0.55,
+                user_role=user_role,
             )
             faq_chunks = _format_faq_as_chunks(faq_results) if faq_results else []
         except Exception as e:

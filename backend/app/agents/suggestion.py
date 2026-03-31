@@ -6,8 +6,9 @@ from app.rag.retriever import get_faq_suggestions
 from app.rag.generator import generate_suggestions
 from app.rag import prefetcher
 
-RFP_SUGGESTION = "RFP 작성하기"
 PR_SUGGESTION = "구매요청서 작성하기"
+RFQ_SUGGESTION = "견적요청서(RFQ) 작성하기"
+RFP_SUGGESTION = "제안요청서(RFP) 작성하기"
 
 
 class SuggestionAgent(AgentBase):
@@ -34,9 +35,9 @@ class SuggestionAgent(AgentBase):
         if ctx.user_role == "user":
             return [PR_SUGGESTION]
         elif ctx.user_role == "procurement":
-            return [RFP_SUGGESTION]
-        # 미감지 → 둘 다 제공
-        return [PR_SUGGESTION, RFP_SUGGESTION]
+            return [RFQ_SUGGESTION, RFP_SUGGESTION]
+        # 미감지 → 사용자 기본
+        return [PR_SUGGESTION]
 
     async def execute(self, ctx: AgentContext, executor: ThreadPoolExecutor) -> AgentResult:
         start = time.time()
@@ -53,6 +54,7 @@ class SuggestionAgent(AgentBase):
                     for c in ctx.chunks
                 ]
 
+                _role = ctx.user_role
                 faq_items = await self.run_in_thread(
                     executor,
                     lambda: get_faq_suggestions(
@@ -62,6 +64,7 @@ class SuggestionAgent(AgentBase):
                         top_k=2,
                         current_query=ctx.message,
                         answered_text=ctx.answer,
+                        user_role=_role,
                     ),
                 )
                 # RFP/구매요청서 관련 항목은 별도 버튼으로 추가하므로 제거

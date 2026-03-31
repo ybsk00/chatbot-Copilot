@@ -663,8 +663,10 @@ class OrchestratorAgent(AgentBase):
 
         # ── suggestions 최종 구성 ──
         if ctx.user_role == "procurement":
-            # 소싱담당자: RAG 추천 질문 제거 → RFQ/RFP CTA만 표시
-            ctx.suggestions = []
+            # 소싱담당자: 소싱 FAQ 추천질문(최대2) + RFQ/RFP CTA
+            # suggestion agent가 이미 소싱 FAQ 기반으로 생성했으므로 사용자 키워드만 제거
+            ctx.suggestions = [s for s in ctx.suggestions
+                               if "구매요청서" not in s][:2]  # 추천질문 최대 2개
             if b2 == "2B_RFQ":
                 ctx.suggestions.append("견적요청서(RFQ) 작성하기")
             elif b2 == "2C_RFP입찰":

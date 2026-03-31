@@ -49,11 +49,17 @@ def vector_search_with_embedding(query_embedding: list[float], category: str | N
 
     # ── 역할별 청크 필터링 ──
     if user_role == "procurement":
-        # 소싱담당자: quote_* + bt_gt_routing 카테고리만
-        rows = [r for r in rows if r["category"].startswith("quote_") or r["category"] == "bt_gt_routing"
-                or r["doc_name"].startswith("QUOTE_") or r["doc_name"].startswith("BSM_")]
+        # 소싱담당자: 견적서(QUOTE_*) + 분기정보(BSM_Branch) + 단가영향 만 포함
+        # BSM_Detail (사용자 안내), 구매요청서 청크 제외
+        rows = [r for r in rows
+                if r["doc_name"].startswith("QUOTE_")
+                or r["doc_name"].startswith("BSM_Branch")
+                or r["category"].startswith("quote_")
+                or "단가영향" in r["doc_name"]
+                or r["doc_name"].startswith("GT_")
+                or r["doc_name"].startswith("BT_")]
     elif user_role == "user":
-        # 사용자: quote_* 카테고리 제외
+        # 사용자: 견적서(quote_*) 카테고리 완전 제외
         rows = [r for r in rows if not r["category"].startswith("quote_")
                 and not r["doc_name"].startswith("QUOTE_")]
 
@@ -252,8 +258,13 @@ def bm25_keyword_search(query: str, category: str | None = None, top_k: int = RA
 
         # ── 역할별 필터링 ──
         if user_role == "procurement":
-            candidates = [c for c in candidates if c["category"].startswith("quote_") or c["category"] == "bt_gt_routing"
-                          or c["doc_name"].startswith("QUOTE_") or c["doc_name"].startswith("BSM_")]
+            candidates = [c for c in candidates
+                          if c["doc_name"].startswith("QUOTE_")
+                          or c["doc_name"].startswith("BSM_Branch")
+                          or c["category"].startswith("quote_")
+                          or "단가영향" in c["doc_name"]
+                          or c["doc_name"].startswith("GT_")
+                          or c["doc_name"].startswith("BT_")]
         elif user_role == "user":
             candidates = [c for c in candidates if not c["category"].startswith("quote_")
                           and not c["doc_name"].startswith("QUOTE_")]

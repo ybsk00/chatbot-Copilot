@@ -733,8 +733,9 @@ export default function ChatPage() {
 
     // ── RFQ 직접 진입: "견적서"/"견적요청"/"RFQ" 키워드 → 백엔드 안 거치고 바로 처리 ──
     if (phase !== "pr_filling" && phase !== "rfq_filling" && (
-      text.includes("견적서 작성") || text.includes("견적요청서") || text.includes("RFQ 작성") ||
-      text === "견적요청서(RFQ) 작성하기" || text === "RFQ 작성하기"
+      text.includes("견적서") && (text.includes("작성") || text.includes("만들") || text.includes("시작"))
+      || text.includes("견적요청서") || text.includes("RFQ 작성") || text.includes("RFQ") && text.includes("작성")
+      || text === "견적요청서(RFQ) 작성하기" || text === "RFQ 작성하기"
     )) {
       const rfqAutoKey = lastClassification?.pr_template_key;
       if (rfqAutoKey && rfqAutoKey !== "_generic" && dbRfqTemplates?.[rfqAutoKey]) {

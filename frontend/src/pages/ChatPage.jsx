@@ -3921,10 +3921,14 @@ export default function ChatPage() {
       {/* ══ RFQ 우측 패널 ══ */}
       {(phase === "rfq_filling" || phase === "rfq_complete") && (
         <div style={{
-          width: 420, flexShrink:0, background: T.card,
+          width: 440, maxWidth:440, height:"85vh",
+          display:"flex", flexDirection:"column",
+          background: 'rgba(255,255,255,0.72)',
+          backdropFilter:"blur(20px)", WebkitBackdropFilter:"blur(20px)",
           borderLeft:`1px solid ${T.border}`,
-          display:"flex", flexDirection:"column", position:"relative",
+          position:"relative",
           boxShadow: "-4px 0 20px rgba(0,0,0,0.03)",
+          overflow:"hidden",
         }}>
           {/* 헤더 */}
           <div style={{

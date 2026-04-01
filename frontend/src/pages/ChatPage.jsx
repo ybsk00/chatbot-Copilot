@@ -2372,12 +2372,12 @@ export default function ChatPage() {
           <span style={{ fontSize:12, fontWeight:700, color: T.text }}>RFQ 완성도</span>
           <span style={{
             fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:16,
-            background: rfqPct >= 80 ? T.greenLight : 'rgba(255,255,255,0.8)',
-            color: rfqPct >= 80 ? T.greenDark : T.primary,
-          }}>{rfqRequiredFilled}/{rfqRequiredTotal} · {rfqPct}%</span>
+            background: rfqRequiredFilled >= rfqRequiredTotal ? T.greenLight : 'rgba(255,255,255,0.8)',
+            color: rfqRequiredFilled >= rfqRequiredTotal ? T.greenDark : T.primary,
+          }}>{rfqRequiredFilled}/{rfqRequiredTotal} · {rfqRequiredTotal > 0 ? Math.round(rfqRequiredFilled/rfqRequiredTotal*100) : 0}%</span>
         </div>
         <div style={{ height:6, background:"rgba(255,255,255,0.7)", borderRadius:3, overflow:"hidden" }}>
-          <div style={{ height:"100%", width:`${rfqPct}%`, borderRadius:3, background:`linear-gradient(90deg, ${T.primary}, ${T.teal})`, transition:"width 0.6s" }} />
+          <div style={{ height:"100%", width:`${rfqRequiredTotal > 0 ? Math.round(rfqRequiredFilled/rfqRequiredTotal*100) : 0}%`, borderRadius:3, background:`linear-gradient(90deg, ${T.primary}, ${T.teal})`, transition:"width 0.6s" }} />
         </div>
       </div>
 

@@ -3170,8 +3170,8 @@ export default function ChatPage() {
                   </div>
                 )}
 
-                {/* BT 라우팅 안내 카드 — 사용자만 표시 (소싱담당자는 숨김) */}
-                {msg.btRouting && !msg.isStreaming && userRole !== "procurement" && (() => {
+                {/* BT 라우팅 안내 카드 — 사용자 + 소싱담당자 카탈로그/주관부서 표시 */}
+                {msg.btRouting && !msg.isStreaming && (() => {
                   const bt = msg.btRouting;
                   const b1 = bt.branch1_path || "";
                   const b2 = bt.branch2_sourcing || "";

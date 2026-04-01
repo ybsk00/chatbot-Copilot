@@ -561,7 +561,7 @@ class OrchestratorAgent(AgentBase):
                     return
 
             if doc_type == "none":
-                # 카탈로그/주관부서 → 안내 (RFQ/RFP 버튼 제공 안 함)
+                # 카탈로그/주관부서 → 안내 + BT 카드 (RFQ/RFP 버튼 없음)
                 yield self._sse("meta", {
                     "sources": [], "rag_score": 0,
                     "phase_trigger": "pr_blocked",
@@ -573,7 +573,7 @@ class OrchestratorAgent(AgentBase):
                 yield self._sse("token", {"content": (
                     f"**{l3_name}**은(는) 단가계약이 체결된 카탈로그 품목입니다.\n"
                     f"기존 계약 조건으로 직접 발주가 가능하며, 별도의 견적서(RFQ)·제안요청서(RFP) 작성이 **불필요**합니다.\n\n"
-                    f"다른 품목의 소싱이 필요하시면 품목명을 입력해 주십시오."
+                    f"아래 안내에 따라 진행해 주십시오."
                 )})
                 yield self._sse("done", {})
                 return
@@ -651,18 +651,19 @@ class OrchestratorAgent(AgentBase):
                 l3_name = (ctx.classification or {}).get("l3_name", "해당 품목")
 
                 if doc_type == "none":
-                    # 카탈로그/주관부서 품목 → RFQ/RFP 완전 차단
+                    # 카탈로그/주관부서 품목 → RFQ/RFP 차단 + BT 카드 표시
                     yield self._sse("meta", {
                         "sources": [], "rag_score": 0,
                         "phase_trigger": "pr_blocked",
                         "classification": ctx.classification,
+                        "bt_routing": _bt_clean_auto,
                         "user_role": ctx.user_role,
                         "doc_type_required": doc_type,
                     })
                     yield self._sse("token", {"content": (
                         f"**{l3_name}**은(는) 단가계약이 체결된 카탈로그 품목입니다.\n"
                         f"기존 계약 조건으로 직접 발주가 가능하며, 별도의 견적서(RFQ)·제안요청서(RFP) 작성이 **불필요**합니다.\n\n"
-                        f"다른 품목의 소싱이 필요하시면 품목명을 입력해 주십시오."
+                        f"아래 안내에 따라 진행해 주십시오."
                     )})
                     yield self._sse("done", {})
                     logger.info(f"[Orchestrator] Procurement catalog BLOCKED: doc_type={doc_type} (l3={l3_code})")
@@ -767,8 +768,13 @@ class OrchestratorAgent(AgentBase):
         await asyncio.gather(constitution_task, script_task)
 
         # ── Meta 이벤트 전송 ──
-        # 소싱담당자: BT 라우팅 카드 숨김 (사용자 안내용이므로)
-        _bt_meta = None if ctx.user_role == "procurement" else self._get_bt_routing(ctx)
+        # 소싱담당자: 카탈로그/주관부서/조건부는 안내 카드 표시, RFQ/RFP 대상은 숨김
+        _bt_raw = self._get_bt_routing(ctx)
+        if ctx.user_role == "procurement":
+            _doc = (_bt_raw or {}).get("doc_type_required", "")
+            _bt_meta = _bt_raw if _doc == "none" else None
+        else:
+            _bt_meta = _bt_raw
         yield self._sse("meta", {
             "sources": ctx.sources,
             "rag_score": round(ctx.rag_score, 4),

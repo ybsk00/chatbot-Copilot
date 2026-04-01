@@ -297,6 +297,72 @@ def _get_rfq_template_key(pr_template_key: str) -> str | None:
     return None
 
 
+# ═══════════════════════════════════════════
+# 2단계: 벡터 유사도 검색 (pgvector)
+# ═══════════════════════════════════════════
+VECTOR_SIMILARITY_THRESHOLD = 0.72
+
+
+def _vector_search_l3(question: str) -> dict | None:
+    """질문을 임베딩하여 taxonomy_v2에서 가장 유사한 L3 검색.
+    유사도 >= VECTOR_SIMILARITY_THRESHOLD이면 결과 반환.
+    """
+    try:
+        from app.db.supabase_client import get_client as get_sb
+        sb = get_sb()
+
+        # 질문 임베딩
+        embedding = _get_client().models.embed_content(
+            model="gemini-embedding-001",
+            contents=question,
+        )
+        query_vec = embedding.embeddings[0].values
+
+        # pgvector 유사도 검색 (RPC 함수)
+        result = sb.rpc("match_taxonomy_l3", {
+            "query_embedding": query_vec,
+            "match_threshold": VECTOR_SIMILARITY_THRESHOLD,
+            "match_count": 3,
+        }).execute()
+
+        if not result.data or len(result.data) == 0:
+            return None
+
+        best = result.data[0]
+        l3_code = best["code"]
+        similarity = best["similarity"]
+
+        # L3 상세 정보 조회
+        cache = _load_taxonomy()
+        l3_info = cache["l3_map"].get(l3_code)
+        if not l3_info:
+            return None
+
+        l2_code = l3_info.get("parent_code", "")
+        l2_info = cache["l2_map"].get(l2_code, {})
+        l1_code = l2_info.get("parent_code", "")
+        l1_name = cache["l1_map"].get(l1_code, "")
+        l2_name = l2_info.get("name", "")
+
+        logger.info(
+            f"[Vector] '{question[:30]}' → {l3_code}({l3_info['name']}) "
+            f"sim={similarity:.3f} (top3: {[r['code'] for r in result.data]})"
+        )
+
+        return {
+            "l1_name": l1_name,
+            "l2_name": l2_name,
+            "l3_code": l3_code,
+            "l3_name": l3_info.get("name", ""),
+            "pr_template_key": l3_info.get("pr_template_key", "_generic"),
+            "rfp_type": l3_info.get("rfp_type", "service"),
+            "similarity": similarity,
+        }
+    except Exception as e:
+        logger.warning(f"벡터 유사도 검색 실패: {e}")
+        return None
+
+
 # ── CTA 키워드 사전감지 (LLM 결과 보정용) ──
 _CTA_HOT_KEYWORDS = [
     "설치하고", "도입하고", "계약하고", "발주하고", "구매하고",
@@ -429,18 +495,54 @@ def _enrich_bt_gt(out: dict) -> dict:
     return out
 
 
+def _build_result_from_match(match: dict, question: str, cta_override: str | None = None) -> dict:
+    """키워드/벡터 매칭 결과를 최종 분류 결과로 변환"""
+    cta = cta_override or _detect_cta_keyword(question) or "cold"
+    rfp_type = _get_rfp_type(match["l1_name"], match["l2_name"], question)
+    pr_template_key = match.get("pr_template_key", "_generic")
+    rfq_template_key = _get_rfq_template_key(pr_template_key)
+
+    out = {
+        "대분류": match["l1_name"],
+        "중분류": match["l2_name"],
+        "rfp_type": rfp_type,
+        "cta": cta,
+        "pr_template_key": pr_template_key,
+        "l3_code": match["l3_code"],
+        "l3_name": match["l3_name"],
+        "_question": question,
+    }
+    if rfq_template_key:
+        out["rfq_template_key"] = rfq_template_key
+    return _enrich_bt_gt(out)
+
+
 def classify_intent(question: str, history: list[dict] | None = None) -> dict | None:
-    """사용자 질문을 분류체계(대분류/중분류)에 매칭 + RFP/PR 유형 추천.
-    반환: {"대분류", "중분류", "rfp_type", "cta", "pr_template_key", "l3_code"(옵션),
-           "bt_type", "gt_code", "pr_action", "dept"(BT/GT 라우팅)}
+    """3단계 분류기: 키워드→벡터→LLM.
+
+    1단계: 키워드 사전매칭 (~0ms, 2+키워드 히트 시 확정)
+    2단계: 벡터 유사도 검색 (~50ms, similarity ≥ 0.72 시 확정)
+    3단계: LLM 분류 (~300ms, 1/2단계 실패 시 폴백)
     """
+    import time
+    t0 = time.time()
     cache = _load_taxonomy()
     valid_majors = set(cache["l1_map"].values())
 
-    # 키워드 사전 매칭
+    # ── 1단계: 키워드 사전매칭 ──
     pre_match = _keyword_pre_match(question)
+    if pre_match and pre_match.get("keyword_hits", 0) >= 2:
+        logger.info(f"[Classifier] STEP1 키워드 히트: {pre_match['l3_code']}({pre_match['l3_name']}) hits={pre_match['keyword_hits']} ({(time.time()-t0)*1000:.0f}ms)")
+        return _build_result_from_match(pre_match, question)
 
-    # LLM 분류
+    # ── 2단계: 벡터 유사도 검색 ──
+    vec_match = _vector_search_l3(question)
+    if vec_match and vec_match.get("similarity", 0) >= VECTOR_SIMILARITY_THRESHOLD:
+        logger.info(f"[Classifier] STEP2 벡터 매칭: {vec_match['l3_code']}({vec_match['l3_name']}) sim={vec_match['similarity']:.3f} ({(time.time()-t0)*1000:.0f}ms)")
+        return _build_result_from_match(vec_match, question)
+
+    # ── 3단계: LLM 분류 (폴백) ──
+    logger.info(f"[Classifier] STEP3 LLM 폴백 진입 (키워드={pre_match is not None}, 벡터={vec_match is not None})")
     taxonomy_text = _build_taxonomy_text()
     history_section = ""
     if history:
@@ -472,23 +574,14 @@ def classify_intent(question: str, history: list[dict] | None = None) -> dict | 
 
         major = result.get("대분류")
         if not major or major == "null" or major not in valid_majors:
-            # LLM 실패 시 키워드 매칭 결과 사용
-            if pre_match:
+            # LLM 실패 → 1/2단계 결과 사용
+            fallback = pre_match or vec_match
+            if fallback:
                 cta = result.get("cta", "cold")
                 kw_cta = _detect_cta_keyword(question)
-                if kw_cta == "hot":
-                    cta = "hot"
-                elif kw_cta == "warm" and cta == "cold":
-                    cta = "warm"
-                return _enrich_bt_gt({
-                    "대분류": pre_match["l1_name"],
-                    "중분류": pre_match["l2_name"],
-                    "rfp_type": pre_match["rfp_type"],
-                    "cta": cta,
-                    "pr_template_key": pre_match["pr_template_key"],
-                    "l3_code": pre_match["l3_code"],
-                    "l3_name": pre_match["l3_name"],
-                })
+                if kw_cta == "hot": cta = "hot"
+                elif kw_cta == "warm" and cta == "cold": cta = "warm"
+                return _build_result_from_match(fallback, question, cta)
             return None
 
         middle = result.get("중분류", "")
@@ -499,7 +592,7 @@ def classify_intent(question: str, history: list[dict] | None = None) -> dict | 
         if cta not in ("hot", "warm", "cold"):
             cta = "cold"
 
-        # 키워드 보정
+        # CTA 키워드 보정
         kw_cta = _detect_cta_keyword(question)
         if kw_cta == "hot" and cta != "hot":
             cta = "hot"
@@ -508,8 +601,16 @@ def classify_intent(question: str, history: list[dict] | None = None) -> dict | 
 
         rfp_type = _get_rfp_type(major, middle, question)
 
-        # L3 코드 결정
-        l3_code = pre_match["l3_code"] if pre_match and pre_match["l1_name"] == major else None
+        # L3 코드 결정: 벡터 매칭 > 키워드 매칭 > LLM 폴백
+        l3_code = None
+        l3_name = None
+        if vec_match and vec_match["l1_name"] == major:
+            l3_code = vec_match["l3_code"]
+            l3_name = vec_match["l3_name"]
+        elif pre_match and pre_match["l1_name"] == major:
+            l3_code = pre_match["l3_code"]
+            l3_name = pre_match["l3_name"]
+
         pr_template_key = _get_pr_template_key(major, middle, l3_code)
         rfq_template_key = _get_rfq_template_key(pr_template_key)
 
@@ -522,24 +623,17 @@ def classify_intent(question: str, history: list[dict] | None = None) -> dict | 
         }
         if l3_code:
             out["l3_code"] = l3_code
-            out["l3_name"] = pre_match["l3_name"]
+            out["l3_name"] = l3_name
         if rfq_template_key:
             out["rfq_template_key"] = rfq_template_key
 
-        out["_question"] = question  # 폴백 매칭에서 질문 키워드 사용
+        out["_question"] = question
+        logger.info(f"[Classifier] STEP3 LLM: {major}/{middle} → l3={l3_code} cta={cta} ({(time.time()-t0)*1000:.0f}ms)")
         return _enrich_bt_gt(out)
 
     except Exception as e:
         logger.error(f"classify_intent 오류: {e}")
-        # 키워드 매칭 폴백
-        if pre_match:
-            return _enrich_bt_gt({
-                "대분류": pre_match["l1_name"],
-                "중분류": pre_match["l2_name"],
-                "rfp_type": pre_match["rfp_type"],
-                "cta": _detect_cta_keyword(question) or "cold",
-                "pr_template_key": pre_match["pr_template_key"],
-                "l3_code": pre_match["l3_code"],
-                "l3_name": pre_match["l3_name"],
-            })
+        fallback = pre_match or vec_match
+        if fallback:
+            return _build_result_from_match(fallback, question)
         return None

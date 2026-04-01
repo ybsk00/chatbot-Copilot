@@ -73,10 +73,9 @@ const BORDER = { lineColor: [51, 51, 51], lineWidth: 0.3 };
  * @param {Object} fields - PR 필드 { p1: { label, value }, ... }
  * @param {Array} sections - PR 섹션 [{ title, fields: ["p1","p2",...] }, ...]
  * @param {string} templateLabel - PR 유형명 (예: "공기청정기 렌탈 서비스")
- * @param {string} supplierName - 선택된 공급업체명 (optional)
  */
-export async function downloadPrPdf(fields, sections, templateLabel, supplierName) {
-  console.log("[prExport] downloadPrPdf called. supplierName:", supplierName, "templateLabel:", templateLabel);
+export async function downloadPrPdf(fields, sections, templateLabel) {
+  console.log("[prExport] downloadPrPdf called. templateLabel:", templateLabel);
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
 
   // ── 한글 폰트 로드 + 등록 ──
@@ -128,9 +127,7 @@ export async function downloadPrPdf(fields, sections, templateLabel, supplierNam
       ],
       [
         { content: "작 성 일", styles: TH },
-        { content: dateStr, styles: TD },
-        { content: "공급업체", styles: TH },
-        { content: supplierName || "(미정)", styles: TD },
+        { content: dateStr, colSpan: 3, styles: TD },
       ],
     ],
   });

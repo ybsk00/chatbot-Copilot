@@ -54,11 +54,10 @@ def _render_pr_html(pr: dict) -> str:
     field_labels = _parse_field_labels(schema)
     sections = _parse_sections_detail(schema)
 
-    supplier_name = _esc(pr.get("selected_supplier_name", ""))
     status = pr.get("status", "draft")
     status_label = {
         "draft": "작성중", "submitted": "제출됨",
-        "supplier_selected": "업체선택", "forwarded": "전달됨",
+        "forwarded": "전달됨",
     }.get(status, status)
 
     created = pr.get("created_at", "")
@@ -108,7 +107,6 @@ def _render_pr_html(pr: dict) -> str:
   .meta .badge {{ padding:4px 12px; border-radius:20px; font-weight:600; font-size:12px; }}
   .badge-draft {{ background:#fef3c7; color:#d97706; }}
   .badge-submitted {{ background:#dbeafe; color:#2563eb; }}
-  .badge-supplier_selected {{ background:#d1fae5; color:#059669; }}
   .badge-forwarded {{ background:#ede9fe; color:#7c3aed; }}
   .content {{ padding:24px 40px 40px; }}
   .sec-table {{ width:100%; border-collapse:collapse; margin-bottom:16px; }}
@@ -116,8 +114,6 @@ def _render_pr_html(pr: dict) -> str:
   .th {{ background:#f1f5f9; font-weight:600; font-size:12px; color:#475569; padding:10px 16px; width:180px; border:1px solid #e2e8f0; vertical-align:top; }}
   .td {{ font-size:12px; padding:10px 16px; border:1px solid #e2e8f0; line-height:1.7; }}
   .empty {{ color:#94a3b8; font-style:italic; }}
-  .supplier-box {{ background:#f0fdf4; border:1.5px solid #bbf7d0; border-radius:12px; padding:16px 20px; margin-top:16px; text-align:center; }}
-  .supplier-box .name {{ font-size:16px; font-weight:700; color:#059669; }}
   .footer {{ text-align:center; padding:20px; font-size:11px; color:#94a3b8; border-top:1px solid #f1f5f9; }}
   .btn-download {{ display:inline-block; margin:12px 8px; padding:10px 24px; border-radius:10px; border:1.5px solid #06b6d4; background:#fff; color:#06b6d4; font-weight:600; font-size:13px; cursor:pointer; }}
   .btn-download:hover {{ background:#f0fdfa; }}
@@ -140,7 +136,6 @@ def _render_pr_html(pr: dict) -> str:
   </div>
   <div class="content">
     {section_html}
-    {f'<div class="supplier-box"><div style="font-size:11px;color:#64748b;margin-bottom:4px">선택된 공급업체</div><div class="name">{supplier_name}</div></div>' if supplier_name else ''}
   </div>
   <div class="footer">
     <button class="btn-download" onclick="window.print()">PDF 다운로드</button>

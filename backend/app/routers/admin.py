@@ -512,7 +512,7 @@ async def list_pr_requests(status: str | None = None, limit: int = 50):
     supabase = get_client()
     query = supabase.table("pr_requests").select(
         "id, session_id, pr_type, title, department, requester, fields, "
-        "selected_supplier_id, selected_supplier_name, status, created_at, updated_at"
+        "status, created_at, updated_at"
     )
     if status:
         query = query.eq("status", status)
@@ -574,14 +574,14 @@ async def dashboard():
     # 재사용 풀로 병렬 실행 (풀 생성 오버헤드 제거)
     f_chunks = _dash_pool.submit(count_table, "knowledge_chunks")
     f_convs = _dash_pool.submit(count_table, "conversations")
-    f_suppliers = _dash_pool.submit(count_table, "suppliers")
+    f_suppliers_l4 = _dash_pool.submit(count_table, "suppliers_l4")
     f_rules = _dash_pool.submit(count_table, "constitution_rules")
     f_pr = _dash_pool.submit(count_table, "pr_requests")
 
     result = {
         "knowledge_chunks": f_chunks.result(timeout=10).count or 0,
         "conversations": f_convs.result(timeout=10).count or 0,
-        "suppliers": f_suppliers.result(timeout=10).count or 0,
+        "suppliers_l4": f_suppliers_l4.result(timeout=10).count or 0,
         "constitution_rules": f_rules.result(timeout=10).count or 0,
         "pr_requests": f_pr.result(timeout=10).count or 0,
     }

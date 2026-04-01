@@ -26,7 +26,7 @@ async def upload_pr(file: UploadFile = File(...)):
     """구매요청서 PDF 업로드 → 카테고리 분류 + 필드 추출.
 
     Returns:
-        pr_type, extracted_fields, label, selected_supplier (if any)
+        pr_type, extracted_fields, label
     """
     try:
         content = await file.read()
@@ -53,7 +53,7 @@ async def upload_pr(file: UploadFile = File(...)):
 {text[:3000]}
 
 ## 출력 형식
-{{"pr_type": "카테고리키 (없으면 _generic)", "fields": {{"p1": "값", "p2": "값", ...}}, "title": "구매요청서 제목", "department": "요청부서", "requester": "요청자", "selected_supplier": "선택된 공급업체명 (있으면)"}}"""
+{{"pr_type": "카테고리키 (없으면 _generic)", "fields": {{"p1": "값", "p2": "값", ...}}, "title": "구매요청서 제목", "department": "요청부서", "requester": "요청자", }}"""
 
         response = _get_client().models.generate_content(
             model=MODELS["generation"],
@@ -81,7 +81,6 @@ async def upload_pr(file: UploadFile = File(...)):
             "title": result.get("title", ""),
             "department": result.get("department", ""),
             "requester": result.get("requester", ""),
-            "selected_supplier": result.get("selected_supplier"),
         }
 
     except json.JSONDecodeError as e:
@@ -131,7 +130,7 @@ async def _extract_pr_from_pdf(file: UploadFile) -> dict:
 {text[:3000]}
 
 ## 출력 형식
-{{"pr_type": "카테고리키 (없으면 _generic)", "fields": {{"p1": "값", "p2": "값", ...}}, "title": "구매요청서 제목", "department": "요청부서", "requester": "요청자", "selected_supplier": "선택된 공급업체명 (있으면)"}}"""
+{{"pr_type": "카테고리키 (없으면 _generic)", "fields": {{"p1": "값", "p2": "값", ...}}, "title": "구매요청서 제목", "department": "요청부서", "requester": "요청자"}}"""
 
     response = _get_client().models.generate_content(
         model=MODELS["generation"],
@@ -158,7 +157,6 @@ async def _extract_pr_from_pdf(file: UploadFile) -> dict:
         "title": result.get("title", ""),
         "department": result.get("department", ""),
         "requester": result.get("requester", ""),
-        "selected_supplier": result.get("selected_supplier"),
     }
 
 

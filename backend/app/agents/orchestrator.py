@@ -23,6 +23,7 @@ from app.constants.rfp_schemas import RFP_SCHEMAS
 from app.constants.pr_schemas import PR_SCHEMAS
 from app.constants.rfq_schemas import RFQ_SCHEMAS
 from app.rag.classifier import TAXONOMY
+from app.data.l4_supplier_data import get_l4_store
 
 logger = logging.getLogger(__name__)
 
@@ -455,7 +456,9 @@ class OrchestratorAgent(AgentBase):
                 yield self._sse("done", {})
                 return
 
-            # 일반 사용자 또는 2A_PR만 → 기존 PR 플로우
+            # 일반 사용자 또는 2A_PR만 → 기존 PR 플로우 + L4 공급업체 안내
+            l4_options = (ctx.classification or {}).get("l4_options", [])
+            l4_auto = (ctx.classification or {}).get("l4_auto", False)
             yield self._sse("meta", {
                 "sources": [], "rag_score": 0,
                 "phase_trigger": "pr_agreed",
@@ -466,6 +469,29 @@ class OrchestratorAgent(AgentBase):
             yield self._sse("token", {
                 "content": "구매요청서 작성을 진행하겠습니다. 아래에서 구매 카테고리를 선택해 주십시오."
             })
+            # L4 세분류 선택 이벤트
+            if l4_options and not l4_auto:
+                l3_name = (ctx.classification or {}).get("l3_name", "")
+                yield self._sse("l4_select", {
+                    "l3_code": (ctx.classification or {}).get("l3_code"),
+                    "l3_name": l3_name,
+                    "options": l4_options,
+                    "message": f"**{l3_name}** 내에서 세분류를 선택하시면 맞춤 공급업체를 추천해 드립니다.",
+                })
+            elif l4_auto and (ctx.classification or {}).get("l4_code"):
+                l4_code = ctx.classification["l4_code"]
+                try:
+                    store = get_l4_store()
+                    branch = store.get_branch_info(l4_code)
+                    if branch.get("has_region") or branch.get("has_worktype"):
+                        yield self._sse("l4_branch", {
+                            "l4_code": l4_code,
+                            "l4_name": (ctx.classification or {}).get("l4_name", ""),
+                            **branch,
+                            "message": f"지역/공종별 전문 공급업체가 있습니다. 선택하시면 맞춤 추천을 드립니다.",
+                        })
+                except Exception as e:
+                    logger.warning(f"L4 branch check failed: {e}")
             yield self._sse("done", {})
             return
 
@@ -732,9 +758,11 @@ class OrchestratorAgent(AgentBase):
                 logger.info(f"[Orchestrator] Procurement auto-branch: doc_type={doc_type} → {trigger} (l3={l3_code})")
                 return
 
-        # 일반 사용자: hot/warm CTA + L3 매칭 시 PR 자동 진입
+        # 일반 사용자: hot/warm CTA + L3 매칭 시 PR 자동 진입 + L4 안내
         if cta in ("hot", "warm") and l3_code:
             if ctx.user_role in ("user", None) and pr_action != "blocked":
+                l4_options = (ctx.classification or {}).get("l4_options", [])
+                l4_auto = (ctx.classification or {}).get("l4_auto", False)
                 yield self._sse("meta", {
                     "sources": [], "rag_score": 0,
                     "phase_trigger": "pr_agreed",
@@ -744,6 +772,29 @@ class OrchestratorAgent(AgentBase):
                 yield self._sse("token", {
                     "content": "구매요청서 작성을 진행하겠습니다. 아래에서 구매 카테고리를 선택해 주십시오."
                 })
+                # L4 세분류 선택 이벤트
+                if l4_options and not l4_auto:
+                    l3_name = (ctx.classification or {}).get("l3_name", "")
+                    yield self._sse("l4_select", {
+                        "l3_code": l3_code,
+                        "l3_name": l3_name,
+                        "options": l4_options,
+                        "message": f"**{l3_name}** 내에서 세분류를 선택하시면 맞춤 공급업체를 추천해 드립니다.",
+                    })
+                elif l4_auto and (ctx.classification or {}).get("l4_code"):
+                    l4_code = ctx.classification["l4_code"]
+                    try:
+                        store = get_l4_store()
+                        branch = store.get_branch_info(l4_code)
+                        if branch.get("has_region") or branch.get("has_worktype"):
+                            yield self._sse("l4_branch", {
+                                "l4_code": l4_code,
+                                "l4_name": (ctx.classification or {}).get("l4_name", ""),
+                                **branch,
+                                "message": f"지역/공종별 전문 공급업체가 있습니다.",
+                            })
+                    except Exception as e:
+                        logger.warning(f"L4 branch check failed: {e}")
                 yield self._sse("done", {})
                 logger.info(f"[Orchestrator] User auto-branch: pr_agreed (l3={l3_code}, cta={cta})")
                 return
@@ -822,6 +873,16 @@ class OrchestratorAgent(AgentBase):
             _bt_meta = _bt_raw if _doc == "none" else None
         else:
             _bt_meta = _bt_raw
+        # L4 정보 추가
+        _l4_meta = {}
+        _l4_opts = (ctx.classification or {}).get("l4_options", [])
+        if _l4_opts:
+            _l4_meta["l4_options"] = _l4_opts
+            _l4_meta["l4_auto"] = (ctx.classification or {}).get("l4_auto", False)
+            if _l4_meta["l4_auto"]:
+                _l4_meta["l4_code"] = (ctx.classification or {}).get("l4_code")
+                _l4_meta["l4_name"] = (ctx.classification or {}).get("l4_name")
+
         yield self._sse("meta", {
             "sources": ctx.sources,
             "rag_score": round(ctx.rag_score, 4),
@@ -831,6 +892,7 @@ class OrchestratorAgent(AgentBase):
             "user_role": ctx.user_role,
             "ask_role": ask_role,
             "bt_routing": {k: v for k, v in _bt_meta.items() if k != "_user_message"} if _bt_meta else None,
+            **_l4_meta,
         })
 
         # ── PHASE 3: 스트리밍 생성 ──

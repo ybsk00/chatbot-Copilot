@@ -45,6 +45,8 @@ export const api = {
           else if (data.type === "meta" && onMeta) onMeta(data);
           else if (data.type === "suggestions" && onSuggestions) onSuggestions(data.items);
           else if (data.type === "done" && onDone) onDone();
+          else if (data.type === "l4_select" && onMeta) onMeta({ ...data, _l4_event: "l4_select" });
+          else if (data.type === "l4_branch" && onMeta) onMeta({ ...data, _l4_event: "l4_branch" });
         } catch (e) {
           console.warn("SSE parse error:", e);
         }
@@ -84,25 +86,20 @@ export const api = {
     return res.json();
   },
 
-  async getSuppliers(category) {
-    const params = category ? `?category=${encodeURIComponent(category)}` : "";
-    const res = await fetch(`${API_URL}/suppliers${params}`);
+  // ── L4 공급업체 추천 ──
+  async getL4Options(l3Code) {
+    const res = await fetch(`${API_URL}/suppliers/l4/options/${encodeURIComponent(l3Code)}`);
     return res.json();
   },
-
-  async searchSuppliers(category, keywords) {
-    const params = new URLSearchParams({ category });
-    if (keywords) params.set("keywords", keywords);
-    const res = await fetch(`${API_URL}/suppliers/search?${params}`);
+  async getL4Suppliers(l4Code, scopeType = "nationwide", scopeValue = null, sessionId = null) {
+    const params = new URLSearchParams({ scope_type: scopeType });
+    if (scopeValue) params.set("scope_value", scopeValue);
+    if (sessionId) params.set("session_id", sessionId);
+    const res = await fetch(`${API_URL}/suppliers/l4/recommend/${encodeURIComponent(l4Code)}?${params}`);
     return res.json();
   },
-
-  async createSupplier(data) {
-    const res = await fetch(`${API_URL}/suppliers`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json; charset=utf-8" },
-      body: JSON.stringify(data),
-    });
+  async getL4BranchOptions(l4Code) {
+    const res = await fetch(`${API_URL}/suppliers/l4/branch/${encodeURIComponent(l4Code)}`);
     return res.json();
   },
 
@@ -198,16 +195,6 @@ export const api = {
     return res.json();
   },
 
-  // ── PR 공급업체 선택 ──
-  async updatePrSupplier(sessionId, supplierId, supplierName) {
-    const res = await fetch(`${API_URL}/chat/pr-supplier`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json; charset=utf-8" },
-      body: JSON.stringify({ session_id: sessionId, supplier_id: supplierId, supplier_name: supplierName }),
-    });
-    return res.json();
-  },
-
   // ── 구매담당자 PDF 업로드 ──
   async uploadPr(formData) {
     const res = await fetch(`${API_URL}/chat/upload-pr`, {
@@ -267,28 +254,6 @@ export const api = {
   // ── 차세대 분류체계 (taxonomy_v2) ──
   async getTaxonomyTree() {
     const res = await fetch(`${API_URL}/admin/taxonomy-v2/tree`);
-    return res.json();
-  },
-
-  // ── 공급업체 CRUD (기존 확장) ──
-  async updateSupplier(id, data) {
-    const res = await fetch(`${API_URL}/suppliers/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json; charset=utf-8" },
-      body: JSON.stringify(data),
-    });
-    return res.json();
-  },
-  async deleteSupplier(id) {
-    const res = await fetch(`${API_URL}/suppliers/${id}`, { method: "DELETE" });
-    return res.json();
-  },
-
-  async uploadSuppliersCsv(formData) {
-    const res = await fetch(`${API_URL}/suppliers/upload-csv`, {
-      method: "POST",
-      body: formData,
-    });
     return res.json();
   },
 

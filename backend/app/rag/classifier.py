@@ -492,6 +492,22 @@ def _enrich_bt_gt(out: dict) -> dict:
                 pass
     except Exception as e:
         logger.warning(f"BT/GT enrichment 실패 (l3={out.get('l3_code')}): {e}")
+
+    # L4 세분류 옵션 추가
+    try:
+        from app.data.l4_supplier_data import get_l4_store
+        l4_store = get_l4_store()
+        l3 = out.get("l3_code")
+        if l3:
+            l4_options = l4_store.get_l4_options(l3)
+            out["l4_options"] = l4_options
+            out["l4_auto"] = len(l4_options) == 1
+            if out["l4_auto"] and l4_options:
+                out["l4_code"] = l4_options[0]["code"]
+                out["l4_name"] = l4_options[0]["name"]
+    except Exception as e:
+        logger.warning(f"L4 옵션 조회 실패 (l3={out.get('l3_code')}): {e}")
+
     return out
 
 

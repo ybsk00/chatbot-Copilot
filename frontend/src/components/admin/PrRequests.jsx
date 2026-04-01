@@ -7,7 +7,6 @@ const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
 const STATUS_MAP = {
   draft:             { label: '작성중',   bg: '#FEF3C7', color: '#D97706' },
   submitted:         { label: '제출됨',   bg: '#DBEAFE', color: '#2563EB' },
-  supplier_selected: { label: '업체선택', bg: '#D1FAE5', color: '#059669' },
   forwarded:         { label: '전달됨',   bg: '#EDE9FE', color: '#7C3AED' },
 }
 
@@ -102,28 +101,10 @@ function DetailModal({ req, onClose, onStatusChange, onDelete }) {
             >
               <option value="draft">작성중</option>
               <option value="submitted">제출됨</option>
-              <option value="supplier_selected">업체선택</option>
               <option value="forwarded">전달됨</option>
             </select>
             <span style={{ fontSize: 11, color: '#94A3B8', marginLeft: 'auto' }}>Session: {req.session_id?.slice(0, 8)}</span>
           </div>
-
-          {/* 공급업체 정보 */}
-          {req.selected_supplier_name && (
-            <div style={{
-              marginBottom: 20, padding: '12px 16px', borderRadius: 12,
-              background: '#F0FDF4', border: '1px solid #BBF7D0',
-              display: 'flex', alignItems: 'center', gap: 10,
-            }}>
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="#059669" style={{ width: 18, height: 18, flexShrink: 0 }}>
-                <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
-              </svg>
-              <div>
-                <div style={{ fontSize: 11, color: '#64748B' }}>선택된 공급업체</div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#059669' }}>{req.selected_supplier_name}</div>
-              </div>
-            </div>
-          )}
 
           {/* 요청자 정보 */}
           {(req.department || req.requester) && (
@@ -427,13 +408,12 @@ function PrRequests() {
 
           {/* 테이블 헤더 */}
           <div style={{
-            display: 'grid', gridTemplateColumns: '1fr 120px 100px 90px 80px 70px',
+            display: 'grid', gridTemplateColumns: '1fr 120px 100px 80px 70px',
             padding: '10px 24px', borderBottom: '1px solid #F0F2F5', background: '#FAFBFC',
           }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: '#94A3B8' }}>제목</div>
             <div style={{ fontSize: 12, fontWeight: 600, color: '#94A3B8' }}>유형</div>
             <div style={{ fontSize: 12, fontWeight: 600, color: '#94A3B8' }}>요청자</div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#94A3B8' }}>공급업체</div>
             <div style={{ fontSize: 12, fontWeight: 600, color: '#94A3B8', textAlign: 'center' }}>상태</div>
             <div style={{ fontSize: 12, fontWeight: 600, color: '#94A3B8', textAlign: 'center' }}>상세</div>
           </div>
@@ -448,7 +428,7 @@ function PrRequests() {
               const sm = STATUS_MAP[req.status]
               return (
                 <div key={req.id} style={{
-                  display: 'grid', gridTemplateColumns: '1fr 120px 100px 90px 80px 70px',
+                  display: 'grid', gridTemplateColumns: '1fr 120px 100px 80px 70px',
                   padding: '14px 24px', alignItems: 'center',
                   borderBottom: idx < paged.length - 1 ? '1px solid #F8FAFC' : 'none',
                   background: hoveredRow === idx ? '#F8FFFE' : 'transparent',
@@ -469,9 +449,6 @@ function PrRequests() {
                   </div>
                   <div style={{ fontSize: 13, color: '#64748B' }}>
                     {req.requester || '-'}
-                  </div>
-                  <div style={{ fontSize: 12, color: req.selected_supplier_name ? '#059669' : '#CBD5E1', fontWeight: req.selected_supplier_name ? 600 : 400 }}>
-                    {req.selected_supplier_name || '-'}
                   </div>
                   <div style={{ textAlign: 'center' }}>
                     <span style={{

@@ -471,11 +471,14 @@ class OrchestratorAgent(AgentBase):
 
         if ctx.phase_trigger in ("rfp_agreed", "rfq_agreed"):
             # 소싱담당자 RFP/RFQ 요청 — doc_type 기반 교정 분기
-            if not ctx.classification:
-                try:
-                    await self.classification.execute(ctx, self._critical_pool)
-                except Exception as e:
-                    self.logger.warning(f"RFP/RFQ agree pre-classification failed: {e}")
+            # CTA 버튼 클릭이므로 현재 메시지로 분류하면 안 됨 → 이전 대화에서 l3_code 추출
+            if not ctx.classification and ctx.history:
+                for msg in reversed(ctx.history):
+                    cls = msg.get("classification") or msg.get("metadata") or {}
+                    if isinstance(cls, dict) and cls.get("l3_code"):
+                        ctx.classification = cls
+                        logger.info(f"[Orchestrator] CTA click: reused history classification l3={cls['l3_code']}")
+                        break
 
             bt_routing = self._get_bt_routing(ctx)
 

@@ -2255,6 +2255,7 @@ export default function ChatPage() {
                   e.stopPropagation();
                   applyRfqFills({ [fk]: opt });
                   setRfqFillingTurns(prev => prev + 1);
+                  setMessages(prev => [...prev, { id: msgIdCounter++, role: "assistant", text: `**${f.label}**: ${opt}`, rfqInlineTabs: true, isQuickFillConfirm: true }]);
                 }}
                 style={{
                   padding:"5px 11px", borderRadius:14, fontSize:11, fontWeight:600,
@@ -2322,6 +2323,7 @@ export default function ChatPage() {
                   e.stopPropagation();
                   applyRfqFills({ [fk]: opt });
                   setRfqFillingTurns(prev => prev + 1);
+                  setMessages(prev => [...prev, { id: msgIdCounter++, role: "assistant", text: `**${f.label}**: ${opt}`, rfqInlineTabs: true, isQuickFillConfirm: true }]);
                 }}
                 style={{
                   padding:"6px 12px", borderRadius:16, fontSize:11, fontWeight:600,
@@ -3155,12 +3157,14 @@ export default function ChatPage() {
                   <div style={{
                     background: msg.role === "user"
                       ? 'linear-gradient(135deg, #0EA5A0 0%, #14B8A6 100%)'
+                      : msg.isQuickFillConfirm ? 'rgba(14,165,160,0.06)'
                       : msg.trigger === "complete" ? T.greenLight : 'rgba(255,255,255,0.85)',
                     color: msg.role === "user" ? T.inverse : T.text,
                     borderRadius: msg.role === "user"
                       ? `${T.r16}px ${T.r4}px ${T.r16}px ${T.r16}px`
                       : `${T.r4}px ${T.r16}px ${T.r16}px ${T.r16}px`,
-                    padding:"12px 16px", fontSize:13, lineHeight:1.75,
+                    padding: msg.isQuickFillConfirm ? "6px 12px" : "12px 16px",
+                    fontSize: msg.isQuickFillConfirm ? 12 : 13, lineHeight:1.75,
                     boxShadow: msg.role === "user" ? '0 3px 12px rgba(14,165,160,0.15)' : '0 1px 4px rgba(0,0,0,0.04)',
                     border: msg.trigger === "complete"
                       ? `1px solid ${T.greenMid}`

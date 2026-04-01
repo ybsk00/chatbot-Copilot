@@ -3279,26 +3279,34 @@ export default function ChatPage() {
                             ]);
                           }
                         } else if (item === "견적요청서(RFQ) 작성하기" || item === "RFQ 작성하기") {
-                          // RFQ 직접 진입: PR과 동일 — 자동매칭 성공 → 바로 진입, 실패 → 카테고리 선택
-                          const rfqAutoKey = lastClassification?.pr_template_key;
-                          if (rfqAutoKey && rfqAutoKey !== "_generic" && dbRfqTemplates?.[rfqAutoKey]) {
-                            handleRfqTypeSelect(rfqAutoKey);
+                          // doc_type=none(카탈로그)이면 차단 — 백엔드 스트리밍으로 위임
+                          if (lastDocType === "none") {
+                            handleSend(item);
+                          } else {
+                            const rfqAutoKey = lastClassification?.pr_template_key;
+                            if (rfqAutoKey && rfqAutoKey !== "_generic" && dbRfqTemplates?.[rfqAutoKey]) {
+                              handleRfqTypeSelect(rfqAutoKey);
+                            } else {
+                              setMessages(prev => [...prev,
+                                { id: msgIdCounter++, role: "user", text: item },
+                                { id: msgIdCounter++, role: "assistant",
+                                  text: "견적서(RFQ) 작성을 진행합니다. 아래에서 견적서 유형을 선택해 주십시오.",
+                                  rfqTypeSelect: true },
+                              ]);
+                            }
+                          }
+                        } else if (item === "제안요청서(RFP) 작성하기" || item === "RFP 작성하기") {
+                          // doc_type=none(카탈로그)이면 차단 — 백엔드 스트리밍으로 위임
+                          if (lastDocType === "none") {
+                            handleSend(item);
                           } else {
                             setMessages(prev => [...prev,
                               { id: msgIdCounter++, role: "user", text: item },
                               { id: msgIdCounter++, role: "assistant",
-                                text: "견적서(RFQ) 작성을 진행합니다. 아래에서 견적서 유형을 선택해 주십시오.",
-                                rfqTypeSelect: true },
+                                text: "제안요청서(RFP) 작성을 진행합니다. 아래에서 RFP 유형을 선택해 주십시오.",
+                                rfpTypeSelect: true },
                             ]);
                           }
-                        } else if (item === "제안요청서(RFP) 작성하기" || item === "RFP 작성하기") {
-                          // RFP 직접 진입: RFP 유형 선택기 표시 (스트리밍 우회)
-                          setMessages(prev => [...prev,
-                            { id: msgIdCounter++, role: "user", text: item },
-                            { id: msgIdCounter++, role: "assistant",
-                              text: "제안요청서(RFP) 작성을 진행합니다. 아래에서 RFP 유형을 선택해 주십시오.",
-                              rfpTypeSelect: true },
-                          ]);
                         } else {
                           handleSend(item);
                         }

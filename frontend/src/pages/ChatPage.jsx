@@ -2616,7 +2616,7 @@ export default function ChatPage() {
         </div>
       ))}
 
-      {/* 하단 3버튼: RFP Complete와 동일 (미리보기 | PDF 다운로드 | RFP 전환) */}
+      {/* 하단 버튼: 미리보기 | PDF 다운로드 | (both일 때만) RFP 전환 */}
       <div style={{ marginTop:16, display:"flex", gap:8 }}>
         <button onClick={() => previewRfq(rfqFields, rfqSections, rfqTemplate?.name)} style={{
           flex:1, padding:"14px", borderRadius: T.r10,
@@ -2644,20 +2644,21 @@ export default function ChatPage() {
         >
           <IconDownload size={14} /> PDF 다운로드
         </button>
-        <button onClick={convertRfqToRfp} style={{
-          flex: lastDocType === "both" ? 2 : 1, padding:"14px", borderRadius: T.r10,
-          border:"none",
-          background: lastDocType === "both" ? "linear-gradient(135deg, #f59e0b, #fb923c)" : T.gradPrimary,
-          color:"#fff", fontSize: lastDocType === "both" ? 13 : 12, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
-          display:"flex", alignItems:"center", justifyContent:"center", gap:6,
-          transition:"all 0.3s", boxShadow: lastDocType === "both" ? "0 4px 12px rgba(245,158,11,0.3)" : T.shadowBlue,
-          animation: lastDocType === "both" ? "pulse-glow 2s ease-in-out infinite" : "none",
-        }}
-          onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.02)"; }}
-          onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
-        >
-          <IconSendMail size={13} /> RFP 전환
-        </button>
+        {lastDocType === "both" && (
+          <button onClick={convertRfqToRfp} style={{
+            flex:2, padding:"14px", borderRadius: T.r10, border:"none",
+            background: "linear-gradient(135deg, #f59e0b, #fb923c)",
+            color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
+            display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+            transition:"all 0.3s", boxShadow: "0 4px 12px rgba(245,158,11,0.3)",
+            animation: "pulse-glow 2s ease-in-out infinite",
+          }}
+            onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.02)"; }}
+            onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
+          >
+            <IconSendMail size={13} /> RFP 전환 (필수)
+          </button>
+        )}
       </div>
       <div style={{ height:20 }} />
     </div>

@@ -873,10 +873,10 @@ class OrchestratorAgent(AgentBase):
             elif _doc_type == "both":
                 cta = ["견적요청서(RFQ) 작성하기"]  # both는 RFQ부터
             elif _doc_type == "none":
-                cta = []
+                cta = []  # 카탈로그: 버튼 없음
             else:
-                # 미확인 doc_type → 안전하게 빈 CTA (카탈로그 취급)
-                cta = []
+                # 분류 실패(L3 미매칭) → 소싱담당자에게 RFQ/RFP 선택 기회 제공
+                cta = ["견적요청서(RFQ) 작성하기", "제안요청서(RFP) 작성하기"]
             ctx.suggestions = recs + cta
         else:
             # 일반 사용자: 기존 로직 유지

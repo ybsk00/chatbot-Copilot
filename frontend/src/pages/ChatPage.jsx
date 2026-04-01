@@ -2156,46 +2156,64 @@ export default function ChatPage() {
     });
   };
 
-  // ── RFQ 필드별 선택 옵션 생성 (PR getPrFieldOptions 동일 패턴) ──
-  const RFQ_SKIP_KEYS = new Set(["rq1","rq2","rq3","rq4","rq5"]);  // 발주기관 정보 제외
+  // ── RFQ 필드별 선택 옵션 생성 (카테고리별 분기) ──
+  const RFQ_SKIP_KEYS = new Set(["rq1","rq2","rq3","rq4","rq5"]);
+  // L1 카테고리 → 수량 단위 매핑
+  const _rfqCatGroup = rfqTemplate?.category_group || "";
+  const _isServiceCat = ["인사·복리후생", "전문용역·컨설팅", "마케팅", "보험 서비스"].includes(_rfqCatGroup);
+  const _isITCat = _rfqCatGroup === "IT/ICT";
+  const _isFacilityCat = ["시설·건물관리", "생산관리"].includes(_rfqCatGroup);
+  const _isLogisticsCat = _rfqCatGroup === "물류";
+
   const getRfqFieldOptions = (key, f) => {
     if (!f) return [];
     const label = (f.label || "").toLowerCase();
-    // 발주기관 정보: 탭 불필요
     if (RFQ_SKIP_KEYS.has(key)) return [];
-    // ── DB default가 있으면 우선 ──
+    // ── DB 옵션 우선 ──
     if (f.options && f.options.length > 0) return f.options;
-    // ── 키워드 기반 옵션 ──
-    // 수량/인원/대수
-    if (label.includes("수량") || label.includes("대수"))
-      return ["5대 미만", "10대", "20대", "50대 이상", "기타"];
-    if (label.includes("인원") || label.includes("명"))
-      return ["10명 이내", "10~50명", "50~100명", "100명 이상"];
-    // 기간/약정/계약기간
+    // ── 카테고리별 수량/규모 ──
+    if (label.includes("수량") || label.includes("moq") || label.includes("대수") || label.includes("규모")) {
+      if (_isServiceCat) return ["10명 이내", "10~50명", "50~100명", "100명 이상", "협의"];
+      if (_isITCat) return ["5대", "10대", "20대", "50대 이상", "협의"];
+      if (_isFacilityCat) return ["1건", "2~5건", "5건 이상", "협의"];
+      if (_isLogisticsCat) return ["10CBM 미만", "10~50CBM", "50CBM 이상", "협의"];
+      return ["10개", "50개", "100개", "500개 이상", "협의"];
+    }
+    if (label.includes("인원") || label.includes("인력") || label.includes("명"))
+      return ["1~5명", "5~10명", "10~50명", "50명 이상"];
+    // ── 기간/약정 ──
     if (label.includes("기간") || label.includes("약정"))
       return ["6개월", "12개월", "24개월", "36개월", "협의"];
-    // 납기/납품
-    if (label.includes("납기") || label.includes("납품"))
+    // ── 납기/이행 ──
+    if (label.includes("납기") || label.includes("납품") || label.includes("이행"))
       return ["1주 이내", "2주 이내", "1개월 이내", "협의"];
-    // 방식/형태
-    if (label.includes("방식") || label.includes("형태"))
+    // ── 방식/형태 ──
+    if (label.includes("방식") || label.includes("형태")) {
+      if (_isServiceCat) return ["상주", "비상주", "온라인", "혼합", "협의"];
       return f.default ? [f.default, "협의"] : ["온라인", "오프라인", "혼합", "협의"];
-    // 여부/포함
+    }
+    // ── 여부/포함 ──
     if (label.includes("여부") || label.includes("포함"))
       return ["포함", "미포함", "협의"];
-    // 주기 (교체/관리/점검)
-    if (label.includes("주기") || label.includes("교체"))
-      return ["3개월", "6개월", "12개월", "협의"];
-    // 결제/지급
-    if (label.includes("결제") || label.includes("지급"))
+    // ── 주기 ──
+    if (label.includes("주기") || label.includes("교체") || label.includes("점검"))
+      return ["월 1회", "분기 1회", "반기 1회", "연 1회", "협의"];
+    // ── 결제/지급 ──
+    if (label.includes("결제") || label.includes("지급") || label.includes("정산"))
       return ["선불", "월 청구", "분기 청구", "납품 후 30일", "협의"];
-    // SLA/지표
+    // ── 보증/보험 ──
+    if (label.includes("보증") || label.includes("보험") || label.includes("warranty"))
+      return ["6개월", "12개월", "24개월", "협의"];
+    // ── 할인/할인율 ──
+    if (label.includes("할인") || label.includes("인상"))
+      return ["3% 이내", "5% 이내", "10% 이내", "협의"];
+    // ── SLA/품질 ──
     if (label.includes("sla") || label.includes("지표") || label.includes("품질"))
       return f.default ? [f.default] : [];
-    // 장소/사업장
-    if (label.includes("장소") || label.includes("사업장"))
-      return ["본사", "전 사업장", "협의"];
-    // 기본값이 있으면 탭으로
+    // ── 장소 ──
+    if (label.includes("장소") || label.includes("사업장") || label.includes("근무지"))
+      return ["본사", "전 사업장", "고객사", "협의"];
+    // 기본값
     if (f.default) return [f.default];
     return [];
   };

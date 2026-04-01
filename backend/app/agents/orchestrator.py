@@ -756,8 +756,31 @@ class OrchestratorAgent(AgentBase):
             ctx.cta_intent = ctx.classification["cta"]
             logger.info(f"[Orchestrator] CTA intent: {ctx.cta_intent}")
 
-        # ── GATE 3: 신뢰도 거부 ──
+        # ── GATE 3: 신뢰도 거부 — L3 매칭 성공이면 BT 안내 제공 ──
         if ctx.confidence_rejected:
+            # L3 매칭 성공 시: RAG 없어도 BT 안내 카드 + 구매요청서 버튼 제공
+            if l3_code and ctx.user_role in ("user", None):
+                _bt_info = self._get_bt_routing(ctx)
+                _bt_clean_rej = {k: v for k, v in _bt_info.items() if k != "_user_message"} if _bt_info else None
+                _user_guide = (_bt_info or {}).get("_user_message", {}).get("사용자안내", "") if _bt_info else ""
+                _l3_name = (ctx.classification or {}).get("l3_name", "해당 품목")
+                _pr_act = (_bt_info or {}).get("pr_action", "")
+
+                yield self._sse("meta", {
+                    "sources": [], "rag_score": round(ctx.rag_score, 4),
+                    "phase_trigger": "pr_agreed" if _pr_act == "allowed" else None,
+                    "classification": ctx.classification,
+                    "bt_routing": _bt_clean_rej,
+                    "user_role": ctx.user_role, "ask_role": ask_role,
+                })
+                guide_text = _user_guide if _user_guide else f"**{_l3_name}** 관련 구매를 진행할 수 있습니다."
+                yield self._sse("token", {"content": guide_text})
+                if _pr_act != "blocked":
+                    yield self._sse("suggestions", {"items": ["구매요청서 작성하기"]})
+                yield self._sse("done", {})
+                logger.info(f"[Orchestrator] Confidence rejected but L3 matched: {l3_code} → BT guide")
+                return
+
             rejected_cta = ["구매요청서 작성하기"] if ctx.user_role == "user" else []
 
             yield self._sse("meta", {

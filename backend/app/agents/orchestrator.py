@@ -659,15 +659,15 @@ class OrchestratorAgent(AgentBase):
         await asyncio.gather(classification_task, retrieval_task)
         # Constitution/Script는 Generation 시작 전까지만 완료되면 됨 (아래서 await)
 
-        # ── 의도 기반 자동 분기: 분류 성공 + hot/warm CTA → 역할별 문서 작성 직행 ──
+        # ── 의도 기반 자동 분기 ──
         l3_code = (ctx.classification or {}).get("l3_code")
         cta = (ctx.classification or {}).get("cta", "cold")
         b2_cls = (ctx.classification or {}).get("branch2_sourcing", "")
         pr_action = (ctx.classification or {}).get("pr_action", "")
 
-        if cta in ("hot", "warm") and l3_code:
-            # 소싱담당자: doc_type 기반 코드레벨 분기
-            if ctx.user_role == "procurement":
+        # 소싱담당자: L3 매칭되면 CTA 무관하게 즉시 분기 (RAG 답변 스킵)
+        if l3_code and ctx.user_role == "procurement":
+            if True:
                 bt_routing_auto = self._get_bt_routing(ctx)
                 doc_type = (bt_routing_auto or {}).get("doc_type_required", "rfq_only")
                 _bt_clean_auto = {k: v for k, v in bt_routing_auto.items() if k != "_user_message"} if bt_routing_auto else None
@@ -732,7 +732,8 @@ class OrchestratorAgent(AgentBase):
                 logger.info(f"[Orchestrator] Procurement auto-branch: doc_type={doc_type} → {trigger} (l3={l3_code})")
                 return
 
-            # 사용자: PR 허용이면 구매요청서 자동 진입
+        # 일반 사용자: hot/warm CTA + L3 매칭 시 PR 자동 진입
+        if cta in ("hot", "warm") and l3_code:
             if ctx.user_role in ("user", None) and pr_action != "blocked":
                 yield self._sse("meta", {
                     "sources": [], "rag_score": 0,

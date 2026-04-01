@@ -478,9 +478,29 @@ class OrchestratorAgent(AgentBase):
                     self.logger.warning(f"RFP/RFQ agree pre-classification failed: {e}")
 
             bt_routing = self._get_bt_routing(ctx)
-            doc_type = (bt_routing or {}).get("doc_type_required", "rfq_only")
-            rfp_type_hint = (bt_routing or {}).get("rfp_type_hint", "service_contract")
-            _bt_clean = {k: v for k, v in bt_routing.items() if k != "_user_message"} if bt_routing else None
+
+            # bt_routing이 없으면 (L3 미확인) → 교정 불가, 원래 요청대로 통과
+            if not bt_routing:
+                yield self._sse("meta", {
+                    "sources": [], "rag_score": 0,
+                    "phase_trigger": ctx.phase_trigger,
+                    "classification": ctx.classification,
+                    "user_role": ctx.user_role,
+                })
+                if ctx.phase_trigger == "rfp_agreed":
+                    yield self._sse("token", {
+                        "content": "제안요청서(RFP) 작성을 진행하겠습니다. 아래에서 RFP 유형을 선택해 주십시오."
+                    })
+                else:
+                    yield self._sse("token", {
+                        "content": "견적서(RFQ) 작성을 진행하겠습니다. 아래에서 견적서 유형을 선택해 주십시오."
+                    })
+                yield self._sse("done", {})
+                return
+
+            doc_type = bt_routing.get("doc_type_required", "rfq_only")
+            rfp_type_hint = bt_routing.get("rfp_type_hint", "service_contract")
+            _bt_clean = {k: v for k, v in bt_routing.items() if k != "_user_message"}
             l3_name = (ctx.classification or {}).get("l3_name", "해당 품목")
 
             # ── 교정 로직: 사용자 요청 vs 실제 필요 문서 ──

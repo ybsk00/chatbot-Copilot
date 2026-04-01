@@ -2512,15 +2512,15 @@ export default function ChatPage() {
           color: T.sub, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
           display:"flex", alignItems:"center", justifyContent:"center", gap:6,
         }}><IconDownload size={14} /> 초안 다운로드</button>
-        <button disabled={rfqPct < 100} onClick={() => { if (rfqPct >= 100) setPhase("rfq_complete"); }} style={{
+        <button disabled={rfqRequiredFilled < rfqRequiredTotal} onClick={() => { if (rfqRequiredFilled >= rfqRequiredTotal) setPhase("rfq_complete"); }} style={{
           flex:1, padding:"12px", borderRadius: T.r10, border:"none",
-          background: rfqPct >= 100 ? T.gradPrimary : T.borderLight,
-          color: rfqPct >= 100 ? "#fff" : T.muted,
+          background: rfqRequiredFilled >= rfqRequiredTotal ? T.gradPrimary : T.borderLight,
+          color: rfqRequiredFilled >= rfqRequiredTotal ? "#fff" : T.muted,
           fontSize:12, fontWeight:700, fontFamily:"inherit",
-          cursor: rfqPct >= 100 ? "pointer" : "not-allowed",
+          cursor: rfqRequiredFilled >= rfqRequiredTotal ? "pointer" : "not-allowed",
           display:"flex", alignItems:"center", justifyContent:"center", gap:5,
-          boxShadow: rfqPct >= 100 ? T.shadowBlue : "none",
-        }}><IconSendMail size={13} /> {rfqPct >= 100 ? "RFQ 완료" : "RFQ 발송"}</button>
+          boxShadow: rfqRequiredFilled >= rfqRequiredTotal ? T.shadowBlue : "none",
+        }}><IconSendMail size={13} /> {rfqRequiredFilled >= rfqRequiredTotal ? "RFQ 완료 / 저장" : "RFQ 저장"}</button>
       </div>
       <div style={{ height:16 }} />
     </div>

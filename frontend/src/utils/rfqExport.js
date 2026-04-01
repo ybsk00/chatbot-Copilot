@@ -5,30 +5,36 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-// ── 미리보기 HTML 스타일 ──
+// ── 미리보기 HTML 스타일 (RFP 나라장터 양식 통일) ──
 const STYLES = `
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family: 'Noto Sans KR', 'Malgun Gothic', sans-serif; max-width:900px; margin:0 auto; padding:40px 30px; color:#1e293b; }
-  .header { text-align:center; border-bottom:3px solid #6366f1; padding-bottom:20px; margin-bottom:30px; }
-  .header .subtitle { font-size:11px; letter-spacing:3px; color:#94a3b8; margin-bottom:8px; }
-  .header h1 { font-size:24px; letter-spacing:6px; color:#1e293b; margin-bottom:12px; }
-  .header .badge { display:inline-block; padding:4px 16px; background:#eef2ff; color:#6366f1; border-radius:8px; font-size:13px; font-weight:700; }
-  .section { margin-bottom:20px; }
-  .section-title { background:#f8fafc; padding:10px 16px; border-left:4px solid #6366f1; font-size:14px; font-weight:700; color:#1e293b; margin-bottom:0; }
-  .section-title.supplier { border-left-color:#f59e0b; background:#fffbeb; }
-  .supplier-notice { background:#fef3c7; padding:8px 16px; font-size:11px; color:#92400e; border:1px solid #fde68a; border-top:none; }
-  table { width:100%; border-collapse:collapse; margin-bottom:16px; }
-  th { background:#f1f5f9; text-align:left; padding:8px 14px; font-size:12px; font-weight:600; color:#475569; width:30%; border:1px solid #e2e8f0; }
-  td { padding:8px 14px; font-size:12px; color:#1e293b; border:1px solid #e2e8f0; }
+  body { font-family: 'Noto Sans KR', 'Malgun Gothic', sans-serif; max-width:900px; margin:0 auto; padding:40px 30px; color:#1e293b; background:#fff; }
+  .header { text-align:center; padding-bottom:16px; margin-bottom:24px; }
+  .header .subtitle { font-size:10px; letter-spacing:4px; color:#94a3b8; margin-bottom:6px; text-transform:uppercase; }
+  .header h1 { font-size:26px; letter-spacing:8px; color:#111827; margin-bottom:6px; font-weight:800; }
+  .header .double-line { height:4px; border-top:2px solid #222; border-bottom:1px solid #222; margin:8px 0 12px; }
+  .header .badge { display:inline-block; padding:4px 16px; background:#f1f5f9; color:#334155; border-radius:6px; font-size:12px; font-weight:700; border:1px solid #e2e8f0; }
+  .info-table { width:100%; border-collapse:collapse; margin-bottom:20px; }
+  .info-table th { background:#e8e8e8; text-align:center; padding:8px 12px; font-size:11px; font-weight:700; color:#111; width:15%; border:1px solid #333; }
+  .info-table td { padding:8px 12px; font-size:11px; color:#222; border:1px solid #333; }
+  .section { margin-bottom:16px; }
+  .section-title { background:#333; color:#fff; padding:8px 16px; font-size:12px; font-weight:700; text-align:center; border:1px solid #333; }
+  .section-title.supplier { background:#fef3c7; color:#92400e; border-color:#f59e0b; }
+  .supplier-notice { background:#fef3c7; padding:6px 14px; font-size:10px; color:#92400e; border:1px solid #fde68a; border-top:none; }
+  table { width:100%; border-collapse:collapse; margin-bottom:0; }
+  th { background:#e8e8e8; text-align:center; padding:7px 12px; font-size:11px; font-weight:700; color:#111; width:28%; border:1px solid #333; }
+  td { padding:7px 12px; font-size:11px; color:#222; border:1px solid #333; }
   td.empty { color:#94a3b8; font-style:italic; }
-  .required { color:#ef4444; font-size:10px; margin-left:2px; }
-  .footer { margin-top:40px; border-top:2px solid #e2e8f0; padding-top:20px; display:flex; justify-content:space-between; }
-  .footer .sig { text-align:center; width:30%; }
-  .footer .sig-line { border-bottom:1px solid #94a3b8; height:40px; margin-bottom:8px; }
-  .footer .sig-label { font-size:11px; color:#64748b; }
+  .required { color:#ef4444; font-size:9px; margin-left:2px; }
+  .footer { margin-top:40px; padding-top:16px; text-align:right; }
+  .footer .date { font-size:12px; color:#333; margin-bottom:10px; }
+  .footer .org { font-size:14px; font-weight:700; color:#111; margin-bottom:8px; }
+  .footer .manager { font-size:12px; color:#333; display:inline-block; }
+  .footer .seal { display:inline-block; width:40px; height:40px; border:1px solid #999; text-align:center; line-height:40px; font-size:9px; color:#999; margin-left:12px; vertical-align:middle; }
+  .footer-line { margin-top:24px; border-top:1px solid #ccc; padding-top:8px; text-align:center; font-size:9px; color:#aaa; }
   .actions { text-align:center; margin-top:30px; }
   .actions button { padding:12px 28px; margin:0 8px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; border:none; }
-  .btn-print { background:#6366f1; color:#fff; }
+  .btn-print { background:#333; color:#fff; }
   .btn-close { background:#f1f5f9; color:#475569; border:1px solid #e2e8f0; }
   @media print { .actions { display:none; } }
 `;
@@ -40,13 +46,30 @@ export function previewRfq(rfqFields, rfqSections, templateName) {
   const w = window.open("", "_blank");
   if (!w) return;
 
+  // 발주기관 정보 테이블 (RFP와 동일 패턴)
+  const orgVal = rfqFields.rq1?.value || "";
+  const dept = rfqFields.rq2?.value || "";
+  const manager = rfqFields.rq3?.value || "";
+  const phone = rfqFields.rq4?.value || "";
+  const email = rfqFields.rq5?.value || "";
+
+  const infoTable = `
+    <table class="info-table">
+      <tr><th>발주기관</th><td colspan="5" style="font-weight:700">${orgVal || "-"}</td></tr>
+      <tr><th>담 당 자</th><th style="width:8%">성명</th><td style="width:22%">${manager || "-"}</td><th style="width:8%">부서</th><td style="width:22%">${dept || "-"}</td><td>${phone || "-"}</td></tr>
+      <tr><th>이 메 일</th><td colspan="5">${email || "-"}</td></tr>
+    </table>`;
+
   let sectionsHtml = "";
   (rfqSections || []).forEach(sec => {
+    if (sec.common) return;
     const isSupplier = sec.supplier_zone;
     let rows = "";
     (sec.fields || []).forEach(fk => {
       const f = rfqFields[fk];
       if (!f) return;
+      // rq1~rq5는 이미 기본정보 테이블에 표시했으므로 스킵
+      if (["rq1","rq2","rq3","rq4","rq5"].includes(fk)) return;
       const val = (f.value || "").trim();
       const reqMark = f.required !== false && !isSupplier ? '<span class="required">*</span>' : '';
       rows += `<tr>
@@ -55,50 +78,53 @@ export function previewRfq(rfqFields, rfqSections, templateName) {
       </tr>`;
     });
 
+    if (!rows) return;
+
     const titleClass = isSupplier ? "section-title supplier" : "section-title";
+    const titleText = sec.title.replace(/^\d+\.\s*/, "").replace(/^※\s*/, "");
     const notice = isSupplier
-      ? '<div class="supplier-notice">📦 이 영역은 공급업체가 작성하는 란입니다. 소싱담당자는 입력하지 않아도 됩니다.</div>'
+      ? '<div class="supplier-notice">이 영역은 공급업체가 작성하는 란입니다. 소싱담당자는 입력하지 않아도 됩니다.</div>'
       : '';
 
     sectionsHtml += `
       <div class="section">
-        <div class="${titleClass}">${sec.title}</div>
+        <div class="${titleClass}">${isSupplier ? "공급업체 작성란" : titleText}</div>
         ${notice}
         <table>${rows}</table>
       </div>`;
   });
 
-  const today = new Date().toLocaleDateString("ko-KR");
+  const today = new Date();
+  const dateStr = `${today.getFullYear()}년 ${String(today.getMonth() + 1).padStart(2, "0")}월 ${String(today.getDate()).padStart(2, "0")}일`;
+
   const html = `<!DOCTYPE html>
 <html lang="ko">
 <head>
   <meta charset="utf-8">
   <title>견적요청서 미리보기</title>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700;800&display=swap" rel="stylesheet">
   <style>${STYLES}</style>
 </head>
 <body>
   <div class="header">
     <div class="subtitle">표준 견적서 양식</div>
     <h1>견 적 요 청 서</h1>
+    <div class="double-line"></div>
     <span class="badge">${templateName || "견적요청서"}</span>
   </div>
 
+  ${infoTable}
   ${sectionsHtml}
 
   <div class="footer">
-    <div class="sig">
-      <div>작성일: ${today}</div>
-    </div>
-    <div class="sig">
-      <div class="sig-line"></div>
-      <div class="sig-label">소싱담당자</div>
-    </div>
-    <div class="sig">
-      <div class="sig-line"></div>
-      <div class="sig-label">발주기관 (인)</div>
+    <div class="date">${dateStr}</div>
+    <div class="org">${orgVal || "발주기관"}</div>
+    <div>
+      <span class="manager">담당자: ${manager}</span>
+      <span class="seal">(인)</span>
     </div>
   </div>
+  <div class="footer-line">업무마켓9 — AI 기반 견적요청서 자동생성 시스템</div>
 
   <div class="actions">
     <button class="btn-print" onclick="window.print()">PDF 다운로드 (인쇄)</button>

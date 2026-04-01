@@ -418,14 +418,30 @@ class OrchestratorAgent(AgentBase):
             # ── 분기1-E/F: PR 작성 진행 → 소싱담당자는 branch2로 추가 분기 ──
             _bt_clean = {k: v for k, v in bt_routing.items() if k != "_user_message"} if bt_routing else None
 
-            # 소싱담당자(procurement)이고 branch2가 RFQ/RFP이면 직행
-            if ctx.user_role == "procurement" and b2 in ("2B_RFQ", "2C_RFP입찰"):
-                if b2 == "2B_RFQ":
+            # 소싱담당자(procurement) → doc_type 기반 분기
+            if ctx.user_role == "procurement":
+                doc_type = (bt_routing or {}).get("doc_type_required", "rfq_only")
+                l3_name = (ctx.classification or {}).get("l3_name", "해당 품목")
+
+                if doc_type == "rfq_only":
                     phase_trigger = "rfq_agreed"
-                    msg_text = "이 품목은 RFQ(3사 경쟁견적) 방식으로 소싱합니다. 견적서(RFQ) 작성을 진행하겠습니다."
-                else:  # 2C_RFP입찰
+                    msg_text = f"**{l3_name}** — 경쟁견적(RFQ) 방식으로 소싱합니다. 견적서(RFQ) 작성을 진행하겠습니다."
+                elif doc_type == "rfp_only":
                     phase_trigger = "rfp_agreed"
-                    msg_text = "이 품목은 RFP(기술+가격 입찰) 방식으로 소싱합니다. 제안요청서(RFP) 작성을 진행하겠습니다."
+                    msg_text = f"**{l3_name}** — 기술+가격 입찰(RFP) 방식으로 소싱합니다. 제안요청서(RFP) 작성을 진행하겠습니다."
+                elif doc_type == "both":
+                    phase_trigger = "rfq_agreed"
+                    msg_text = (
+                        f"**{l3_name}**은(는) 견적서(RFQ)와 제안요청서(RFP) **모두 작성**이 필요합니다.\n"
+                        f"견적서(RFQ)를 먼저 작성한 후, 제안요청서(RFP)로 전환됩니다."
+                    )
+                elif doc_type == "none":
+                    phase_trigger = "pr_blocked"
+                    msg_text = f"**{l3_name}**은(는) 카탈로그 직접발주 품목입니다. 별도의 견적서(RFQ)·제안요청서(RFP) 작성이 불필요합니다."
+                else:
+                    # 미확인 doc_type → 안전하게 차단
+                    phase_trigger = "pr_blocked"
+                    msg_text = f"**{l3_name}**의 소싱 방식을 확인할 수 없습니다. 품목명을 구체적으로 입력해 주십시오."
 
                 yield self._sse("meta", {
                     "sources": [], "rag_score": 0,
@@ -433,6 +449,7 @@ class OrchestratorAgent(AgentBase):
                     "classification": ctx.classification,
                     "bt_routing": _bt_clean,
                     "user_role": ctx.user_role,
+                    "doc_type_required": doc_type,
                 })
                 yield self._sse("token", {"content": msg_text})
                 yield self._sse("done", {})
@@ -452,34 +469,133 @@ class OrchestratorAgent(AgentBase):
             yield self._sse("done", {})
             return
 
-        if ctx.phase_trigger == "rfp_agreed":
-            yield self._sse("meta", {
-                "sources": [], "rag_score": 0,
-                "phase_trigger": ctx.phase_trigger, "classification": None,
-                "user_role": ctx.user_role,
-            })
-            yield self._sse("token", {
-                "content": "제안요청서(RFP) 작성을 진행하겠습니다. 아래에서 RFP 유형을 선택해 주십시오."
-            })
-            yield self._sse("done", {})
-            return
-
-        if ctx.phase_trigger == "rfq_agreed":
-            # RFQ 직접 요청 — Classification 선행 실행 (L3코드 필요)
+        if ctx.phase_trigger in ("rfp_agreed", "rfq_agreed"):
+            # 소싱담당자 RFP/RFQ 요청 — doc_type 기반 교정 분기
             if not ctx.classification:
                 try:
                     await self.classification.execute(ctx, self._critical_pool)
                 except Exception as e:
-                    self.logger.warning(f"RFQ agree pre-classification failed: {e}")
+                    self.logger.warning(f"RFP/RFQ agree pre-classification failed: {e}")
+
+            bt_routing = self._get_bt_routing(ctx)
+            doc_type = (bt_routing or {}).get("doc_type_required", "rfq_only")
+            rfp_type_hint = (bt_routing or {}).get("rfp_type_hint", "service_contract")
+            _bt_clean = {k: v for k, v in bt_routing.items() if k != "_user_message"} if bt_routing else None
+            l3_name = (ctx.classification or {}).get("l3_name", "해당 품목")
+
+            # ── 교정 로직: 사용자 요청 vs 실제 필요 문서 ──
+            requested = ctx.phase_trigger  # rfp_agreed or rfq_agreed
+
+            if requested == "rfp_agreed" and doc_type == "rfq_only":
+                # RFP 요청했지만 실제로는 RFQ만 필요 → RFQ로 교정
+                yield self._sse("meta", {
+                    "sources": [], "rag_score": 0,
+                    "phase_trigger": "rfq_agreed",
+                    "classification": ctx.classification,
+                    "bt_routing": _bt_clean,
+                    "user_role": ctx.user_role,
+                    "doc_type_required": doc_type,
+                })
+                yield self._sse("token", {"content": (
+                    f"**{l3_name}**은(는) 경쟁견적(RFQ) 방식으로 소싱하는 품목입니다.\n"
+                    f"제안요청서(RFP) 대신 **견적서(RFQ)** 작성을 진행하겠습니다."
+                )})
+                yield self._sse("done", {})
+                logger.info(f"[Orchestrator] RFP→RFQ 교정: doc_type={doc_type}")
+                return
+
+            if requested == "rfq_agreed" and doc_type == "rfp_only":
+                # RFQ 요청했지만 실제로는 RFP만 필요 → RFP로 교정
+                yield self._sse("meta", {
+                    "sources": [], "rag_score": 0,
+                    "phase_trigger": "rfp_agreed",
+                    "classification": ctx.classification,
+                    "bt_routing": _bt_clean,
+                    "user_role": ctx.user_role,
+                    "doc_type_required": doc_type,
+                    "rfp_type_hint": rfp_type_hint,
+                })
+                yield self._sse("token", {"content": (
+                    f"**{l3_name}**은(는) 기술+가격 입찰(RFP) 방식으로 소싱하는 품목입니다.\n"
+                    f"견적서(RFQ) 대신 **제안요청서(RFP)** 작성을 진행하겠습니다."
+                )})
+                yield self._sse("done", {})
+                logger.info(f"[Orchestrator] RFQ→RFP 교정: doc_type={doc_type}")
+                return
+
+            if doc_type == "both":
+                # 둘 다 필요 → RFQ 먼저 안내
+                if requested == "rfp_agreed":
+                    # RFP 요청했지만 RFQ 먼저 필요
+                    yield self._sse("meta", {
+                        "sources": [], "rag_score": 0,
+                        "phase_trigger": "rfq_agreed",
+                        "classification": ctx.classification,
+                        "bt_routing": _bt_clean,
+                        "user_role": ctx.user_role,
+                        "doc_type_required": doc_type,
+                    })
+                    yield self._sse("token", {"content": (
+                        f"**{l3_name}**은(는) 견적서(RFQ)와 제안요청서(RFP) **모두 작성**이 필요한 품목입니다.\n"
+                        f"견적서(RFQ)를 먼저 작성한 후, 제안요청서(RFP)로 전환됩니다."
+                    )})
+                    yield self._sse("done", {})
+                    logger.info(f"[Orchestrator] both→RFQ먼저: doc_type={doc_type}")
+                    return
+                else:
+                    # RFQ 요청 + both → RFQ 진행 (완료 후 RFP 전환 안내)
+                    yield self._sse("meta", {
+                        "sources": [], "rag_score": 0,
+                        "phase_trigger": "rfq_agreed",
+                        "classification": ctx.classification,
+                        "bt_routing": _bt_clean,
+                        "user_role": ctx.user_role,
+                        "doc_type_required": doc_type,
+                    })
+                    yield self._sse("token", {"content": (
+                        f"**{l3_name}** 견적서(RFQ) 작성을 진행하겠습니다.\n"
+                        f"견적서 완료 후 제안요청서(RFP) 작성도 함께 진행됩니다."
+                    )})
+                    yield self._sse("done", {})
+                    logger.info(f"[Orchestrator] both→RFQ시작: doc_type={doc_type}")
+                    return
+
+            if doc_type == "none":
+                # 카탈로그/주관부서 → 안내 (RFQ/RFP 버튼 제공 안 함)
+                yield self._sse("meta", {
+                    "sources": [], "rag_score": 0,
+                    "phase_trigger": "pr_blocked",
+                    "classification": ctx.classification,
+                    "bt_routing": _bt_clean,
+                    "user_role": ctx.user_role,
+                    "doc_type_required": doc_type,
+                })
+                yield self._sse("token", {"content": (
+                    f"**{l3_name}**은(는) 단가계약이 체결된 카탈로그 품목입니다.\n"
+                    f"기존 계약 조건으로 직접 발주가 가능하며, 별도의 견적서(RFQ)·제안요청서(RFP) 작성이 **불필요**합니다.\n\n"
+                    f"다른 품목의 소싱이 필요하시면 품목명을 입력해 주십시오."
+                )})
+                yield self._sse("done", {})
+                return
+
+            # 정상 요청 (교정 불필요) — 원래 요청대로 진행
             yield self._sse("meta", {
                 "sources": [], "rag_score": 0,
-                "phase_trigger": "rfq_agreed",
+                "phase_trigger": requested,
                 "classification": ctx.classification,
+                "bt_routing": _bt_clean,
                 "user_role": ctx.user_role,
+                "doc_type_required": doc_type,
+                "rfp_type_hint": rfp_type_hint if requested == "rfp_agreed" else None,
             })
-            yield self._sse("token", {
-                "content": "견적서(RFQ) 작성을 진행하겠습니다. 아래에서 견적서 유형을 선택해 주십시오."
-            })
+            if requested == "rfp_agreed":
+                yield self._sse("token", {
+                    "content": "제안요청서(RFP) 작성을 진행하겠습니다. 아래에서 RFP 유형을 선택해 주십시오."
+                })
+            else:
+                yield self._sse("token", {
+                    "content": "견적서(RFQ) 작성을 진행하겠습니다."
+                })
             yield self._sse("done", {})
             return
 
@@ -527,47 +643,69 @@ class OrchestratorAgent(AgentBase):
         pr_action = (ctx.classification or {}).get("pr_action", "")
 
         if cta in ("hot", "warm") and l3_code:
-            # 소싱담당자: 어떤 품목이든 hot/warm이면 작성 진입
+            # 소싱담당자: doc_type 기반 코드레벨 분기
             if ctx.user_role == "procurement":
-                if b2_cls == "2B_RFQ":
-                    trigger = "rfq_agreed"
-                    msg_text = "이 품목은 RFQ(경쟁견적) 방식으로 소싱합니다. 견적서(RFQ) 작성을 진행하겠습니다."
-                elif b2_cls == "2C_RFP입찰":
-                    trigger = "rfp_agreed"
-                    msg_text = "이 품목은 RFP(기술+가격 입찰) 방식으로 소싱합니다. 제안요청서(RFP) 작성을 진행하겠습니다."
-                elif b2_cls in ("SKIP", "SKIP_or_PR"):
-                    # 카탈로그/주관부서 품목 → 단가계약 안내 + 견적 필요 여부 확인
-                    l3_name = (ctx.classification or {}).get("l3_name", "해당 품목")
+                bt_routing_auto = self._get_bt_routing(ctx)
+                doc_type = (bt_routing_auto or {}).get("doc_type_required", "rfq_only")
+                _bt_clean_auto = {k: v for k, v in bt_routing_auto.items() if k != "_user_message"} if bt_routing_auto else None
+                l3_name = (ctx.classification or {}).get("l3_name", "해당 품목")
+
+                if doc_type == "none":
+                    # 카탈로그/주관부서 품목 → RFQ/RFP 완전 차단
                     yield self._sse("meta", {
                         "sources": [], "rag_score": 0,
-                        "phase_trigger": None,
+                        "phase_trigger": "pr_blocked",
                         "classification": ctx.classification,
                         "user_role": ctx.user_role,
+                        "doc_type_required": doc_type,
                     })
                     yield self._sse("token", {"content": (
                         f"**{l3_name}**은(는) 단가계약이 체결된 카탈로그 품목입니다.\n"
-                        f"기존 계약 조건으로 직접 발주가 가능합니다.\n\n"
-                        f"재계약·신규 공급사 선정을 위한 견적서가 필요하시면 아래에서 선택해 주십시오."
+                        f"기존 계약 조건으로 직접 발주가 가능하며, 별도의 견적서(RFQ)·제안요청서(RFP) 작성이 **불필요**합니다.\n\n"
+                        f"다른 품목의 소싱이 필요하시면 품목명을 입력해 주십시오."
                     )})
-                    yield self._sse("suggestions", {
-                        "items": ["견적요청서(RFQ) 작성하기", "제안요청서(RFP) 작성하기"]
-                    })
                     yield self._sse("done", {})
-                    logger.info(f"[Orchestrator] Procurement catalog guidance: {b2_cls} (l3={l3_code})")
+                    logger.info(f"[Orchestrator] Procurement catalog BLOCKED: doc_type={doc_type} (l3={l3_code})")
                     return
-                else:
-                    # 2A_PR만 등 → RFQ 기본 진입
+
+                if doc_type == "rfq_only":
                     trigger = "rfq_agreed"
-                    msg_text = "견적서(RFQ) 작성을 진행하겠습니다."
+                    msg_text = f"**{l3_name}** — 경쟁견적(RFQ) 방식으로 소싱합니다. 견적서(RFQ) 작성을 진행하겠습니다."
+                elif doc_type == "rfp_only":
+                    trigger = "rfp_agreed"
+                    msg_text = f"**{l3_name}** — 기술+가격 입찰(RFP) 방식으로 소싱합니다. 제안요청서(RFP) 작성을 진행하겠습니다."
+                elif doc_type == "both":
+                    trigger = "rfq_agreed"
+                    msg_text = (
+                        f"**{l3_name}**은(는) 견적서(RFQ)와 제안요청서(RFP) **모두 작성**이 필요합니다.\n"
+                        f"견적서(RFQ)를 먼저 작성한 후, 제안요청서(RFP)로 전환됩니다."
+                    )
+                else:
+                    # 미확인 doc_type → 카탈로그 취급 (안전)
+                    yield self._sse("meta", {
+                        "sources": [], "rag_score": 0,
+                        "phase_trigger": "pr_blocked",
+                        "classification": ctx.classification,
+                        "user_role": ctx.user_role,
+                        "doc_type_required": "none",
+                    })
+                    yield self._sse("token", {"content": (
+                        f"**{l3_name}**의 소싱 방식을 확인할 수 없습니다. 품목명을 구체적으로 입력해 주십시오."
+                    )})
+                    yield self._sse("done", {})
+                    return
+
                 yield self._sse("meta", {
                     "sources": [], "rag_score": 0,
                     "phase_trigger": trigger,
                     "classification": ctx.classification,
+                    "bt_routing": _bt_clean_auto,
                     "user_role": ctx.user_role,
+                    "doc_type_required": doc_type,
                 })
                 yield self._sse("token", {"content": msg_text})
                 yield self._sse("done", {})
-                logger.info(f"[Orchestrator] Procurement auto-branch: {b2_cls} → {trigger} (l3={l3_code})")
+                logger.info(f"[Orchestrator] Procurement auto-branch: doc_type={doc_type} → {trigger} (l3={l3_code})")
                 return
 
             # 사용자: PR 허용이면 구매요청서 자동 진입
@@ -694,16 +832,21 @@ class OrchestratorAgent(AgentBase):
 
         # ── suggestions 최종 구성 ──
         if ctx.user_role == "procurement":
-            # 소싱담당자: 추천질문(최대2) + CTA (중복 제거)
+            # 소싱담당자: doc_type 기반 CTA (코드레벨 분기)
             _CTA = {"견적요청서(RFQ) 작성하기", "제안요청서(RFP) 작성하기", "RFP 작성하기", "구매요청서 작성하기"}
             recs = [s for s in ctx.suggestions if s not in _CTA and "구매요청서" not in s][:2]
-            cta = []
-            if b2 == "2B_RFQ":
+            _doc_type = (bt_routing or {}).get("doc_type_required", "")
+            if _doc_type == "rfq_only":
                 cta = ["견적요청서(RFQ) 작성하기"]
-            elif b2 == "2C_RFP입찰":
+            elif _doc_type == "rfp_only":
                 cta = ["제안요청서(RFP) 작성하기"]
+            elif _doc_type == "both":
+                cta = ["견적요청서(RFQ) 작성하기"]  # both는 RFQ부터
+            elif _doc_type == "none":
+                cta = []
             else:
-                cta = ["견적요청서(RFQ) 작성하기", "제안요청서(RFP) 작성하기"]
+                # 미확인 doc_type → 안전하게 빈 CTA (카탈로그 취급)
+                cta = []
             ctx.suggestions = recs + cta
         else:
             # 일반 사용자: 기존 로직 유지

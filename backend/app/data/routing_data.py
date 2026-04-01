@@ -30,6 +30,47 @@ _BRANCH1_TO_ACTION = {
 }
 
 
+# ── 소싱담당자 문서유형 결정 매트릭스 ────────────────────────
+# branch2 + gt_code 조합으로 확정적 분기 (프롬프트 의존 X)
+#   rfq_only  : 견적서만 작성
+#   rfp_only  : 제안요청서만 작성
+#   both      : 견적서 먼저 → 제안요청서 순차 작성
+#   none      : 카탈로그/주관부서 (문서 작성 불필요)
+_BOTH_GT_CODES = {"G13", "G15", "G33", "G34"}  # RFQ+RFP 모두 필요한 GT
+
+def resolve_doc_type(branch2: str, gt_code: str) -> str:
+    """branch2 + gt_code로 문서유형 확정. 코드레벨 분기."""
+    if not branch2 or branch2 in ("SKIP", "SKIP_or_PR"):
+        return "none"
+    if branch2 == "2C_RFP입찰":
+        if gt_code in _BOTH_GT_CODES:
+            return "both"
+        return "rfp_only"
+    if branch2 == "2B_RFQ":
+        if gt_code in _BOTH_GT_CODES:
+            return "both"
+        return "rfq_only"
+    if branch2 == "2A_PR만":
+        return "rfq_only"
+    # 미확인 값 → 안전하게 none (카탈로그 취급)
+    return "none"
+
+# ── RFP 유형 자동 매핑 (L1 대분류 → rfp_type) ────────────
+_L1_TO_RFP_TYPE = {
+    "시설·건물관리": "construction",
+    "전문용역·컨설팅": "consulting",
+    "IT/ICT": "service_contract",
+    "마케팅": "service_contract",
+    "인사·복리후생": "service",
+    "생산관리": "purchase_maintenance",
+    "연구개발": "consulting",
+}
+_DEFAULT_RFP_TYPE = "service_contract"
+
+# ── 소싱담당자용 RFP 카테고리 허용 목록 ───────────────────
+PROCUREMENT_RFP_TYPES = {"service_contract", "construction", "consulting"}
+
+
 @dataclass
 class RoutingEntry:
     """taxonomy_v2 L3 행."""
@@ -234,6 +275,20 @@ class RoutingDataStore:
         b1 = self.get_branch1_path(l3_code)
         return _BRANCH1_TO_ACTION.get(b1, "unknown")
 
+    def get_doc_type_required(self, l3_code: str) -> str:
+        """소싱담당자용 문서유형 확정 (rfq_only/rfp_only/both/none)."""
+        entry = self.l3_index.get(l3_code)
+        if not entry:
+            return "rfq_only"  # 기본값
+        return resolve_doc_type(entry.branch2_sourcing, entry.gt_code)
+
+    def get_rfp_type_for_l3(self, l3_code: str) -> str:
+        """L3의 L1 대분류에 맞는 RFP 유형 반환."""
+        entry = self.l3_index.get(l3_code)
+        if not entry:
+            return _DEFAULT_RFP_TYPE
+        return _L1_TO_RFP_TYPE.get(entry.l1, _DEFAULT_RFP_TYPE)
+
     # ── 일반 조회 ────────────────────────────────────────
 
     def get_routing(self, l3_code: str) -> RoutingEntry | None:
@@ -300,6 +355,8 @@ class RoutingDataStore:
             "pr_action": self.get_bt_action(l3_code),
             "branch1_path": entry.branch1_path,
             "branch2_sourcing": entry.branch2_sourcing,
+            "doc_type_required": self.get_doc_type_required(l3_code),
+            "rfp_type_hint": self.get_rfp_type_for_l3(l3_code),
             "action_buttons": self.get_action_buttons(l3_code),
             "dept": entry.dept,
             "sla": self.get_sla(l3_code),

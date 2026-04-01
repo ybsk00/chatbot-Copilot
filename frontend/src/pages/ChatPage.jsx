@@ -271,6 +271,9 @@ export default function ChatPage() {
   const [rfqRightVisible, setRfqRightVisible] = useState(false);
   const [rfqRequestId, setRfqRequestId]     = useState(null);
   const [dbRfqTemplates, setDbRfqTemplates] = useState(null);
+  const [activeRfqFieldKey, setActiveRfqFieldKey] = useState(null);  // RFQ 자율답변 대상 필드
+  const [lastDocType, setLastDocType]       = useState(null);  // "rfq_only"|"rfp_only"|"both"|"none"
+  const [lastRfpTypeHint, setLastRfpTypeHint] = useState(null);  // RFP 유형 힌트
   const msgEndRef  = useRef(null);
   const chatScrollRef = useRef(null);
   const fieldRefs  = useRef({});
@@ -758,22 +761,35 @@ export default function ChatPage() {
           setPrRightVisible(true);
         }
       } else if (phase === "rfq_filling") {
-        // RFQ 필드 추출 (PR과 동일 패턴)
-        setRfqFillingTurns(prev => prev + 1);
-        const rfqFilled = {};
-        Object.entries(rfqFields).forEach(([k, v]) => { if ((v.value || "").trim()) rfqFilled[k] = v.value; });
-        const data = await api.chat(sessionId, text, null, history, phase, {}, rfpType, prType, {}, userRole, roleTurnCount, rfqType, rfqFilled);
-        if (data.rfq_fields && Object.keys(data.rfq_fields).length > 0) {
-          applyRfqFills(data.rfq_fields);
-        }
-        setMessages(prev => [...prev, {
-          id: msgIdCounter++, role: "assistant",
-          text: data.answer, sources: data.sources,
-          rfqInlineTabs: true,
-        }]);
-        if (data.phase_trigger === "rfq_complete") {
-          if (data.rfq_request_id) setRfqRequestId(data.rfq_request_id);
-          setTimeout(() => { setPhase("rfq_complete"); setRfqRightVisible(true); }, 800);
+        // RFQ 자율답변 모드: activeRfqFieldKey가 있으면 직접 매핑 (백엔드 호출 불필요)
+        if (activeRfqFieldKey && rfqFields[activeRfqFieldKey]) {
+          applyRfqFills({ [activeRfqFieldKey]: text });
+          setRfqFillingTurns(prev => prev + 1);
+          const fieldLabel = rfqFields[activeRfqFieldKey]?.label || activeRfqFieldKey;
+          setActiveRfqFieldKey(null);
+          setMessages(prev => [...prev, {
+            id: msgIdCounter++, role: "assistant",
+            text: `**${fieldLabel}** 입력 완료. 다음 항목을 입력해 주세요.`,
+            rfqInlineTabs: true,
+          }]);
+        } else {
+          // 일반 RFQ 필드 추출 (PR과 동일 패턴)
+          setRfqFillingTurns(prev => prev + 1);
+          const rfqFilled = {};
+          Object.entries(rfqFields).forEach(([k, v]) => { if ((v.value || "").trim()) rfqFilled[k] = v.value; });
+          const data = await api.chat(sessionId, text, null, history, phase, {}, rfpType, prType, {}, userRole, roleTurnCount, rfqType, rfqFilled);
+          if (data.rfq_fields && Object.keys(data.rfq_fields).length > 0) {
+            applyRfqFills(data.rfq_fields);
+          }
+          setMessages(prev => [...prev, {
+            id: msgIdCounter++, role: "assistant",
+            text: data.answer, sources: data.sources,
+            rfqInlineTabs: true,
+          }]);
+          if (data.phase_trigger === "rfq_complete") {
+            if (data.rfq_request_id) setRfqRequestId(data.rfq_request_id);
+            setTimeout(() => { setPhase("rfq_complete"); setRfqRightVisible(true); }, 800);
+          }
         }
       } else if (phase === "filling") {
         const data = await api.chat(sessionId, text, null, history, phase, getFilledFields(), rfpType);
@@ -815,6 +831,9 @@ export default function ChatPage() {
                 m.id === aiMsgId ? { ...m, roleSelect: true } : m
               ));
             }
+            // doc_type_required 저장 (소싱담당자 분기용)
+            if (meta.doc_type_required) setLastDocType(meta.doc_type_required);
+            if (meta.rfp_type_hint) setLastRfpTypeHint(meta.rfp_type_hint);
             // 분류 결과 저장 (다음 요청의 카테고리 필터용)
             if (meta.classification) {
               setLastClassification(meta.classification);
@@ -873,9 +892,15 @@ export default function ChatPage() {
                 ));
               }
             } else if (metaData.phase_trigger === "rfp_agreed") {
-              setMessages(prev => prev.map(m =>
-                m.id === aiMsgId ? { ...m, rfpTypeSelect: true } : m
-              ));
+              // RFP 유형 힌트가 있으면 자동 선택 (소싱담당자 교정 분기)
+              const hintType = metaData.rfp_type_hint || lastRfpTypeHint;
+              if (hintType && RFP_TEMPLATES[hintType]) {
+                handleRfpTypeSelect(hintType);
+              } else {
+                setMessages(prev => prev.map(m =>
+                  m.id === aiMsgId ? { ...m, rfpTypeSelect: true } : m
+                ));
+              }
             } else if (metaData.phase_trigger === "rfq_agreed") {
               // 소싱담당자 RFQ — handleRfqTypeSelect로 통일 (대화형 수집, 30% 자동오픈)
               const l3Code = metaData.classification?.l3_code;
@@ -954,10 +979,28 @@ export default function ChatPage() {
     }}>{children}</span>
   );
 
-  // ═══ RFP 유형 선택 카드 (9종, 3×3 그리드) ═══
-  const renderRfpTypeSelector = () => (
-    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginTop:12, position:"relative", zIndex:2 }}>
-      {Object.entries(RFP_TEMPLATES).map(([key, tmpl]) => {
+  // ═══ 소싱담당자용 RFP 허용 카테고리 ═══
+  const PROCUREMENT_RFP_TYPES = new Set(["service_contract", "construction", "consulting"]);
+  const [showAllRfpTypes, setShowAllRfpTypes] = useState(false);
+
+  // ═══ RFP 유형 선택 카드 (소싱담당자: 3종 기본, 전체보기 토글) ═══
+  const renderRfpTypeSelector = () => {
+    const isProcurement = userRole === "procurement";
+    const filteredEntries = Object.entries(RFP_TEMPLATES).filter(([key]) =>
+      !isProcurement || showAllRfpTypes || PROCUREMENT_RFP_TYPES.has(key)
+    );
+    return (
+    <div>
+      {isProcurement && !showAllRfpTypes && (
+        <div style={{ fontSize:10, color: T.sub, marginBottom:6, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <span>소싱 업무에 필요한 RFP 유형</span>
+          <button onClick={() => setShowAllRfpTypes(true)} style={{
+            fontSize:10, color: T.primary, background:"none", border:"none", cursor:"pointer", textDecoration:"underline",
+          }}>전체 보기</button>
+        </div>
+      )}
+    <div style={{ display:"grid", gridTemplateColumns: filteredEntries.length <= 3 ? "1fr 1fr 1fr" : "1fr 1fr 1fr", gap:8, marginTop: isProcurement && !showAllRfpTypes ? 0 : 12, position:"relative", zIndex:2 }}>
+      {filteredEntries.map(([key, tmpl]) => {
         const iconCfg = RFP_TYPE_ICONS[key];
         if (!iconCfg) return null;
         const isRecommended = recommendedRfp === key;
@@ -1007,7 +1050,9 @@ export default function ChatPage() {
         );
       })}
     </div>
+    </div>
   );
+  };
 
   // ═══ PR 카테고리 선택 카드 (차세대 품목체계 L1 11개 대분류) ═══
   const PR_CATEGORY_ICONS = {
@@ -2075,16 +2120,19 @@ export default function ChatPage() {
   const rfqFilled = Object.values(rfqFields).filter(f => f.zone !== "supplier" && (f.value || "").trim()).length;
   const rfqTotal = Object.values(rfqFields).filter(f => f.zone !== "supplier").length;
   const rfqPct = rfqTotal > 0 ? Math.round(rfqFilled / rfqTotal * 100) : 0;
-  const rfqRequiredFilled = Object.entries(rfqFields).filter(([, f]) => f.zone !== "supplier" && f.required !== false && (f.value || "").trim()).length;
-  const rfqRequiredTotal = Object.entries(rfqFields).filter(([, f]) => f.zone !== "supplier" && f.required !== false).length;
+
+  // RFQ 완성도 계산 — rq1~rq5 제외 (PR의 c1~c5 제외와 동일 패턴: 추후 시스템 연동으로 자동 입력)
+  const RFQ_SKIP_KEYS_CALC = new Set(["rq1","rq2","rq3","rq4","rq5"]);
+  const rfqRequiredFilled = Object.entries(rfqFields).filter(([k, f]) => f.zone !== "supplier" && f.required !== false && !RFQ_SKIP_KEYS_CALC.has(k) && (f.value || "").trim()).length;
+  const rfqRequiredTotal = Object.entries(rfqFields).filter(([k, f]) => f.zone !== "supplier" && f.required !== false && !RFQ_SKIP_KEYS_CALC.has(k)).length;
 
   const [rfqOpenSec, setRfqOpenSec] = useState({0:true,1:true,2:true,3:true,4:true});
   const [rfqUserFilledKeys, setRfqUserFilledKeys] = useState(new Set());
   const [rfqFillingTurns, setRfqFillingTurns] = useState(0);
   const RFQ_AUTO_OPEN_PCT = 30;
 
-  // RFQ 자동오픈 (PR과 동일 패턴: 30% 또는 3턴)
-  const rfqRequiredFields = Object.entries(rfqFields).filter(([, f]) => f.zone !== "supplier" && f.required !== false);
+  // RFQ 자동오픈 (PR과 동일 패턴: 30% 또는 3턴, rq1~rq5 제외)
+  const rfqRequiredFields = Object.entries(rfqFields).filter(([k, f]) => f.zone !== "supplier" && f.required !== false && !RFQ_SKIP_KEYS_CALC.has(k));
   const rfqUserFilledPct = rfqRequiredTotal > 0
     ? Math.round(rfqRequiredFields.filter(([k]) => rfqUserFilledKeys.has(k)).length / rfqRequiredTotal * 100) : 0;
 
@@ -2106,6 +2154,185 @@ export default function ChatPage() {
       });
       return updated;
     });
+  };
+
+  // ── RFQ 필드별 선택 옵션 생성 (PR getPrFieldOptions 동일 패턴) ──
+  const RFQ_SKIP_KEYS = new Set(["rq1","rq2","rq3","rq4","rq5"]);  // 발주기관 정보 제외
+  const getRfqFieldOptions = (key, f) => {
+    if (!f) return [];
+    const label = (f.label || "").toLowerCase();
+    // 발주기관 정보: 탭 불필요
+    if (RFQ_SKIP_KEYS.has(key)) return [];
+    // ── DB default가 있으면 우선 ──
+    if (f.options && f.options.length > 0) return f.options;
+    // ── 키워드 기반 옵션 ──
+    // 수량/인원/대수
+    if (label.includes("수량") || label.includes("대수"))
+      return ["5대 미만", "10대", "20대", "50대 이상", "기타"];
+    if (label.includes("인원") || label.includes("명"))
+      return ["10명 이내", "10~50명", "50~100명", "100명 이상"];
+    // 기간/약정/계약기간
+    if (label.includes("기간") || label.includes("약정"))
+      return ["6개월", "12개월", "24개월", "36개월", "협의"];
+    // 납기/납품
+    if (label.includes("납기") || label.includes("납품"))
+      return ["1주 이내", "2주 이내", "1개월 이내", "협의"];
+    // 방식/형태
+    if (label.includes("방식") || label.includes("형태"))
+      return f.default ? [f.default, "협의"] : ["온라인", "오프라인", "혼합", "협의"];
+    // 여부/포함
+    if (label.includes("여부") || label.includes("포함"))
+      return ["포함", "미포함", "협의"];
+    // 주기 (교체/관리/점검)
+    if (label.includes("주기") || label.includes("교체"))
+      return ["3개월", "6개월", "12개월", "협의"];
+    // 결제/지급
+    if (label.includes("결제") || label.includes("지급"))
+      return ["선불", "월 청구", "분기 청구", "납품 후 30일", "협의"];
+    // SLA/지표
+    if (label.includes("sla") || label.includes("지표") || label.includes("품질"))
+      return f.default ? [f.default] : [];
+    // 장소/사업장
+    if (label.includes("장소") || label.includes("사업장"))
+      return ["본사", "전 사업장", "협의"];
+    // 기본값이 있으면 탭으로
+    if (f.default) return [f.default];
+    return [];
+  };
+
+  // ── RFQ 인라인 탭: AI 응답 아래에 다음 미확인 필드 탭 표시 ──
+  const renderRfqInlineTabs = () => {
+    if (!rfqType || !rfqFields || Object.keys(rfqFields).length === 0) return null;
+    const unconfirmed = Object.entries(rfqFields)
+      .filter(([k, f]) => f.zone !== "supplier" && f.required !== false && !RFQ_SKIP_KEYS.has(k) && !rfqUserFilledKeys.has(k));
+    if (unconfirmed.length === 0) return null;
+
+    // 옵션 있는 필드 우선
+    const withOpts = unconfirmed.filter(([k, f]) => getRfqFieldOptions(k, f).length > 0);
+    const [fk, f] = withOpts.length > 0 ? withOpts[0] : unconfirmed[0];
+    const opts = getRfqFieldOptions(fk, f);
+    const currentVal = (f.value || "").trim();
+
+    return (
+      <div style={{ marginTop:10 }}>
+        <div style={{ fontSize:10, fontWeight:600, color: T.sub, marginBottom:6 }}>
+          다음 항목을 입력해 주세요 ({unconfirmed.length}개 남음)
+        </div>
+        <div style={{
+          background: "rgba(6,182,212,0.04)",
+          border: "1px solid rgba(6,182,212,0.12)",
+          borderRadius: 10, padding:"8px 12px",
+        }}>
+          <div style={{ fontSize:11, fontWeight:700, color: T.primary, marginBottom:5, display:"flex", alignItems:"center", gap:4 }}>
+            <span style={{ color: T.red, fontSize:10 }}>*</span>
+            {f.label}
+            {currentVal && <span style={{ fontSize:10, fontWeight:500, color: T.sub, marginLeft:"auto" }}>현재: {currentVal}</span>}
+          </div>
+          <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
+            {opts.map((opt, i) => (
+              <button
+                key={i}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  applyRfqFills({ [fk]: opt });
+                  setRfqFillingTurns(prev => prev + 1);
+                }}
+                style={{
+                  padding:"5px 11px", borderRadius:14, fontSize:11, fontWeight:600,
+                  border: `1px solid ${opt === currentVal ? T.primary : "rgba(6,182,212,0.2)"}`,
+                  background: opt === currentVal ? "rgba(14,165,160,0.1)" : "rgba(255,255,255,0.8)",
+                  color: opt === currentVal ? T.primary : T.text,
+                  cursor:"pointer", fontFamily:"inherit", transition:"all 0.15s",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = "rgba(6,182,212,0.1)"; e.currentTarget.style.borderColor = T.primary; }}
+                onMouseLeave={e => { e.currentTarget.style.background = opt === currentVal ? "rgba(14,165,160,0.1)" : "rgba(255,255,255,0.8)"; e.currentTarget.style.borderColor = opt === currentVal ? T.primary : "rgba(6,182,212,0.2)"; }}
+              >{opt}</button>
+            ))}
+            <button
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setActiveRfqFieldKey(fk);
+                inputRef.current?.focus();
+              }}
+              style={{
+                padding:"5px 11px", borderRadius:14, fontSize:11, fontWeight:600,
+                border:`1px dashed ${activeRfqFieldKey === fk ? T.primary : "rgba(100,116,139,0.3)"}`,
+                background: activeRfqFieldKey === fk ? "rgba(14,165,160,0.08)" : "transparent",
+                color: activeRfqFieldKey === fk ? T.primary : T.muted,
+                cursor:"pointer", fontFamily:"inherit", transition:"all 0.15s",
+              }}
+            >직접 입력</button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // ── RFQ 퀵필 카드: 필수 항목을 탭 형태로 선택 (첫 메시지) ──
+  const renderRfqQuickFillCards = () => {
+    if (!rfqType || !rfqFields || Object.keys(rfqFields).length === 0) return null;
+    const unfilledFields = Object.entries(rfqFields)
+      .filter(([k, f]) => f.zone !== "supplier" && f.required !== false && !RFQ_SKIP_KEYS.has(k) && !(f.value || "").trim());
+    if (unfilledFields.length === 0) return null;
+
+    const withOpts = unfilledFields.filter(([k, f]) => getRfqFieldOptions(k, f).length > 0);
+    const [fk, f] = withOpts.length > 0 ? withOpts[0] : unfilledFields[0];
+    const opts = getRfqFieldOptions(fk, f);
+
+    return (
+      <div style={{ marginTop:12 }}>
+        <div style={{ fontSize:10, color: T.sub, marginBottom:6 }}>
+          필수 항목 {unfilledFields.length}개 남음
+        </div>
+        <div style={{
+          background: "rgba(6,182,212,0.04)",
+          border: "1px solid rgba(6,182,212,0.12)",
+          borderRadius: 10, padding:"10px 14px",
+        }}>
+          <div style={{ fontSize:11, fontWeight:700, color: T.primary, marginBottom:6, display:"flex", alignItems:"center", gap:4 }}>
+            <span style={{ color: T.red, fontSize:10 }}>*</span>
+            {f.label}
+          </div>
+          <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+            {opts.map((opt, i) => (
+              <button
+                key={i}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  applyRfqFills({ [fk]: opt });
+                  setRfqFillingTurns(prev => prev + 1);
+                }}
+                style={{
+                  padding:"6px 12px", borderRadius:16, fontSize:11, fontWeight:600,
+                  border:"1px solid rgba(6,182,212,0.2)", background:"rgba(255,255,255,0.8)",
+                  color: T.text, cursor:"pointer", fontFamily:"inherit", transition:"all 0.15s",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = "rgba(6,182,212,0.1)"; e.currentTarget.style.borderColor = T.primary; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.8)"; e.currentTarget.style.borderColor = "rgba(6,182,212,0.2)"; }}
+              >{opt}</button>
+            ))}
+            <button
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setActiveRfqFieldKey(fk);
+                inputRef.current?.focus();
+              }}
+              style={{
+                padding:"6px 12px", borderRadius:16, fontSize:11, fontWeight:600,
+                border:`1px dashed ${activeRfqFieldKey === fk ? T.primary : "rgba(100,116,139,0.3)"}`,
+                background: activeRfqFieldKey === fk ? "rgba(14,165,160,0.08)" : "transparent",
+                color: activeRfqFieldKey === fk ? T.primary : T.muted,
+                cursor:"pointer", fontFamily:"inherit", transition:"all 0.15s",
+              }}
+            >직접 입력</button>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   const RfqPanelFilling = () => (
@@ -2294,9 +2521,33 @@ export default function ChatPage() {
         <IconParty size={32} />
         <div>
           <div style={{ fontSize:14, fontWeight:800, color: T.greenDark }}>견적서(RFQ) 작성 완료!</div>
-          <div style={{ fontSize:11, color:"#16a34a", marginTop:3 }}>RFP로 전환하거나 미리보기로 확인하세요.</div>
+          <div style={{ fontSize:11, color:"#16a34a", marginTop:3 }}>
+            {lastDocType === "both"
+              ? "제안요청서(RFP) 작성도 필요합니다. 아래 RFP 전환 버튼을 눌러주세요."
+              : "RFP로 전환하거나 미리보기로 확인하세요."}
+          </div>
         </div>
       </div>
+
+      {/* both 케이스: RFP 전환 필수 강조 배너 */}
+      {lastDocType === "both" && (
+        <div style={{
+          background: "linear-gradient(135deg, rgba(245,158,11,0.08), rgba(251,146,60,0.06))",
+          borderRadius: T.r12, padding:"14px 18px", marginBottom:14,
+          border:"1.5px solid rgba(245,158,11,0.2)",
+          display:"flex", alignItems:"center", gap:10,
+        }}>
+          <span style={{ fontSize:20 }}>⚠️</span>
+          <div>
+            <div style={{ fontSize:12, fontWeight:700, color:"#d97706" }}>
+              RFQ + RFP 모두 필요한 품목입니다
+            </div>
+            <div style={{ fontSize:11, color:"#b45309", marginTop:2 }}>
+              견적서 작성이 완료되었습니다. 제안요청서(RFP)도 작성해 주세요.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 문서 헤더 */}
       <div style={{
@@ -2376,11 +2627,13 @@ export default function ChatPage() {
           <IconDownload size={14} /> PDF 다운로드
         </button>
         <button onClick={convertRfqToRfp} style={{
-          flex:1, padding:"14px", borderRadius: T.r10,
-          border:"none", background: T.gradPrimary,
-          color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
+          flex: lastDocType === "both" ? 2 : 1, padding:"14px", borderRadius: T.r10,
+          border:"none",
+          background: lastDocType === "both" ? "linear-gradient(135deg, #f59e0b, #fb923c)" : T.gradPrimary,
+          color:"#fff", fontSize: lastDocType === "both" ? 13 : 12, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
           display:"flex", alignItems:"center", justifyContent:"center", gap:6,
-          transition:"all 0.3s", boxShadow: T.shadowBlue,
+          transition:"all 0.3s", boxShadow: lastDocType === "both" ? "0 4px 12px rgba(245,158,11,0.3)" : T.shadowBlue,
+          animation: lastDocType === "both" ? "pulse-glow 2s ease-in-out infinite" : "none",
         }}
           onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.02)"; }}
           onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
@@ -2392,9 +2645,11 @@ export default function ChatPage() {
     </div>
   );
 
-  // ══ RFQ → RFP 전환 ══
+  // ══ RFQ → RFP 전환 (RFQ 필드값을 RFP로 직접 매핑) ══
+  const RFQ_TO_RFP_MAP = {
+    rq1: "s1", rq2: "s2", rq3: "s3", rq4: "s4", rq5: "s5",  // 발주기관 정보
+  };
   const convertRfqToRfp = () => {
-    // RFQ 필드에서 RFP로 매핑 가능한 값 추출
     const mapping = getPrToRfpMapping(rfqType || prType);
     if (!mapping) return;
 
@@ -2403,11 +2658,30 @@ export default function ChatPage() {
       rfpTemplateFields[k] = { ...v };
     });
 
-    // RFQ 값 중 매칭 가능한 것을 RFP에 복사
-    // 먼저 PR에서 온 공통필드(c→s) 매핑
-    if (prFields && Object.keys(prFields).length > 0) {
+    // 1단계: RFQ 발주기관 정보(rq1~rq5) → RFP 기관 정보(s1~s5) 직접 매핑
+    Object.entries(RFQ_TO_RFP_MAP).forEach(([rfqKey, rfpKey]) => {
+      if (rfqFields[rfqKey]?.value && rfpTemplateFields[rfpKey]) {
+        rfpTemplateFields[rfpKey] = { ...rfpTemplateFields[rfpKey], value: rfqFields[rfqKey].value };
+      }
+    });
+
+    // 2단계: RFQ 필드 라벨 기반 → RFP 필드 라벨 매칭 (동일 라벨이면 값 복사)
+    const rfpByLabel = {};
+    Object.entries(rfpTemplateFields).forEach(([k, v]) => {
+      if (v.label) rfpByLabel[v.label.toLowerCase().trim()] = k;
+    });
+    Object.entries(rfqFields).forEach(([rfqKey, rfqField]) => {
+      if (!rfqField.value || RFQ_TO_RFP_MAP[rfqKey]) return;  // 이미 매핑된 기관 정보 스킵
+      const label = (rfqField.label || "").toLowerCase().trim();
+      if (label && rfpByLabel[label] && rfpTemplateFields[rfpByLabel[label]]) {
+        rfpTemplateFields[rfpByLabel[label]] = { ...rfpTemplateFields[rfpByLabel[label]], value: rfqField.value };
+      }
+    });
+
+    // 3단계: PR 필드가 있으면 PR→RFP 매핑도 추가 (PR→RFQ→RFP 순차 플로우)
+    if (prFields && Object.keys(prFields).length > 0 && mapping.fieldMap) {
       Object.entries(mapping.fieldMap).forEach(([prKey, rfpKey]) => {
-        if (prFields[prKey]?.value && rfpTemplateFields[rfpKey]) {
+        if (prFields[prKey]?.value && rfpTemplateFields[rfpKey] && !rfpTemplateFields[rfpKey].value) {
           rfpTemplateFields[rfpKey] = { ...rfpTemplateFields[rfpKey], value: prFields[prKey].value };
         }
       });
@@ -3100,28 +3374,11 @@ export default function ChatPage() {
                 {/* RFQ 견적서 카테고리 선택 카드 */}
                 {msg.rfqTypeSelect && !rfqType && renderRfqTypeSelector()}
 
-                {/* RFQ 퀵필 카드 — 초기 필수 항목 안내 */}
-                {msg.rfqQuickFill && phase === "rfq_filling" && (
-                  <div style={{ marginTop:8, padding:"12px 16px", borderRadius: T.r12,
-                    background:"rgba(14,165,160,0.04)", border:`1px solid rgba(14,165,160,0.12)` }}>
-                    <div style={{ fontSize:11, fontWeight:700, color: T.primary, marginBottom:6 }}>
-                      필수 항목 {rfqRequiredTotal - rfqRequiredFilled}개 남음
-                    </div>
-                    <div style={{ fontSize:11, color: T.sub }}>
-                      발주기관 정보(기관명, 부서, 담당자, 연락처, 이메일)를 먼저 알려주세요.
-                    </div>
-                  </div>
-                )}
+                {/* RFQ 퀵필 카드 — 초기 필수 항목 탭 (첫 메시지만) */}
+                {msg.rfqQuickFill && phase === "rfq_filling" && renderRfqQuickFillCards()}
 
-                {/* RFQ 인라인 탭 — AI 응답마다 미완 필드 안내 */}
-                {msg.rfqInlineTabs && phase === "rfq_filling" && (
-                  <div style={{ marginTop:8, padding:"10px 14px", borderRadius: T.r10,
-                    background:"rgba(6,182,212,0.04)", border:`1px dashed rgba(14,165,160,0.2)` }}>
-                    <div style={{ fontSize:11, color: T.primary, fontWeight:600 }}>
-                      미입력 필수항목 {rfqRequiredTotal - rfqRequiredFilled}개 · 채팅으로 입력하거나 우측 패널에서 직접 입력하세요
-                    </div>
-                  </div>
-                )}
+                {/* RFQ 인라인 탭 — AI 응답마다 다음 미완 필드 탭 표시 */}
+                {msg.rfqInlineTabs && phase === "rfq_filling" && renderRfqInlineTabs()}
 
                 {/* PR 업로드 결과 → RFP/RFQ 변환 버튼 (procurement만) */}
                 {msg.prUploadResult && userRole === "procurement" && phase === "chat" && (
@@ -3307,18 +3564,20 @@ export default function ChatPage() {
               placeholder={
                 activePrFieldKey && phase === "pr_filling"
                   ? `✎ "${prFields[activePrFieldKey]?.label || activePrFieldKey}" 값을 입력하세요...`
+                  : activeRfqFieldKey && phase === "rfq_filling"
+                  ? `✎ "${rfqFields[activeRfqFieldKey]?.label || activeRfqFieldKey}" 값을 입력하세요...`
                   : phase === "chat" ? (userRole === "procurement" ? "질문을 입력하거나 구매요청서 PDF를 업로드하세요..." : "궁금한 내용을 입력해주세요...")
                   : phase === "complete" ? "공급업체 추천 또는 추가 질문..."
                   : "추가 정보를 입력하세요..."
               }
               style={{
                 flex:1, height:48,
-                background: activePrFieldKey ? "rgba(14,165,160,0.06)" : (inputFocused ? T.card : T.bgSubtle),
-                border:`1.5px solid ${activePrFieldKey ? T.primary : (inputFocused ? T.primary : "transparent")}`,
+                background: (activePrFieldKey || activeRfqFieldKey) ? "rgba(14,165,160,0.06)" : (inputFocused ? T.card : T.bgSubtle),
+                border:`1.5px solid ${(activePrFieldKey || activeRfqFieldKey) ? T.primary : (inputFocused ? T.primary : "transparent")}`,
                 borderRadius: T.r14, padding:"0 16px",
                 color: T.text, fontSize:14, outline:"none", fontFamily:"inherit",
                 transition:"all 0.2s ease",
-                boxShadow: activePrFieldKey ? `0 0 0 3px rgba(14,165,160,0.15)` : (inputFocused ? `0 0 0 3px rgba(14,165,160,0.10)` : "none"),
+                boxShadow: (activePrFieldKey || activeRfqFieldKey) ? `0 0 0 3px rgba(14,165,160,0.15)` : (inputFocused ? `0 0 0 3px rgba(14,165,160,0.10)` : "none"),
               }}
             />
             <button

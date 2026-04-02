@@ -47,3 +47,24 @@ async def get_branch_options(l4_code: str):
     """L4의 지역/공종 분기 옵션 반환."""
     store = get_l4_store()
     return store.get_branch_info(l4_code)
+
+
+@router.post("/selection")
+async def save_supplier_selection(body: dict):
+    """공급업체 선택 저장 (PR 미작성 경로 — 카탈로그/주관부서 등)."""
+    from app.db.supabase_client import get_client
+    try:
+        supabase = get_client()
+        result = supabase.table("supplier_selections").insert({
+            "session_id": body.get("session_id"),
+            "l3_code": body.get("l3_code"),
+            "l4_code": body.get("l4_code"),
+            "l4_name": body.get("l4_name"),
+            "selected_suppliers": body.get("selected_suppliers", []),
+            "bt_type": body.get("bt_type"),
+            "branch1_path": body.get("branch1_path"),
+        }).execute()
+        return {"status": "saved", "id": result.data[0]["id"] if result.data else None}
+    except Exception as e:
+        logger.error(f"Supplier selection save failed: {e}")
+        return {"status": "error", "message": str(e)}

@@ -104,6 +104,17 @@ export const api = {
     const res = await fetch(`${API_URL}/suppliers/l4/branch/${encodeURIComponent(l4Code)}`);
     return res.json();
   },
+  async saveSupplierSelection(sessionId, l3Code, l4Code, l4Name, selectedSuppliers, btType, branch1Path) {
+    const res = await fetch(`${API_URL}/suppliers/l4/selection`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify({
+        session_id: sessionId, l3_code: l3Code, l4_code: l4Code, l4_name: l4Name,
+        selected_suppliers: selectedSuppliers, bt_type: btType, branch1_path: branch1Path,
+      }),
+    });
+    return res.json();
+  },
 
   async getConstitution() {
     const res = await fetch(`${API_URL}/admin/constitution`);

@@ -1544,6 +1544,7 @@ export default function ChatPage() {
                   e.stopPropagation();
                   applyPrFills({ [fk]: opt });
                   setPrFillingTurns(prev => prev + 1);
+                  setMessages(prev => [...prev, { id: msgIdCounter++, role: "assistant", text: `**${f.label}**: ${opt}`, prInlineTabs: true, isQuickFillConfirm: true }]);
                 }}
                 style={{
                   padding:"5px 11px", borderRadius:14, fontSize:11, fontWeight:600,
@@ -1613,6 +1614,7 @@ export default function ChatPage() {
                   e.stopPropagation();
                   applyPrFills({ [fk]: opt });
                   setPrFillingTurns(prev => prev + 1);
+                  setMessages(prev => [...prev, { id: msgIdCounter++, role: "assistant", text: `**${f.label}**: ${opt}`, prInlineTabs: true, isQuickFillConfirm: true }]);
                 }}
                 style={{
                   padding:"6px 12px", borderRadius:16, fontSize:11, fontWeight:600,

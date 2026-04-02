@@ -3271,11 +3271,8 @@ export default function ChatPage() {
                 {/* PR 카테고리 선택 카드 */}
                 {msg.prTypeSelect && !prType && renderPrTypeSelector()}
 
-                {/* PR 퀵필 카드 — 마지막 prQuickFill 메시지에만 표시 */}
-                {msg.prQuickFill && phase === "pr_filling" && mi === messages.findLastIndex(m => m.prQuickFill) && renderPrQuickFillCards()}
-
-                {/* PR 인라인 탭 — 마지막 prInlineTabs 메시지에만 표시 */}
-                {msg.prInlineTabs && phase === "pr_filling" && mi === messages.findLastIndex(m => m.prInlineTabs) && renderPrInlineTabs()}
+                {/* PR 인라인 탭 — 마지막 prQuickFill/prInlineTabs 메시지에만 표시 (퀵필카드도 인라인탭으로 통일) */}
+                {(msg.prQuickFill || msg.prInlineTabs) && phase === "pr_filling" && mi === messages.findLastIndex(m => m.prQuickFill || m.prInlineTabs) && renderPrInlineTabs()}
 
                 {/* RFP 유형 선택 카드 */}
                 {msg.rfpTypeSelect && !rfpType && renderRfpTypeSelector()}

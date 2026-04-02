@@ -754,7 +754,9 @@ export default function ChatPage() {
       } else if (phase === "pr_filling") {
         // ── 일반 대화 모드: 백엔드 PR 필드 추출 ──
         setPrFillingTurns(prev => prev + 1);
-        const data = await api.chat(sessionId, text, null, history, phase, {}, rfpType, prType, getPrFilledFields(), userRole, roleTurnCount);
+        const l4NameFound = l4Options.find(o => o.code === l4Code)?.name || null;
+        const allSuppliers = [...(l4Suppliers?.fixed || []), ...(l4Suppliers?.rotating || [])];
+        const data = await api.chat(sessionId, text, null, history, phase, {}, rfpType, prType, getPrFilledFields(), userRole, roleTurnCount, null, {}, lastClassification?.l3_code || null, l4Code, l4NameFound, allSuppliers);
         if (data.pr_fields && Object.keys(data.pr_fields).length > 0) {
           applyPrFills(data.pr_fields);
         }

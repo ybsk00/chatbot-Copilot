@@ -84,6 +84,10 @@ class ChatRequest(BaseModel):
     user_role: str | None = None        # "user" | "procurement"
     pr_type: str | None = None           # PR 카테고리 키
     pr_filled_fields: dict = {}          # PR 채워진 필드
+    l3_code: str | None = None           # L3 분류 코드
+    l4_code: str | None = None           # L4 세분류 코드
+    l4_name: str | None = None           # L4 세분류 이름
+    selected_suppliers: list[dict] = []  # 선택된 공급업체 목록
     role_turn_count: int = 0             # 역할 감지 턴 카운터
     # RFQ (견적서) 관련
     rfq_type: str | None = None          # RFQ 카테고리 키
@@ -187,6 +191,10 @@ async def chat(req: ChatRequest):
                 "session_id": req.session_id,
                 "pr_type": req.pr_type or "_generic",
                 "fields": req.pr_filled_fields,
+                "l3_code": req.l3_code,
+                "l4_code": req.l4_code,
+                "l4_name": req.l4_name,
+                "selected_suppliers": req.selected_suppliers or [],
                 "status": "draft",
             }).execute()
             result["pr_saved"] = True

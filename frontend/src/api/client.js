@@ -1,7 +1,7 @@
 const API_URL = import.meta.env.VITE_API_URL || "https://ip-assist-backend-1058034030780.asia-northeast3.run.app";
 
 export const api = {
-  async chat(sessionId, message, category, history = [], phase = "chat", filledFields = {}, rfpType = "service_contract", prType = null, prFilledFields = {}, userRole = null, roleTurnCount = 0, rfqType = null, rfqFilledFields = {}) {
+  async chat(sessionId, message, category, history = [], phase = "chat", filledFields = {}, rfpType = "service_contract", prType = null, prFilledFields = {}, userRole = null, roleTurnCount = 0, rfqType = null, rfqFilledFields = {}, l3Code = null, l4Code = null, l4Name = null, selectedSuppliers = []) {
     const res = await fetch(`${API_URL}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json; charset=utf-8" },
@@ -11,6 +11,8 @@ export const api = {
         pr_type: prType, pr_filled_fields: prFilledFields,
         user_role: userRole, role_turn_count: roleTurnCount,
         rfq_type: rfqType, rfq_filled_fields: rfqFilledFields,
+        l3_code: l3Code, l4_code: l4Code, l4_name: l4Name,
+        selected_suppliers: selectedSuppliers,
       }),
     });
     return res.json();

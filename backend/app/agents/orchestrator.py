@@ -413,7 +413,8 @@ class OrchestratorAgent(AgentBase):
                     "user_role": ctx.user_role,
                 })
                 yield self._sse("token", {"content": message})
-                yield from self._emit_l4_events(ctx)
+                for _l4_evt in self._emit_l4_events(ctx):
+                    yield _l4_evt
                 yield self._sse("done", {})
                 return
 
@@ -428,7 +429,8 @@ class OrchestratorAgent(AgentBase):
                     "user_role": ctx.user_role,
                 })
                 yield self._sse("token", {"content": message})
-                yield from self._emit_l4_events(ctx)
+                for _l4_evt in self._emit_l4_events(ctx):
+                    yield _l4_evt
                 yield self._sse("done", {})
                 return
 
@@ -443,7 +445,8 @@ class OrchestratorAgent(AgentBase):
                     "user_role": ctx.user_role,
                 })
                 yield self._sse("token", {"content": message})
-                yield from self._emit_l4_events(ctx)
+                for _l4_evt in self._emit_l4_events(ctx):
+                    yield _l4_evt
                 yield self._sse("done", {})
                 return
 
@@ -500,7 +503,8 @@ class OrchestratorAgent(AgentBase):
             yield self._sse("token", {
                 "content": "구매요청서 작성을 진행하겠습니다. 아래에서 구매 카테고리를 선택해 주십시오."
             })
-            yield from self._emit_l4_events(ctx)
+            for _l4_evt in self._emit_l4_events(ctx):
+                yield _l4_evt
             yield self._sse("done", {})
             return
 
@@ -781,7 +785,8 @@ class OrchestratorAgent(AgentBase):
                 yield self._sse("token", {
                     "content": "구매요청서 작성을 진행하겠습니다. 아래에서 구매 카테고리를 선택해 주십시오."
                 })
-                yield from self._emit_l4_events(ctx)
+                for _l4_evt in self._emit_l4_events(ctx):
+                    yield _l4_evt
                 yield self._sse("done", {})
                 logger.info(f"[Orchestrator] User auto-branch: pr_agreed (l3={l3_code}, cta={cta})")
                 return
@@ -813,7 +818,8 @@ class OrchestratorAgent(AgentBase):
                 })
                 guide_text = _user_guide if _user_guide else f"**{_l3_name}** 관련 구매를 진행할 수 있습니다."
                 yield self._sse("token", {"content": guide_text})
-                yield from self._emit_l4_events(ctx)
+                for _l4_evt in self._emit_l4_events(ctx):
+                    yield _l4_evt
                 if _pr_act != "blocked":
                     yield self._sse("suggestions", {"items": ["구매요청서 작성하기"]})
                 yield self._sse("done", {})

@@ -363,27 +363,26 @@ def _vector_search_l3(question: str) -> dict | None:
         return None
 
 
-# ── CTA 키워드 사전감지 (LLM 결과 보정용) ──
-_CTA_HOT_KEYWORDS = [
-    "설치하고", "도입하고", "계약하고", "발주하고", "구매하고",
-    "설치할", "도입할", "계약할", "발주할", "구매할",
-    "견적", "설치 예정", "도입 예정", "계약 예정",
-    "필요해", "필요합니다", "신청하고", "주문하고",
-    "검토 중", "검토중", "도입 검토", "구매 검토",
+# ── CTA 어간 패턴 기반 사전감지 (LLM 결과 보정용) ──
+_CTA_HOT_STEMS = [
+    "설치", "도입", "계약", "발주", "구매", "신청", "주문", "교체", "이전", "구축",
 ]
-_CTA_WARM_KEYWORDS = [
-    "비교", "차이", "추천", "어떤 게", "뭐가 좋", "얼마나", "얼마",
-    "종류", "옵션", "대안", "선택", "장단점", "비용",
-    "가격", "단가", "견적서", "시세", "시장가",
-]
+_CTA_HOT_SUFFIXES = r"(하고|할|해|하려|하겠|하고자|예정|검토|필요)"
+_CTA_HOT_PATTERN = re.compile(
+    "|".join(rf"{s}{_CTA_HOT_SUFFIXES}" for s in _CTA_HOT_STEMS)
+    + r"|견적|필요해|필요합니다"
+)
+_CTA_WARM_PATTERN = re.compile(
+    r"비교|차이|추천|어떤\s*게|뭐가\s*좋|얼마|종류|옵션|대안|선택|장단점|비용|가격|단가|견적서|시세|시장가"
+)
 
 
 def _detect_cta_keyword(question: str) -> str | None:
-    """키워드 기반 CTA 사전감지. 확실한 경우만 반환."""
+    """어간 패턴 기반 CTA 사전감지. 한국어 동사 활용형을 자동 커버."""
     q = question.lower()
-    if any(kw in q for kw in _CTA_HOT_KEYWORDS):
+    if _CTA_HOT_PATTERN.search(q):
         return "hot"
-    if any(kw in q for kw in _CTA_WARM_KEYWORDS):
+    if _CTA_WARM_PATTERN.search(q):
         return "warm"
     return None
 
@@ -502,7 +501,22 @@ def _enrich_bt_gt(out: dict) -> dict:
             l4_options = l4_store.get_l4_options(l3)
             out["l4_options"] = l4_options
             out["l4_auto"] = len(l4_options) == 1
-            if out["l4_auto"] and l4_options:
+
+            # L4가 2개 이상일 때: 사용자 쿼리로 자동 매칭 시도
+            if not out["l4_auto"] and len(l4_options) > 1:
+                q = question.lower().replace(" ", "")
+                matched = []
+                for opt in l4_options:
+                    name_tokens = opt["name"].replace(" ", "").split("·")
+                    if any(tok in q for tok in name_tokens if len(tok) >= 2):
+                        matched.append(opt)
+                if len(matched) == 1:
+                    out["l4_auto"] = True
+                    out["l4_code"] = matched[0]["code"]
+                    out["l4_name"] = matched[0]["name"]
+                    logger.info(f"L4 쿼리 자동매칭: {matched[0]['name']} (query={question})")
+
+            if out["l4_auto"] and l4_options and not out.get("l4_code"):
                 out["l4_code"] = l4_options[0]["code"]
                 out["l4_name"] = l4_options[0]["name"]
     except Exception as e:
@@ -608,9 +622,9 @@ def classify_intent(question: str, history: list[dict] | None = None) -> dict | 
         if cta not in ("hot", "warm", "cold"):
             cta = "cold"
 
-        # CTA 키워드 보정
+        # CTA 어간 패턴 보정 (LLM CTA 기본 신뢰, cold일 때만 상향)
         kw_cta = _detect_cta_keyword(question)
-        if kw_cta == "hot" and cta != "hot":
+        if kw_cta == "hot" and cta == "cold":
             cta = "hot"
         elif kw_cta == "warm" and cta == "cold":
             cta = "warm"

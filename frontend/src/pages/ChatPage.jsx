@@ -262,6 +262,7 @@ export default function ChatPage() {
   const [prSaved, setPrSaved] = useState(false);
   const [prUserFilledKeys, setPrUserFilledKeys] = useState(new Set());  // 사용자가 채팅으로 채운 필드 키 추적
   const [prFillingTurns, setPrFillingTurns] = useState(0);  // pr_filling에서 사용자 메시지 턴 수
+  const [prManualClosed, setPrManualClosed] = useState(false);  // 사용자가 수동으로 패널 닫았는지
   const [activePrFieldKey, setActivePrFieldKey] = useState(null);  // 자율답변 대상 필드 키
   const [prRequestId, setPrRequestId] = useState(null);
   const [dbPrTemplates, setDbPrTemplates] = useState(null); // DB에서 로드된 PR 템플릿
@@ -322,14 +323,14 @@ export default function ChatPage() {
     }
   }, [messages, isTyping]);
 
-  // PR 패널 자동 오픈: 사용자 답변 30% 이상 또는 대화 3턴 이상
+  // PR 패널 자동 오픈: 사용자 답변 30% 이상 또는 대화 3턴 이상 (수동 닫기 시 억제)
   useEffect(() => {
-    if (phase === "pr_filling" && !prRightVisible) {
+    if (phase === "pr_filling" && !prRightVisible && !prManualClosed) {
       if (prUserFilledPct >= PR_AUTO_OPEN_PCT || prFillingTurns >= 3) {
         setPrRightVisible(true);
       }
     }
-  }, [prUserFilledPct, prFillingTurns, phase, prRightVisible]);
+  }, [prUserFilledPct, prFillingTurns, phase, prRightVisible, prManualClosed]);
 
   // PR 패널 "작성 완료" 버튼 핸들러
   const handlePrManualComplete = () => {
@@ -686,13 +687,13 @@ export default function ChatPage() {
     setPrRightVisible(false);   // 대화로 필드 수집 후 자동 오픈 (PR_AUTO_OPEN_PCT% 도달 시)
     setPrUserFilledKeys(new Set());  // 사용자 채움 추적 초기화
     setPrFillingTurns(0);            // 대화 턴 초기화
+    setPrManualClosed(false);        // 수동 닫기 플래그 초기화
     setActivePrFieldKey(null);       // 자율답변 대상 초기화
     setPhase("pr_filling");
 
     const label = tmpl.name || tmpl.label;
     setMessages(prev => [
       ...prev,
-      { id: msgIdCounter++, role: "user", text: label },
       {
         id: msgIdCounter++, role: "assistant",
         text: `${label} 구매요청서를 준비했습니다.\n아래 항목들을 확인하시고, 채팅으로 내용을 알려주시면 자동으로 채워드립니다.`,
@@ -3616,7 +3617,7 @@ export default function ChatPage() {
               border: `1px solid ${phase === "pr_complete" ? T.greenMid : T.primaryMid}`,
             }}>{phase === "pr_complete" ? "✓ 완료" : "작성 중"}</span>
             <button
-              onClick={() => setPrRightVisible(false)}
+              onClick={() => { setPrRightVisible(false); setPrManualClosed(true); }}
               style={{
                 width:28, height:28, borderRadius:8, border:"none",
                 background:"rgba(100,116,139,0.08)", cursor:"pointer",

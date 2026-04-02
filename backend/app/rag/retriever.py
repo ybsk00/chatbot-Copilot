@@ -336,76 +336,7 @@ def _rrf_fuse(
     return results
 
 
-# ── JSON 직접 응답용 가상 청크 생성 ──
-
-def _build_json_chunks(l3_code: str) -> list[dict]:
-    """L3 JSON 안내 메시지를 가상 청크로 변환 (RAG 스킵, 1순위)"""
-    try:
-        from app.data.routing_data import get_routing_store
-        store = get_routing_store()
-        detail = store.l3_detail.get(l3_code)
-        if not detail:
-            return []
-
-        entry = store.get_routing(l3_code)
-        metadata = {
-            "source_type": "bsm_routing",
-            "l3_code": l3_code,
-            "bt_type": entry.bt_type if entry else "",
-            "gt_code": entry.gt_code if entry else "",
-            "branch1": store.get_branch1_path(l3_code),
-            "branch2": store.get_branch2_sourcing(l3_code),
-        }
-
-        chunks = []
-
-        # 사용자 안내 메시지 청크 (02_L3_detail_guide)
-        user_guide = detail.get("사용자안내", "")
-        if user_guide:
-            entry_method = detail.get("진입방법", "")
-            sla_info = detail.get("Confirm_SLA", "")
-            content = user_guide
-            if entry_method:
-                content += f"\n\n[진입방법] {entry_method}"
-            if sla_info:
-                content += f"\n[처리 SLA] {sla_info}"
-
-            chunks.append({
-                "id": f"bsm-msg-{l3_code}",
-                "content": content,
-                "metadata": {**metadata, "chunk_type": "user_message"},
-                "doc_name": f"BSM_L3_{l3_code}",
-                "category": entry.l1 if entry else "",
-                "similarity": 1.0,
-                "rrf_score": 1.0,
-                "rrf_sources": ["bsm_routing"],
-            })
-
-        # 프로세스 가이드 청크
-        process = store.get_process_guide(l3_code)
-        if process:
-            lines = []
-            for key in sorted(process.keys()):
-                lines.append(f"[{key}] {process[key]}")
-            process_text = "\n".join(lines)
-            chunks.append({
-                "id": f"bsm-proc-{l3_code}",
-                "content": process_text,
-                "metadata": {**metadata, "chunk_type": "process_guide"},
-                "doc_name": f"BSM_Process_{l3_code}",
-                "category": entry.l1 if entry else "",
-                "similarity": 0.99,
-                "rrf_score": 0.95,
-                "rrf_sources": ["bsm_process"],
-            })
-
-        return chunks
-    except Exception as e:
-        logger.warning(f"JSON chunk 생성 실패 (l3={l3_code}): {e}")
-        return []
-
-
-# ── 하이브리드 검색 (JSON 1순위 + BM25/Vector 2순위 + FAQ 3순위 최소폴백) ──
+# ── 하이브리드 검색 (knowledge_chunks 1순위 + FAQ 2순위 최소폴백) ──
 
 def hybrid_search(
     query: str,
@@ -416,22 +347,17 @@ def hybrid_search(
     l3_code: str | None = None,
     user_role: str | None = None,
 ) -> tuple[list[dict], list[float]]:
-    """3단계 하이브리드 검색.
+    """2단계 하이브리드 검색 (모든 데이터는 벡터 DB에 시딩됨).
 
-    [1순위] L3 JSON 직접 조회 — l3_code가 있으면 JSON 안내 메시지를 가상 청크로 반환 (RAG 스킵)
-    [2순위] knowledge_chunks — Vector + BM25 → RRF 리랭킹
-    [3순위] knowledge_faq — 최소 폴백 (boost 0.5, top_k 2)
+    [1순위] knowledge_chunks — Vector + BM25 → RRF 리랭킹
+    [2순위] knowledge_faq — 최소 폴백 (chunks 부족 시)
 
     Returns: (chunks, query_embedding)
     """
     import time
     t0 = time.time()
 
-    # ── [1순위] L3 JSON 직접 조회 — 비활성화 (데이터는 DB에 시딩 완료) ──
-    # _build_json_chunks는 BSM JSON 시딩 파일을 직접 읽는 레거시 코드.
-    # 모든 데이터가 knowledge_chunks에 시딩되었으므로 DB 검색으로 통일.
-
-    # ── [2순위] knowledge_chunks (Vector + BM25 병렬) ──
+    # ── [1순위] knowledge_chunks (Vector + BM25 병렬) ──
     query_embedding = embed_query(query)
     t_embed = time.time()
 

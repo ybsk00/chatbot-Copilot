@@ -182,8 +182,8 @@ class L4SupplierStore:
 
         # S/A 등급: 고정
         fixed = [s for s in suppliers if s.get("grade") in ("S", "A")]
-        # B/C/D 등급: 롤링
-        pool = [s for s in suppliers if s.get("grade") in ("B", "C", "D")]
+        # B/C 등급: 롤링 (D등급 제외)
+        pool = [s for s in suppliers if s.get("grade") in ("B", "C")]
 
         rotating = []
         if pool:

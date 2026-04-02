@@ -284,6 +284,7 @@ export default function ChatPage() {
   const [l4Suppliers, setL4Suppliers] = useState({ fixed: [], rotating: [], eval_criteria: [] });
   const [l4Loading, setL4Loading] = useState(false);
   const [showSuppliers, setShowSuppliers] = useState(false);
+  const [supplierPanelVisible, setSupplierPanelVisible] = useState(false);
   const [selectedSupplierIds, setSelectedSupplierIds] = useState(new Set());
   const msgEndRef  = useRef(null);
   const chatScrollRef = useRef(null);
@@ -529,7 +530,7 @@ export default function ChatPage() {
     setL4ScopeType('nationwide');
     setL4ScopeValue(null);
     setSelectedSupplierIds(new Set());
-    setShowSuppliers(false);
+    setSupplierPanelVisible(true);
     fetchL4Suppliers(l4code);
   };
 
@@ -3140,7 +3141,14 @@ export default function ChatPage() {
                       {(bt.action_buttons || []).length > 0 && (isBlocked || isConditional) && (
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                           {bt.action_buttons.map((btn, i) => (
-                            <button key={i} onClick={() => handleSend(btn)} style={{
+                            <button key={i} onClick={() => {
+                              // L4 옵션이 있으면 공급업체 패널 오픈, 없으면 기존 동작
+                              if (l4Options.length > 0 || l4Suppliers.fixed.length > 0 || l4Suppliers.rotating.length > 0) {
+                                setSupplierPanelVisible(true);
+                              } else {
+                                handleSend(btn);
+                              }
+                            }} style={{
                               padding: "7px 14px", borderRadius: T.r8,
                               fontSize: 12, fontWeight: 600, fontFamily: "inherit",
                               background: i === 0 ? pathStyle.badge : "#fff",
@@ -3384,98 +3392,6 @@ export default function ChatPage() {
                       </button>
                     ))}
                   </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ── 채팅 영역 공급업체 추천 (phase 무관, 데이터 있으면 표시) ── */}
-          {l4Code && (l4Suppliers.fixed.length > 0 || l4Suppliers.rotating.length > 0) && (
-            <div style={{ padding: '0 16px', marginBottom: 12 }}>
-              <button
-                onClick={() => setShowSuppliers(prev => !prev)}
-                style={{
-                  width: '100%', padding: '10px 14px', borderRadius: 10,
-                  border: '1.5px solid rgba(14,165,160,0.25)', background: 'rgba(14,165,160,0.04)',
-                  cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s',
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(14,165,160,0.08)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(14,165,160,0.04)'; }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: '#0ea5a0' }}>추천 공급업체 보기</span>
-                  <span style={{ fontSize: 11, color: '#64748b' }}>
-                    {[...l4Suppliers.fixed, ...l4Suppliers.rotating].length}개사
-                    {selectedSupplierIds.size > 0 && ` · ${selectedSupplierIds.size}개 선택됨`}
-                  </span>
-                </div>
-                <span style={{ fontSize: 11, color: '#94a3b8', transform: showSuppliers ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▼</span>
-              </button>
-              {showSuppliers && (
-                <div style={{ marginTop: 8 }}>
-                  {[...l4Suppliers.fixed, ...l4Suppliers.rotating].map((s, idx) => {
-                    const sid = s.id || `${s.company}_${idx}`;
-                    const isSelected = selectedSupplierIds.has(sid);
-                    return (
-                      <div key={idx}
-                        onClick={() => {
-                          setSelectedSupplierIds(prev => {
-                            const next = new Set(prev);
-                            if (next.has(sid)) next.delete(sid); else next.add(sid);
-                            return next;
-                          });
-                        }}
-                        style={{
-                          background: isSelected ? 'rgba(14,165,160,0.06)' : '#fff',
-                          borderRadius: 10, padding: '12px 14px', marginBottom: 6,
-                          border: `1.5px solid ${isSelected ? '#0ea5a0' : '#e2e8f0'}`,
-                          boxShadow: '0 1px 3px rgba(0,0,0,0.04)', cursor: 'pointer', transition: 'all 0.15s',
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{
-                              width: 18, height: 18, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              fontSize: 11, fontWeight: 700, border: isSelected ? 'none' : '1.5px solid #cbd5e1',
-                              background: isSelected ? '#0ea5a0' : '#fff', color: isSelected ? '#fff' : '#94a3b8',
-                            }}>{isSelected ? '✓' : ''}</span>
-                            <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{s.company}</span>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <span style={{
-                              padding: '2px 7px', borderRadius: 8, fontSize: 9, fontWeight: 700,
-                              color: GRADE_COLORS[s.grade] || '#6B7280', background: GRADE_BG[s.grade] || '#F3F4F6',
-                            }}>{s.grade}</span>
-                            <span style={{ fontSize: 11, fontWeight: 700, color: '#0ea5a0' }}>{s.weighted_score}점</span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {selectedSupplierIds.size > 0 && (
-                    <button
-                      onClick={async () => {
-                        const allSuppliers = [...l4Suppliers.fixed, ...l4Suppliers.rotating];
-                        const selected = allSuppliers.filter(s => selectedSupplierIds.has(s.id || `${s.company}_${allSuppliers.indexOf(s)}`));
-                        const l4NameFound = l4Options.find(o => o.code === l4Code)?.name || null;
-                        const btType = lastClassification?.bt_type || '';
-                        const branch1 = lastClassification?.branch1_path || '';
-                        await api.saveSupplierSelection(sessionId, lastClassification?.l3_code, l4Code, l4NameFound, selected, btType, branch1);
-                        setShowSuppliers(false);
-                        setMessages(prev => [...prev, {
-                          id: msgIdCounter++, role: "assistant",
-                          text: `공급업체 ${selected.length}개사가 저장되었습니다: ${selected.map(s => s.company).join(', ')}`,
-                        }]);
-                      }}
-                      style={{
-                        width: '100%', padding: '10px', borderRadius: 8, border: 'none',
-                        background: 'linear-gradient(135deg, #0ea5a0, #14b8a6)', color: '#fff',
-                        fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
-                        marginTop: 6, transition: 'all 0.2s',
-                      }}
-                    >선택 완료 ({selectedSupplierIds.size}개사)</button>
-                  )}
                 </div>
               )}
             </div>
@@ -4252,6 +4168,149 @@ export default function ChatPage() {
               );
             })()}
           </div>
+        </div>
+      )}
+
+      {/* ════ RIGHT: 공급업체 추천 패널 ════ */}
+      {supplierPanelVisible && !phase.startsWith("pr_") && !rightVisible && (
+        <div style={{
+          width: 380, minWidth: 380, borderLeft: `1px solid ${T.border}`,
+          background: T.bg, display: "flex", flexDirection: "column",
+          animation: "panel-slide-in 0.3s ease-out",
+        }}>
+          {/* 헤더 */}
+          <div style={{
+            padding: "16px 20px", borderBottom: `1px solid ${T.border}`,
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+          }}>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: T.text }}>추천 공급업체</div>
+              <div style={{ fontSize: 11, color: T.sub, marginTop: 2 }}>
+                {l4Options.find(o => o.code === l4Code)?.name || ''} · {[...l4Suppliers.fixed, ...l4Suppliers.rotating].length}개사
+              </div>
+            </div>
+            <button
+              onClick={() => setSupplierPanelVisible(false)}
+              style={{
+                width: 28, height: 28, borderRadius: 8, border: "none",
+                background: "rgba(100,116,139,0.08)", cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                color: T.muted, fontSize: 16,
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(239,68,68,0.1)"; e.currentTarget.style.color = "#ef4444"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "rgba(100,116,139,0.08)"; e.currentTarget.style.color = T.muted; }}
+            >✕</button>
+          </div>
+
+          {/* L4 세분류 선택 (아직 미선택 시) */}
+          {l4Options.length > 1 && !l4Code && (
+            <div style={{ padding: "16px 20px", borderBottom: `1px solid ${T.border}` }}>
+              <div style={{ fontSize: 12, color: T.sub, marginBottom: 8 }}>세분류를 선택하세요</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {l4Options.map(opt => (
+                  <button key={opt.code} onClick={() => handleL4Select(opt.code)}
+                    style={{
+                      padding: '8px 14px', borderRadius: 16, border: '1.5px solid #0ea5a0',
+                      background: 'rgba(14,165,160,0.06)', color: '#0ea5a0', fontSize: 12,
+                      fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                    }}>
+                    {opt.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 공급업체 목록 */}
+          <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px" }} className="custom-scroll">
+            {l4Loading && <div style={{ textAlign: 'center', padding: 30, color: T.muted }}>로딩 중...</div>}
+            {selectedSupplierIds.size > 0 && (
+              <div style={{ fontSize: 11, color: '#0ea5a0', fontWeight: 600, marginBottom: 10 }}>
+                {selectedSupplierIds.size}개 업체 선택됨
+              </div>
+            )}
+            {[...l4Suppliers.fixed, ...l4Suppliers.rotating].map((s, idx) => {
+              const sid = s.id || `${s.company}_${idx}`;
+              const isSelected = selectedSupplierIds.has(sid);
+              return (
+                <div key={idx}
+                  onClick={() => {
+                    setSelectedSupplierIds(prev => {
+                      const next = new Set(prev);
+                      if (next.has(sid)) next.delete(sid); else next.add(sid);
+                      return next;
+                    });
+                  }}
+                  style={{
+                    background: isSelected ? 'rgba(14,165,160,0.06)' : '#fff',
+                    borderRadius: 12, padding: '14px 16px', marginBottom: 8,
+                    border: `1.5px solid ${isSelected ? '#0ea5a0' : '#e2e8f0'}`,
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.04)', cursor: 'pointer', transition: 'all 0.15s',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{
+                        width: 20, height: 20, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 12, fontWeight: 700, border: isSelected ? 'none' : '1.5px solid #cbd5e1',
+                        background: isSelected ? '#0ea5a0' : '#fff', color: isSelected ? '#fff' : '#94a3b8',
+                      }}>{isSelected ? '✓' : ''}</span>
+                      <span style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>{s.company}</span>
+                    </div>
+                    <span style={{
+                      padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 700,
+                      color: GRADE_COLORS[s.grade] || '#6B7280', background: GRADE_BG[s.grade] || '#F3F4F6',
+                    }}>{s.grade} {s.grade_label?.split(' ')[0] || ''}</span>
+                  </div>
+                  <div style={{ marginBottom: 6 }}>
+                    {l4Suppliers.eval_criteria.map(c => {
+                      const score = s[`score_${c.num}`] || 0;
+                      return (
+                        <div key={c.num} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                          <span style={{ fontSize: 9, color: '#94a3b8', width: 90, flexShrink: 0, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{c.name}({c.weight_pct}%)</span>
+                          <div style={{ flex: 1, height: 5, background: '#f1f5f9', borderRadius: 3, overflow: 'hidden' }}>
+                            <div style={{ width: `${(score / 5) * 100}%`, height: '100%', borderRadius: 3, background: score >= 4 ? '#10b981' : score >= 3 ? '#f59e0b' : '#ef4444' }} />
+                          </div>
+                          <span style={{ fontSize: 9, color: '#64748b', width: 18, textAlign: 'right' }}>{score}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f1f5f9', paddingTop: 6 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#0ea5a0' }}>종합 {s.weighted_score}점</span>
+                    {s.revenue_est && <span style={{ fontSize: 10, color: '#94a3b8' }}>{s.revenue_est}</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* 하단 버튼 */}
+          {selectedSupplierIds.size > 0 && (
+            <div style={{ padding: "12px 20px", borderTop: `1px solid ${T.border}` }}>
+              <button
+                onClick={async () => {
+                  const allSuppliers = [...l4Suppliers.fixed, ...l4Suppliers.rotating];
+                  const selected = allSuppliers.filter(s => selectedSupplierIds.has(s.id || `${s.company}_${allSuppliers.indexOf(s)}`));
+                  const l4NameFound = l4Options.find(o => o.code === l4Code)?.name || null;
+                  const btType = lastClassification?.bt_type || '';
+                  const branch1 = lastClassification?.branch1_path || '';
+                  await api.saveSupplierSelection(sessionId, lastClassification?.l3_code, l4Code, l4NameFound, selected, btType, branch1);
+                  setMessages(prev => [...prev, {
+                    id: msgIdCounter++, role: "assistant",
+                    text: `공급업체 ${selected.length}개사가 저장되었습니다: ${selected.map(s => s.company).join(', ')}`,
+                  }]);
+                  setSupplierPanelVisible(false);
+                }}
+                style={{
+                  width: '100%', padding: '12px', borderRadius: 10, border: 'none',
+                  background: 'linear-gradient(135deg, #0ea5a0, #14b8a6)', color: '#fff',
+                  fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+                  boxShadow: '0 2px 8px rgba(14,165,160,0.25)',
+                }}
+              >선택 완료 ({selectedSupplierIds.size}개사 저장)</button>
+            </div>
+          )}
         </div>
       )}
 

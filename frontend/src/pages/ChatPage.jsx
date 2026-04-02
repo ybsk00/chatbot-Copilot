@@ -3271,11 +3271,11 @@ export default function ChatPage() {
                 {/* PR 카테고리 선택 카드 */}
                 {msg.prTypeSelect && !prType && renderPrTypeSelector()}
 
-                {/* PR 퀵필 카드 — 초기 전체 필수 항목 탭 (첫 메시지만) */}
-                {msg.prQuickFill && phase === "pr_filling" && renderPrQuickFillCards()}
+                {/* PR 퀵필 카드 — 마지막 prQuickFill 메시지에만 표시 */}
+                {msg.prQuickFill && phase === "pr_filling" && mi === messages.findLastIndex(m => m.prQuickFill) && renderPrQuickFillCards()}
 
-                {/* PR 인라인 탭 — AI 응답마다 다음 미완 필드 탭 표시 */}
-                {msg.prInlineTabs && phase === "pr_filling" && renderPrInlineTabs()}
+                {/* PR 인라인 탭 — 마지막 prInlineTabs 메시지에만 표시 */}
+                {msg.prInlineTabs && phase === "pr_filling" && mi === messages.findLastIndex(m => m.prInlineTabs) && renderPrInlineTabs()}
 
                 {/* RFP 유형 선택 카드 */}
                 {msg.rfpTypeSelect && !rfpType && renderRfpTypeSelector()}
@@ -3283,11 +3283,11 @@ export default function ChatPage() {
                 {/* RFQ 견적서 카테고리 선택 카드 */}
                 {msg.rfqTypeSelect && !rfqType && renderRfqTypeSelector()}
 
-                {/* RFQ 퀵필 카드 — 초기 필수 항목 탭 (첫 메시지만) */}
-                {msg.rfqQuickFill && phase === "rfq_filling" && renderRfqQuickFillCards()}
+                {/* RFQ 퀵필 카드 — 마지막 rfqQuickFill 메시지에만 표시 */}
+                {msg.rfqQuickFill && phase === "rfq_filling" && mi === messages.findLastIndex(m => m.rfqQuickFill) && renderRfqQuickFillCards()}
 
-                {/* RFQ 인라인 탭 — AI 응답마다 다음 미완 필드 탭 표시 */}
-                {msg.rfqInlineTabs && phase === "rfq_filling" && renderRfqInlineTabs()}
+                {/* RFQ 인라인 탭 — 마지막 rfqInlineTabs 메시지에만 표시 */}
+                {msg.rfqInlineTabs && phase === "rfq_filling" && mi === messages.findLastIndex(m => m.rfqInlineTabs) && renderRfqInlineTabs()}
 
                 {/* PR 업로드 결과 → RFP/RFQ 변환 버튼 (procurement만) */}
                 {msg.prUploadResult && userRole === "procurement" && phase === "chat" && (

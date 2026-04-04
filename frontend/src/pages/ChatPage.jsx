@@ -4748,8 +4748,62 @@ export default function ChatPage() {
 
           {/* 본문 — PR 패널과 동일 스크롤 */}
           <div className="custom-scroll" style={{ flex:1, overflowY:"auto", padding:"20px 22px" }}>
-            {/* 3탭 네비게이션 — PR 패널과 동일 스타일 */}
-            {(() => {
+
+            {/* ── 계약서 완료 상태: 성공 배너 + 문서 헤더 ── */}
+            {phase === "contract_complete" && (
+              <>
+                <div style={{
+                  background: `linear-gradient(135deg, rgba(16,185,129,0.08), rgba(14,165,160,0.06))`,
+                  borderRadius: T.r16, padding:"18px 22px", marginBottom:18,
+                  border:`1.5px solid rgba(16,185,129,0.15)`,
+                  display:"flex", alignItems:"center", gap:14,
+                }}>
+                  <IconParty size={32} />
+                  <div>
+                    <div style={{ fontSize:14, fontWeight:800, color: T.greenDark }}>계약서 작성 완료!</div>
+                    <div style={{ fontSize:11, color:"#16a34a", marginTop:3 }}>미리보기로 확인 후 다운로드하세요.</div>
+                  </div>
+                </div>
+                <div style={{
+                  background: 'rgba(255,255,255,0.8)', borderRadius: T.r16, padding:"22px 28px", textAlign:"center",
+                  marginBottom:16, border:`1.5px solid rgba(14,165,160,0.15)`,
+                  boxShadow:'0 2px 12px rgba(14,165,160,0.06)',
+                  position:"relative", overflow:"hidden",
+                  backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)",
+                }}>
+                  <div style={{ position:"absolute", top:0, left:0, right:0, height:3, background: T.gradTeal }} />
+                  <div style={{ fontSize:10, letterSpacing:3, color: T.sub, marginBottom:8 }}>간접구매 표준 양식</div>
+                  <div style={{ fontSize:20, fontWeight:900, letterSpacing:4, color: T.navy }}>
+                    {(contractTemplate?.contract_name || "계약서").replace("계약서", "계 약 서")}
+                  </div>
+                </div>
+                {/* 당사자 요약 */}
+                <div style={{ display:"flex", gap:10, marginBottom:12 }}>
+                  {[
+                    { label: "발주자 (갑)", name: contractFields.buyer_name, rep: contractFields.buyer_rep },
+                    { label: "수주자 (을)", name: contractFields.supplier_name, rep: contractFields.supplier_rep },
+                  ].map((p, i) => (
+                    <div key={i} style={{ flex:1, padding:"12px 14px", borderRadius:T.r10, border:`1px solid ${T.border}`, background:"rgba(255,255,255,0.7)" }}>
+                      <div style={{ fontSize:10, fontWeight:700, color:T.primary, marginBottom:4 }}>{p.label}</div>
+                      <div style={{ fontSize:12, fontWeight:600, color:T.navy }}>{p.name || "—"}</div>
+                      <div style={{ fontSize:11, color:T.sub }}>{p.rep || ""}</div>
+                    </div>
+                  ))}
+                </div>
+                {/* 핵심 조항 요약 */}
+                {(contractTemplate?.key_articles || []).map((ka, i) => (
+                  <div key={i} style={{ padding:"8px 16px", borderBottom:`1px solid ${T.borderLight}`, fontSize:12, display:"flex", gap:8 }}>
+                    <span style={{ fontWeight:600, color:T.navy, minWidth:120 }}>{ka.num} [{ka.title}]</span>
+                    <span style={{ color:T.sub }}>
+                      {Object.entries(ka.fields || {}).map(([fk, fd]) => contractFields[fk] || "—").join(" / ")}
+                    </span>
+                  </div>
+                ))}
+              </>
+            )}
+
+            {/* ── 계약서 작성 중: 3탭 편집 ── */}
+            {phase === "contract_filling" && (() => {
               const tabGroups = [
                 { key: "party", label: "당사자 정보", icon: "👤" },
                 { key: "articles", label: "핵심 계약조항", icon: "📝" },

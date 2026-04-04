@@ -387,26 +387,91 @@ def _detect_cta_keyword(question: str) -> str | None:
     return None
 
 
+# ── 의도 키워드: 질문의 맥락으로 L3 가산/감산 ──
+# "용역/외주/위탁/대행" → 서비스 구매 (용역 계열 L3 가산)
+# "도구/툴/라이선스/구독" → 도구/SW 구매 (도구 계열 L3 가산)
+# "구매/납품/발주" → 물품 구매 (물품 계열 L3 가산)
+_INTENT_BOOST = {
+    # 용역/외주 의도 → 용역 계열 가산
+    "용역": {"boost_l2": ["개발 용역", "용역", "컨설팅", "대행"], "penalty_l2": ["도구", "라이선스", "SW"]},
+    "외주": {"boost_l2": ["개발 용역", "용역", "컨설팅", "대행"], "penalty_l2": ["도구", "라이선스", "SW"]},
+    "위탁": {"boost_l2": ["개발 용역", "용역", "컨설팅", "대행"], "penalty_l2": ["도구"]},
+    "대행": {"boost_l2": ["대행", "용역"], "penalty_l2": ["도구"]},
+    "아웃소싱": {"boost_l2": ["개발 용역", "용역"], "penalty_l2": ["도구"]},
+    # 도구/SW 의도 → 도구 계열 가산
+    "도구": {"boost_l2": ["도구", "SW", "라이선스"], "penalty_l2": ["개발 용역"]},
+    "툴": {"boost_l2": ["도구", "SW", "라이선스"], "penalty_l2": ["개발 용역"]},
+    "라이선스": {"boost_l2": ["라이선스", "SW", "클라우드"], "penalty_l2": ["개발 용역"]},
+    "구독": {"boost_l2": ["구독", "클라우드", "SW"], "penalty_l2": ["개발 용역"]},
+    # 공사/시설 의도
+    "공사": {"boost_l2": ["공사", "시설"], "penalty_l2": ["도구", "SW"]},
+    "설치": {"boost_l2": ["공사", "시설", "렌탈"], "penalty_l2": []},
+}
+
+
 def _keyword_pre_match(question: str) -> dict | None:
-    """키워드 기반 L3 사전 매칭 (LLM 호출 전 빠른 감지)"""
+    """키워드 기반 L3 사전 매칭 — 가중치 + 의도 키워드 보정.
+
+    A) 긴 키워드에 높은 가중치: len 1~2=0.5, 3~4=1.0, 5+=1.5+0.3/char
+    B) 의도 키워드(용역/외주/도구 등)로 L2 계열 가산/감산
+    """
     cache = _load_taxonomy()
     if not cache["keyword_to_l3"]:
         return None
 
     q_lower = question.lower()
-    scores = {}  # l3_code → hit count
+    scores = {}  # l3_code → weighted score
 
+    # A) 키워드 가중치 매칭
     for kw, l3_codes in cache["keyword_to_l3"].items():
         if kw in q_lower:
+            # 긴 키워드일수록 더 구체적 → 높은 가중치
+            kw_len = len(kw)
+            if kw_len <= 2:
+                weight = 0.5
+            elif kw_len <= 4:
+                weight = 1.0
+            else:
+                weight = 1.5 + (kw_len - 5) * 0.3
             for code in l3_codes:
-                scores[code] = scores.get(code, 0) + 1
+                scores[code] = scores.get(code, 0) + weight
 
     if not scores:
         return None
 
-    # 가장 많이 매칭된 L3
+    # 기본 키워드 점수만으로 최소 threshold 확인 (의도 보정 전)
+    base_best = max(scores.values())
+    if base_best < 1.5:
+        # 기본 점수가 너무 낮으면 의도 보정해도 신뢰 불가 → 2/3단계로 위임
+        return None
+
+    # B) 의도 키워드 보정
+    for intent_kw, rules in _INTENT_BOOST.items():
+        if intent_kw in q_lower:
+            for code, _ in list(scores.items()):
+                l3 = cache["l3_map"].get(code)
+                if not l3:
+                    continue
+                l2_code = l3.get("parent_code", "")
+                l2_name = cache["l2_map"].get(l2_code, {}).get("name", "")
+                l3_name = l3.get("name", "")
+                combined = l2_name + " " + l3_name
+
+                # boost: L2/L3 이름에 부스트 키워드 포함 시 가산
+                for bkw in rules.get("boost_l2", []):
+                    if bkw in combined:
+                        scores[code] += 2.0
+                        break
+
+                # penalty: L2/L3 이름에 페널티 키워드 포함 시 감산
+                for pkw in rules.get("penalty_l2", []):
+                    if pkw in combined:
+                        scores[code] -= 1.5
+                        break
+
+    # 최고 점수 L3 선택
     best_l3_code = max(scores, key=scores.get)
-    if scores[best_l3_code] < 2:  # 최소 2개 키워드 매칭 필요 (1개는 오매칭 위험)
+    if scores[best_l3_code] < 2.0:  # 최소 가중치합 2.0 이상
         return None
 
     l3 = cache["l3_map"].get(best_l3_code)

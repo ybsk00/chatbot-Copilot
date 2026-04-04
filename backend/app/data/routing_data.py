@@ -289,6 +289,22 @@ class RoutingDataStore:
             return _DEFAULT_RFP_TYPE
         return _L1_TO_RFP_TYPE.get(entry.l1, _DEFAULT_RFP_TYPE)
 
+    def get_contract_type_for_l3(self, l3_code: str) -> str | None:
+        """L3의 계약유형(A~L) 반환. DB contract_templates.l3_codes에서 조회."""
+        if not hasattr(self, "_l3_to_contract"):
+            self._l3_to_contract: dict[str, str] = {}
+            try:
+                from app.db.supabase_client import get_client
+                rows = get_client().table("contract_templates").select("contract_type, l3_codes").execute().data or []
+                for r in rows:
+                    ct = r.get("contract_type", "")
+                    for code in r.get("l3_codes") or []:
+                        self._l3_to_contract[code] = ct
+                logger.info("Contract L3 mapping loaded: %d entries", len(self._l3_to_contract))
+            except Exception:
+                logger.warning("Contract L3 mapping load failed")
+        return self._l3_to_contract.get(l3_code)
+
     # ── 일반 조회 ────────────────────────────────────────
 
     def get_routing(self, l3_code: str) -> RoutingEntry | None:
@@ -357,6 +373,7 @@ class RoutingDataStore:
             "branch2_sourcing": entry.branch2_sourcing,
             "doc_type_required": self.get_doc_type_required(l3_code),
             "rfp_type_hint": self.get_rfp_type_for_l3(l3_code),
+            "contract_type": self.get_contract_type_for_l3(l3_code),
             "action_buttons": self.get_action_buttons(l3_code),
             "dept": entry.dept,
             "sla": self.get_sla(l3_code),

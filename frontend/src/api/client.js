@@ -330,4 +330,24 @@ export const api = {
     const res = await fetch(`${API_URL}/admin/rfp-requests/session/${sessionId}`);
     return res.json();
   },
+
+  // ── 계약서 ──
+  async getContractTemplate(l3Code) {
+    const res = await fetch(`${API_URL}/contracts/template/${l3Code}`);
+    if (!res.ok) return null;
+    return res.json();
+  },
+  async getContractTemplateByType(contractType) {
+    const res = await fetch(`${API_URL}/contracts/template-by-type/${contractType}`);
+    if (!res.ok) return null;
+    return res.json();
+  },
+  async saveContract(data) {
+    const res = await fetch(`${API_URL}/contracts/save`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  },
 };

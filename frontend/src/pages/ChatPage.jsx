@@ -286,6 +286,14 @@ export default function ChatPage() {
   const [showSuppliers, setShowSuppliers] = useState(false);
   const [supplierPanelVisible, setSupplierPanelVisible] = useState(false);
   const [selectedSupplierIds, setSelectedSupplierIds] = useState(new Set());
+  // 계약서 state
+  const [contractType, setContractType] = useState(null);          // "A"~"L"
+  const [contractTemplate, setContractTemplate] = useState(null);  // DB 템플릿
+  const [contractFields, setContractFields] = useState({});        // 입력 필드값
+  const [contractRightVisible, setContractRightVisible] = useState(false);
+  const [contractSaved, setContractSaved] = useState(false);
+  const [contractRequestId, setContractRequestId] = useState(null);
+  const [contractTab, setContractTab] = useState(0);               // 0=당사자, 1=핵심조항, 2=특약
   const msgEndRef  = useRef(null);
   const chatScrollRef = useRef(null);
   const fieldRefs  = useRef({});
@@ -505,6 +513,60 @@ export default function ChatPage() {
       ...prev,
       { id: msgIdCounter++, role: "assistant", text: `구매요청서 내용을 기반으로 **${rfqTpl.name}** 견적서(RFQ)를 준비했습니다.\n소싱담당자 필수 항목을 채워주세요. 채팅으로 입력하시면 자동 매핑됩니다.` }
     ]);
+  };
+
+  // ── PR → 계약서 전환 ──
+  const convertPrToContract = async () => {
+    const l3 = lastClassification?.l3_code;
+    const ctType = lastClassification?.contract_type;
+    try {
+      const tpl = ctType
+        ? await api.getContractTemplateByType(ctType)
+        : l3 ? await api.getContractTemplate(l3) : null;
+      if (!tpl) {
+        setMessages(prev => [...prev, { id: msgIdCounter++, role: "assistant", text: "이 품목에 매핑된 계약서 템플릿이 없습니다." }]);
+        return;
+      }
+
+      // PR 필드 → 계약서 필드 자동매핑
+      const autoFilled = {};
+      // 발주자 정보
+      autoFilled.buyer_name = prFields.c1?.value || "";
+      autoFilled.buyer_contact = prFields.c3?.value || "";
+      autoFilled.buyer_phone = prFields.c4?.value || "";
+      autoFilled.buyer_email = prFields.c5?.value || "";
+      // 수주자 정보 (선택된 공급업체)
+      const allSup = [...(l4Suppliers.fixed || []), ...(l4Suppliers.rotating || [])];
+      const selSup = allSup.filter(s => selectedSupplierIds.has(s.id || s.company));
+      if (selSup.length > 0) {
+        autoFilled.supplier_name = selSup[0].company || "";
+      }
+      // 핵심 조항 필드 자동매핑 (pr_map)
+      for (const ka of tpl.key_articles || []) {
+        for (const [fk, fd] of Object.entries(ka.fields || {})) {
+          if (fd.pr_map && prFields[fd.pr_map]?.value) {
+            autoFilled[fk] = prFields[fd.pr_map].value;
+          }
+        }
+      }
+
+      setContractType(tpl.contract_type);
+      setContractTemplate(tpl);
+      setContractFields(autoFilled);
+      setContractSaved(false);
+      setContractTab(0);
+      setPhase("contract_filling");
+      setContractRightVisible(true);
+      setPrRightVisible(false);
+
+      setMessages(prev => [...prev, {
+        id: msgIdCounter++, role: "assistant",
+        text: `구매요청서 내용을 기반으로 **${tpl.contract_name}**를 준비했습니다.\n당사자 정보와 핵심 계약조건을 확인해 주세요.`
+      }]);
+    } catch (e) {
+      console.warn("Contract template load failed:", e);
+      setMessages(prev => [...prev, { id: msgIdCounter++, role: "assistant", text: "계약서 템플릿 로드에 실패했습니다." }]);
+    }
   };
 
   // ── L4 공급업체 추천 ──
@@ -887,7 +949,9 @@ export default function ChatPage() {
             }
             // 분류 결과 저장 (다음 요청의 카테고리 필터용)
             if (meta.classification) {
-              setLastClassification(meta.classification);
+              const cls = { ...meta.classification };
+              if (meta.bt_routing?.contract_type) cls.contract_type = meta.bt_routing.contract_type;
+              setLastClassification(cls);
               if (meta.classification.rfp_type) {
                 setRecommendedRfp(meta.classification.rfp_type);
               }
@@ -2964,6 +3028,8 @@ export default function ChatPage() {
                 setUserRole(null); setRoleTurnCount(0); setPrType(null); setPrFields({}); setPrJustFilled(new Set()); setPrRightVisible(false); setPrSaved(false);
                 // L4 공급업체 초기화
                 setL4Code(null); setL4Options([]); setL4Branch(null); setL4ScopeType('nationwide'); setL4ScopeValue(null); setL4Suppliers({fixed:[], rotating:[], eval_criteria:[]});
+                // 계약서 초기화
+                setContractType(null); setContractTemplate(null); setContractFields({}); setContractRightVisible(false); setContractSaved(false); setContractRequestId(null); setContractTab(0);
               }}
               style={{
                 width:34, height:34, borderRadius: T.r8,
@@ -3140,8 +3206,12 @@ export default function ChatPage() {
                       </div>
                       {(bt.action_buttons || []).length > 0 && (isBlocked || isConditional) && (
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                          {bt.action_buttons.map((btn, i) => (
+                          {[...(bt.action_buttons || []), ...(isConditional ? ["계약서 작성하기"] : [])].map((btn, i) => (
                             <button key={i} onClick={() => {
+                              if (btn === "계약서 작성하기") {
+                                convertPrToContract();
+                                return;
+                              }
                               // L4 옵션이 있으면 공급업체 패널 오픈, 없으면 기존 동작
                               if (l4Options.length > 0 || l4Suppliers.fixed.length > 0 || l4Suppliers.rotating.length > 0) {
                                 setSupplierPanelVisible(true);
@@ -3223,6 +3293,8 @@ export default function ChatPage() {
                                 rfpTypeSelect: true },
                             ]);
                           }
+                        } else if (item === "계약서 작성하기") {
+                          convertPrToContract();
                         } else {
                           handleSend(item);
                         }
@@ -3882,6 +3954,18 @@ export default function ChatPage() {
                     >
                       <IconDownload size={13} /> RFQ 전환
                     </button>
+                    <button onClick={convertPrToContract} style={{
+                      flex:"1 1 100%", padding:"14px", borderRadius: T.r10,
+                      border:"none", background: "linear-gradient(135deg, #059669, #10b981)",
+                      color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
+                      display:"flex", alignItems:"center", justifyContent:"center", gap:6, transition:"all 0.3s",
+                      boxShadow: "0 2px 8px rgba(5,150,105,0.3)",
+                    }}
+                      onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.02)"; }}
+                      onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
+                    >
+                      <span style={{fontSize:14}}>📋</span> 계약서 작성
+                    </button>
                   </div>
                 )}
 
@@ -4330,7 +4414,12 @@ export default function ChatPage() {
                   const selected = allSuppliers.filter(s => selectedSupplierIds.has(s.id || `${s.company}_${allSuppliers.indexOf(s)}`));
                   const l4NameFound = l4Options.find(o => o.code === l4Code)?.name || null;
                   await api.saveSupplierSelection(sessionId, lastClassification?.l3_code, l4Code, l4NameFound, selected, lastClassification?.bt_type || '', lastClassification?.branch1_path || '');
-                  setMessages(prev => [...prev, { id: msgIdCounter++, role:"assistant", text:`공급업체 ${selected.length}개사가 저장되었습니다: ${selected.map(s => s.company).join(', ')}` }]);
+                  const prAction = lastClassification?.pr_action || lastClassification?.branch1_path;
+                  const canContract = prAction !== "blocked" && !["A_카탈로그직접발주","B_주관부서신청"].includes(prAction);
+                  setMessages(prev => [...prev, { id: msgIdCounter++, role:"assistant",
+                    text: `공급업체 ${selected.length}개사가 저장되었습니다: ${selected.map(s => s.company).join(', ')}` + (canContract ? `\n\n선택한 업체와 **계약서를 작성**하시겠습니까?` : ""),
+                    ...(canContract ? { suggestions: ["계약서 작성하기"] } : {}),
+                  }]);
                   setSupplierPanelVisible(false);
                 }}
                 style={{
@@ -4483,6 +4572,233 @@ export default function ChatPage() {
           </div>
           {phase === "rfq_filling" && RfqPanelFilling()}
           {phase === "rfq_complete" && RfqPanelComplete()}
+        </div>
+      )}
+
+      {/* ── 계약서 패널 ── */}
+      {contractRightVisible && (phase === "contract_filling" || phase === "contract_complete") && contractTemplate && (
+        <div style={{
+          width:440, height:"85vh", position:"fixed", right:24, top:"7.5vh",
+          background:"rgba(255,255,255,0.72)", backdropFilter:"blur(30px) saturate(1.4)",
+          WebkitBackdropFilter:"blur(30px) saturate(1.4)", borderRadius:T.r24,
+          border:"1px solid rgba(5,150,105,0.12)",
+          boxShadow:"0 4px 24px rgba(5,150,105,0.08), 0 1px 3px rgba(0,0,0,0.06)",
+          display:"flex", flexDirection:"column", overflow:"hidden", zIndex:100,
+          animation:"panel-slide-in 0.45s cubic-bezier(0.16, 1, 0.3, 1)",
+        }}>
+          {/* 헤더 */}
+          <div style={{ padding:"16px 20px", borderBottom:`1px solid ${T.border}`, display:"flex", alignItems:"center", gap:10, flexShrink:0 }}>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:14, fontWeight:700, color:T.text, display:"flex", alignItems:"center", gap:6 }}>
+                <span style={{fontSize:16}}>📋</span> {contractTemplate.contract_name}
+              </div>
+              <div style={{ fontSize:10, color:T.sub, marginTop:2 }}>
+                전체 {contractTemplate.total_articles}개 조항 중 핵심 {(contractTemplate.key_articles||[]).length}개 입력
+              </div>
+            </div>
+            <span style={{
+              fontSize:10, padding:"4px 10px", borderRadius:20, fontWeight:600,
+              background: phase === "contract_complete" ? T.greenLight : "rgba(5,150,105,0.08)",
+              color: phase === "contract_complete" ? T.greenDark : "#059669",
+              border: `1px solid ${phase === "contract_complete" ? T.greenMid : "rgba(5,150,105,0.2)"}`,
+            }}>{phase === "contract_complete" ? "작성 완료" : "작성 중"}</span>
+            <button onClick={() => { setContractRightVisible(false); }} style={{
+              width:28, height:28, borderRadius:8, border:"none", background:"rgba(100,116,139,0.08)",
+              cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
+              color:T.muted, fontSize:16, lineHeight:1, transition:"all 0.15s",
+            }}
+              onMouseEnter={e => { e.currentTarget.style.background="rgba(239,68,68,0.1)"; e.currentTarget.style.color="#ef4444"; }}
+              onMouseLeave={e => { e.currentTarget.style.background="rgba(100,116,139,0.08)"; e.currentTarget.style.color=T.muted; }}
+            >✕</button>
+          </div>
+
+          {/* 3탭 */}
+          <div style={{ display:"flex", borderBottom:`1px solid ${T.border}`, flexShrink:0 }}>
+            {[{label:"당사자 정보",icon:"👤"},{label:"핵심 계약조항",icon:"📝"},{label:"특약사항",icon:"📌"}].map((t,i) => (
+              <button key={i} onClick={() => setContractTab(i)} style={{
+                flex:1, padding:"10px 0", border:"none", cursor:"pointer", fontFamily:"inherit",
+                fontSize:12, fontWeight: contractTab===i ? 700 : 500,
+                color: contractTab===i ? "#059669" : T.sub,
+                background: contractTab===i ? "rgba(5,150,105,0.06)" : "transparent",
+                borderBottom: contractTab===i ? "2px solid #059669" : "2px solid transparent",
+                transition:"all 0.2s",
+              }}>{t.icon} {t.label}</button>
+            ))}
+          </div>
+
+          {/* 탭 내용 */}
+          <div style={{ flex:1, overflowY:"auto", padding:"16px 20px" }}>
+
+            {/* 탭0: 당사자 정보 */}
+            {contractTab === 0 && (
+              <div>
+                <div style={{ fontSize:13, fontWeight:700, color:"#059669", marginBottom:10 }}>발주자 (갑)</div>
+                {["buyer_name","buyer_rep","buyer_addr","buyer_brn","buyer_contact","buyer_phone","buyer_email"].map(k => {
+                  const cf = (contractTemplate.common_fields||{})[k];
+                  if (!cf) return null;
+                  return (
+                    <div key={k} style={{ marginBottom:8 }}>
+                      <label style={{ fontSize:11, fontWeight:600, color:T.sub, display:"block", marginBottom:2 }}>
+                        {cf.label} {cf.required && <span style={{color:"#ef4444"}}>*</span>}
+                      </label>
+                      <input value={contractFields[k]||""} onChange={e => setContractFields(prev => ({...prev, [k]:e.target.value}))}
+                        style={{ width:"100%", padding:"8px 10px", borderRadius:8, border:`1px solid ${T.border}`, fontSize:13, fontFamily:"inherit", outline:"none" }}
+                        placeholder={cf.label} />
+                    </div>
+                  );
+                })}
+                <div style={{ fontSize:13, fontWeight:700, color:"#059669", margin:"16px 0 10px" }}>수주자 (을)</div>
+                {["supplier_name","supplier_rep","supplier_addr","supplier_brn"].map(k => {
+                  const cf = (contractTemplate.common_fields||{})[k];
+                  if (!cf) return null;
+                  return (
+                    <div key={k} style={{ marginBottom:8 }}>
+                      <label style={{ fontSize:11, fontWeight:600, color:T.sub, display:"block", marginBottom:2 }}>
+                        {cf.label} {cf.required && <span style={{color:"#ef4444"}}>*</span>}
+                      </label>
+                      <input value={contractFields[k]||""} onChange={e => setContractFields(prev => ({...prev, [k]:e.target.value}))}
+                        style={{ width:"100%", padding:"8px 10px", borderRadius:8, border:`1px solid ${T.border}`, fontSize:13, fontFamily:"inherit", outline:"none" }}
+                        placeholder={cf.label} />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* 탭1: 핵심 계약조항 */}
+            {contractTab === 1 && (
+              <div>
+                {(contractTemplate.key_articles||[]).map((ka, ai) => (
+                  <div key={ai} style={{
+                    marginBottom:12, padding:"12px 14px", borderRadius:10,
+                    border: ka.star ? "1px solid rgba(5,150,105,0.3)" : `1px solid ${T.border}`,
+                    background: ka.star ? "rgba(5,150,105,0.02)" : T.card,
+                  }}>
+                    <div style={{ fontSize:13, fontWeight:700, color:T.text, marginBottom:4, display:"flex", alignItems:"center", gap:6 }}>
+                      {ka.num} [{ka.title}]
+                      {ka.star && <span style={{ fontSize:10, color:"#059669", fontWeight:600, background:"rgba(5,150,105,0.1)", padding:"2px 6px", borderRadius:4 }}>★발주자유리</span>}
+                    </div>
+                    <div style={{ fontSize:11, color:T.sub, lineHeight:1.5, marginBottom:8, whiteSpace:"pre-line" }}>
+                      {(ka.summary||"").slice(0, 200)}{(ka.summary||"").length > 200 ? "..." : ""}
+                    </div>
+                    {Object.entries(ka.fields||{}).map(([fk, fd]) => (
+                      <div key={fk} style={{ marginBottom:6 }}>
+                        <label style={{ fontSize:11, fontWeight:600, color:"#059669", display:"block", marginBottom:2 }}>
+                          {fd.label} {fd.required && <span style={{color:"#ef4444"}}>*</span>}
+                        </label>
+                        {fd.type === "select" ? (
+                          <select value={contractFields[fk]||""} onChange={e => setContractFields(prev => ({...prev, [fk]:e.target.value}))}
+                            style={{ width:"100%", padding:"8px 10px", borderRadius:8, border:`1px solid ${T.border}`, fontSize:13, fontFamily:"inherit" }}>
+                            <option value="">선택</option>
+                            {(fd.options||[]).map(o => <option key={o} value={o}>{o}</option>)}
+                          </select>
+                        ) : (
+                          <input value={contractFields[fk]||""} onChange={e => setContractFields(prev => ({...prev, [fk]:e.target.value}))}
+                            style={{ width:"100%", padding:"8px 10px", borderRadius:8, border:`1px solid ${T.border}`, fontSize:13, fontFamily:"inherit", outline:"none" }}
+                            placeholder={fd.label} />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+                <div style={{ padding:"10px 12px", borderRadius:8, background:"rgba(5,150,105,0.04)", border:"1px dashed rgba(5,150,105,0.2)", fontSize:12, color:T.sub, textAlign:"center" }}>
+                  📌 나머지 {contractTemplate.total_articles - (contractTemplate.key_articles||[]).length}개 조항은 표준 조건이 적용됩니다.
+                  <br/>미리보기에서 전문을 확인할 수 있습니다.
+                </div>
+              </div>
+            )}
+
+            {/* 탭2: 특약사항 */}
+            {contractTab === 2 && (
+              <div>
+                <div style={{ fontSize:12, color:T.sub, marginBottom:8 }}>표준 계약 조건 외 별도로 합의한 사항을 기재하세요.</div>
+                <textarea value={contractFields._special_terms||""} onChange={e => setContractFields(prev => ({...prev, _special_terms:e.target.value}))}
+                  rows={8} placeholder="특약사항을 입력하세요..."
+                  style={{ width:"100%", padding:"10px 12px", borderRadius:8, border:`1px solid ${T.border}`, fontSize:13, fontFamily:"inherit", outline:"none", resize:"vertical", lineHeight:1.6 }} />
+              </div>
+            )}
+          </div>
+
+          {/* 하단 버튼 */}
+          <div style={{ padding:"12px 20px", borderTop:`1px solid ${T.border}`, flexShrink:0 }}>
+            {!contractSaved ? (
+              <div style={{ display:"flex", gap:8 }}>
+                <button onClick={() => {
+                  // 프론트 미리보기: 새 탭에 간이 HTML
+                  const w = window.open("", "_blank");
+                  if (!w) return;
+                  const ctName = contractTemplate?.contract_name || "계약서";
+                  const buyer = contractFields;
+                  const arts = (contractTemplate?.all_articles || []).map(a => {
+                    const star = a.star ? " ★발주자유리" : "";
+                    const body = (a.body || "").replace(/\n/g, "<br/>");
+                    const cls = a.is_key ? "style='border-left:3px solid #059669;padding-left:12px;'" : "";
+                    return `<div ${cls}><h3>${a.num} [${a.title}]${star}</h3><p>${body}</p></div>`;
+                  }).join("");
+                  w.document.write(`<html><head><meta charset="utf-8"><title>${ctName}</title><style>body{font-family:sans-serif;max-width:800px;margin:40px auto;line-height:1.7;color:#1a1a2e}h1{text-align:center;letter-spacing:6px}h3{margin-top:20px;color:#059669}.party{display:flex;gap:20px;margin:20px 0}.party div{flex:1;padding:12px;border:1px solid #e5e7eb;border-radius:8px}p{font-size:14px}</style></head><body><h1>${ctName.replace("계약서","계 약 서")}</h1><div class="party"><div><b>발주자(갑)</b><br/>상호: ${buyer.buyer_name||""}<br/>대표자: ${buyer.buyer_rep||""}</div><div><b>수주자(을)</b><br/>상호: ${buyer.supplier_name||""}<br/>대표자: ${buyer.supplier_rep||""}</div></div>${arts}${contractFields._special_terms ? `<div style="border-left:3px solid #059669;padding-left:12px"><h3>특약사항</h3><p>${contractFields._special_terms.replace(/\n/g,"<br/>")}</p></div>` : ""}</body></html>`);
+                  w.document.close();
+                }} style={{
+                  flex:1, padding:"12px", borderRadius:T.r10, border:`1px solid ${T.border}`, background:T.card,
+                  color:T.sub, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
+                  display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+                }}>미리보기</button>
+                <button onClick={async () => {
+                  try {
+                    const buyerF = {}; const supplierF = {}; const articleF = {};
+                    Object.entries(contractFields).forEach(([k,v]) => {
+                      if (k.startsWith("buyer_")) buyerF[k] = v;
+                      else if (k.startsWith("supplier_")) supplierF[k] = v;
+                      else if (k === "_special_terms") { /* skip */ }
+                      else articleF[k] = v;
+                    });
+                    const res = await api.saveContract({
+                      session_id: sessionId,
+                      contract_type: contractType,
+                      source_type: "pr",
+                      l3_code: lastClassification?.l3_code,
+                      l4_code: l4Code,
+                      buyer_fields: buyerF,
+                      supplier_fields: supplierF,
+                      article_fields: articleF,
+                      special_terms: contractFields._special_terms || "",
+                      selected_suppliers: [...(l4Suppliers.fixed||[]), ...(l4Suppliers.rotating||[])].filter(s => selectedSupplierIds.has(s.id||s.company)),
+                    });
+                    if (res.ok) {
+                      setContractSaved(true);
+                      setContractRequestId(res.id);
+                      setPhase("contract_complete");
+                      setMessages(prev => [...prev, { id: msgIdCounter++, role: "assistant", text: `**${contractTemplate.contract_name}**가 저장되었습니다.` }]);
+                    }
+                  } catch (e) { console.warn("Contract save failed:", e); }
+                }} style={{
+                  flex:1, padding:"12px", borderRadius:T.r10, border:"none",
+                  background:"linear-gradient(135deg, #059669, #10b981)", color:"#fff",
+                  fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
+                  display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+                  boxShadow:"0 2px 8px rgba(5,150,105,0.3)",
+                }}>저장</button>
+              </div>
+            ) : (
+              <div style={{ display:"flex", gap:8 }}>
+                <button onClick={() => {
+                  const baseUrl = import.meta.env.VITE_API_URL || "https://ip-assist-backend-1058034030780.asia-northeast3.run.app";
+                  if (contractRequestId) window.open(`${baseUrl}/contracts/view/${contractRequestId}`, "_blank");
+                }} style={{
+                  flex:1, padding:"12px", borderRadius:T.r10, border:`1px solid #059669`, background:"rgba(5,150,105,0.04)",
+                  color:"#059669", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
+                  display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+                }}>미리보기</button>
+                <button onClick={() => {
+                  const baseUrl = import.meta.env.VITE_API_URL || "https://ip-assist-backend-1058034030780.asia-northeast3.run.app";
+                  if (contractRequestId) window.open(`${baseUrl}/contracts/view/${contractRequestId}`, "_blank");
+                }} style={{
+                  flex:1, padding:"12px", borderRadius:T.r10, border:`1px solid ${T.border}`, background:T.card,
+                  color:T.sub, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
+                  display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+                }}>PDF 다운로드</button>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

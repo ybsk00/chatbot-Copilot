@@ -14,7 +14,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from app.routers import chat, rfp, knowledge, admin, rfp_view, upload, pr_view, suppliers_l4
+from app.routers import chat, rfp, knowledge, admin, rfp_view, upload, pr_view, suppliers_l4, contract_view
 
 app = FastAPI(
     title="IP Assist API",
@@ -46,6 +46,7 @@ app.include_router(rfp_view.router)
 app.include_router(upload.router)
 app.include_router(pr_view.router)
 app.include_router(suppliers_l4.router)
+app.include_router(contract_view.router)
 
 
 @app.on_event("startup")

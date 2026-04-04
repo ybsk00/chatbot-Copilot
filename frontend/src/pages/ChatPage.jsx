@@ -592,7 +592,13 @@ export default function ChatPage() {
     setL4ScopeType('nationwide');
     setL4ScopeValue(null);
     setSelectedSupplierIds(new Set());
-    setSupplierPanelVisible(true);
+    // PR/RFQ/RFP/계약서 진행 중이면 공급업체 패널 열지 않음 (PR 완료 후 표시)
+    const curPhase = phase;
+    const isDocFilling = curPhase.startsWith("pr_") || curPhase.startsWith("rfq_") ||
+                         curPhase === "filling" || curPhase.startsWith("contract_");
+    if (!isDocFilling) {
+      setSupplierPanelVisible(true);
+    }
     fetchL4Suppliers(l4code);
   };
 

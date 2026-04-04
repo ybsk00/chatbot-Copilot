@@ -516,8 +516,8 @@ export default function ChatPage() {
     ]);
   };
 
-  // ── PR → 계약서 전환 ──
-  const convertPrToContract = async () => {
+  // ── 계약서 전환 (PR/RFQ/RFP 공통) ──
+  const convertToContract = async (source = "pr") => {
     const l3 = lastClassification?.l3_code;
     const ctType = lastClassification?.contract_type;
     try {
@@ -529,26 +529,51 @@ export default function ChatPage() {
         return;
       }
 
-      // PR 필드 → 계약서 필드 자동매핑
       const autoFilled = {};
-      // 발주자 정보
-      autoFilled.buyer_name = prFields.c1?.value || "";
-      autoFilled.buyer_contact = prFields.c3?.value || "";
-      autoFilled.buyer_phone = prFields.c4?.value || "";
-      autoFilled.buyer_email = prFields.c5?.value || "";
-      // 수주자 정보 (선택된 공급업체)
+
+      // ── 소스별 필드 매핑 ──
+      if (source === "pr") {
+        autoFilled.buyer_name = prFields.c1?.value || "";
+        autoFilled.buyer_contact = prFields.c3?.value || "";
+        autoFilled.buyer_phone = prFields.c4?.value || "";
+        autoFilled.buyer_email = prFields.c5?.value || "";
+        // 핵심 조항 pr_map 매핑
+        for (const ka of tpl.key_articles || []) {
+          for (const [fk, fd] of Object.entries(ka.fields || {})) {
+            if (fd.pr_map && prFields[fd.pr_map]?.value) {
+              autoFilled[fk] = prFields[fd.pr_map].value;
+            }
+          }
+        }
+      } else if (source === "rfp") {
+        autoFilled.buyer_name = fields.s1?.value || "";
+        autoFilled.buyer_contact = fields.s3?.value || "";
+        autoFilled.buyer_phone = fields.s4?.value || "";
+        autoFilled.buyer_email = fields.s5?.value || "";
+        // RFP 필드 → 계약서 조항 매핑
+        for (const ka of tpl.key_articles || []) {
+          for (const [fk, fd] of Object.entries(ka.fields || {})) {
+            if (fd.pr_map === "c6" && fields.s6?.value) autoFilled[fk] = fields.s6.value;
+            if (fd.pr_map === "c9" && fields.s9?.value) autoFilled[fk] = fields.s9.value;
+            if (fd.pr_map === "c10" && fields.s10?.value) autoFilled[fk] = fields.s10.value;
+          }
+        }
+      } else if (source === "rfq") {
+        // RFQ는 발주자 정보 없음 → 핵심 조항만 매핑
+        for (const ka of tpl.key_articles || []) {
+          for (const [fk, fd] of Object.entries(ka.fields || {})) {
+            if (fd.pr_map === "c6" && rfqFields.rq1?.value) autoFilled[fk] = rfqFields.rq1.value;
+            if (fd.pr_map === "c10" && rfqFields.rq2?.value) autoFilled[fk] = rfqFields.rq2.value;
+            if (fd.pr_map === "c9" && rfqFields.rq4?.value) autoFilled[fk] = rfqFields.rq4.value;
+          }
+        }
+      }
+
+      // 수주자 정보 (모든 경로 공통 — L4 선택 업체)
       const allSup = [...(l4Suppliers.fixed || []), ...(l4Suppliers.rotating || [])];
       const selSup = allSup.filter(s => selectedSupplierIds.has(s.id || s.company));
       if (selSup.length > 0) {
         autoFilled.supplier_name = selSup[0].company || "";
-      }
-      // 핵심 조항 필드 자동매핑 (pr_map)
-      for (const ka of tpl.key_articles || []) {
-        for (const [fk, fd] of Object.entries(ka.fields || {})) {
-          if (fd.pr_map && prFields[fd.pr_map]?.value) {
-            autoFilled[fk] = prFields[fd.pr_map].value;
-          }
-        }
       }
 
       setContractType(tpl.contract_type);
@@ -559,6 +584,8 @@ export default function ChatPage() {
       setPhase("contract_filling");
       setContractRightVisible(true);
       setPrRightVisible(false);
+      setRightVisible(false);     // RFP 패널 닫기
+      setRfqRightVisible(false);  // RFQ 패널 닫기
 
       // 첫 번째 빈 필드 안내
       const partyKeys = ["buyer_name","buyer_rep","buyer_addr","buyer_brn","supplier_name","supplier_rep","supplier_addr","supplier_brn"];
@@ -570,9 +597,10 @@ export default function ChatPage() {
           || firstEmpty)
         : null;
 
+      const sourceLabel = source === "pr" ? "구매요청서" : source === "rfp" ? "제안요청서(RFP)" : "견적서(RFQ)";
       setMessages(prev => [...prev, {
         id: msgIdCounter++, role: "assistant",
-        text: `구매요청서 내용을 기반으로 **${tpl.contract_name}**를 준비했습니다.\n당사자 정보와 핵심 계약조건을 확인해 주세요.`
+        text: `${sourceLabel} 내용을 기반으로 **${tpl.contract_name}**를 준비했습니다.\n당사자 정보와 핵심 계약조건을 확인해 주세요.`
           + (firstLabel ? `\n\n첫 번째 입력 항목: **${firstLabel}**\n채팅으로 입력하거나 우측 패널에서 직접 입력하세요.` : ""),
       }]);
     } catch (e) {
@@ -2226,6 +2254,22 @@ export default function ChatPage() {
           {emailSent ? <><IconCheck /> 발송 완료</> : <><IconSendMail size={13} /> RFP 발송</>}
         </button>
       </div>
+      {lastClassification?.pr_action !== "blocked" && (
+        <div style={{ marginTop:8, display:"flex", gap:8 }}>
+          <button onClick={() => convertToContract("rfp")} style={{
+            flex:1, padding:"14px", borderRadius: T.r10, border:"none",
+            background: "linear-gradient(135deg, #059669, #10b981)",
+            color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
+            display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+            transition:"all 0.3s", boxShadow: "0 2px 8px rgba(5,150,105,0.3)",
+          }}
+            onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.02)"; }}
+            onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
+          >
+            <span style={{fontSize:14}}>📋</span> 계약서 작성
+          </button>
+        </div>
+      )}
 
       {/* RFP 신청 내역 */}
       {rfpHistory.length > 0 && (
@@ -2808,6 +2852,20 @@ export default function ChatPage() {
             <IconSendMail size={13} /> RFP 전환 (필수)
           </button>
         )}
+        {lastDocType !== "both" && lastClassification?.pr_action !== "blocked" && (
+          <button onClick={() => convertToContract("rfq")} style={{
+            flex:"1 1 100%", padding:"14px", borderRadius: T.r10, border:"none",
+            background: "linear-gradient(135deg, #059669, #10b981)",
+            color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
+            display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+            transition:"all 0.3s", boxShadow: "0 2px 8px rgba(5,150,105,0.3)",
+          }}
+            onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.02)"; }}
+            onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
+          >
+            <span style={{fontSize:14}}>📋</span> 계약서 작성
+          </button>
+        )}
       </div>
       <div style={{ height:20 }} />
     </div>
@@ -3265,7 +3323,7 @@ export default function ChatPage() {
                           {[...(bt.action_buttons || []), ...(isConditional ? ["계약서 작성하기"] : [])].map((btn, i) => (
                             <button key={i} onClick={() => {
                               if (btn === "계약서 작성하기") {
-                                convertPrToContract();
+                                convertToContract();
                                 return;
                               }
                               // L4 옵션이 있으면 공급업체 패널 오픈, 없으면 기존 동작
@@ -3350,7 +3408,7 @@ export default function ChatPage() {
                             ]);
                           }
                         } else if (item === "계약서 작성하기") {
-                          convertPrToContract();
+                          convertToContract();
                         } else {
                           handleSend(item);
                         }
@@ -4010,7 +4068,7 @@ export default function ChatPage() {
                     >
                       <IconDownload size={13} /> RFQ 전환
                     </button>
-                    <button onClick={convertPrToContract} style={{
+                    <button onClick={convertToContract} style={{
                       flex:"1 1 100%", padding:"14px", borderRadius: T.r10,
                       border:"none", background: "linear-gradient(135deg, #059669, #10b981)",
                       color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit",

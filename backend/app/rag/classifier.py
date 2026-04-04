@@ -445,7 +445,25 @@ def _keyword_pre_match(question: str) -> dict | None:
         # 기본 점수가 너무 낮으면 의도 보정해도 신뢰 불가 → 2/3단계로 위임
         return None
 
-    # B) 의도 키워드 보정
+    # B) L3 이름에 질문 핵심어가 직접 포함되면 강력 가산 (3.0)
+    #    "사무실 청소 용역" → "청소·미화 용역" L3 이름에 "청소" 포함 → +3.0
+    #    범용어(용역/서비스/관리/구매 등)는 제외하여 오매칭 방지
+    _NAME_MATCH_STOPWORDS = {"용역", "서비스", "관리", "구매", "계약", "지원",
+                             "대행", "운영", "개발", "시스템", "솔루션", "컨설팅",
+                             "필요합니다", "필요", "하려고", "합니다", "있습니다",
+                             "진행", "서비스가"}
+    _q_tokens = set(q_lower.split()) - _NAME_MATCH_STOPWORDS
+    for code in list(scores.keys()):
+        l3 = cache["l3_map"].get(code)
+        if not l3:
+            continue
+        l3_name_lower = l3.get("name", "").lower()
+        for tok in _q_tokens:
+            if len(tok) >= 2 and tok in l3_name_lower:
+                scores[code] += 3.0
+                break
+
+    # C) 의도 키워드 보정
     for intent_kw, rules in _INTENT_BOOST.items():
         if intent_kw in q_lower:
             for code, _ in list(scores.items()):

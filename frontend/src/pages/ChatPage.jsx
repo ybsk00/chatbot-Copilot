@@ -4081,94 +4081,55 @@ export default function ChatPage() {
                   </div>
                 )}
 
-                {/* ── L4 추천 공급업체 토글 카드 ── */}
-                {(l4Suppliers.fixed.length > 0 || l4Suppliers.rotating.length > 0) && (
-                  <div style={{ padding: '12px 0', marginTop: 12 }}>
-                    <button
-                      onClick={() => setShowSuppliers(prev => !prev)}
-                      style={{
-                        width: '100%', padding: '12px 16px', borderRadius: 10,
-                        border: '1.5px solid rgba(14,165,160,0.2)', background: 'rgba(14,165,160,0.04)',
-                        cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s',
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      }}
-                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(14,165,160,0.08)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'rgba(14,165,160,0.04)'; }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontSize: 14, fontWeight: 700, color: '#0ea5a0' }}>추천 공급업체 보기</span>
-                        <span style={{ fontSize: 11, color: '#64748b' }}>
-                          {[...l4Suppliers.fixed, ...l4Suppliers.rotating].length}개사 · S/A 고정, B/C 롤링
-                        </span>
-                      </div>
-                      <span style={{ fontSize: 12, color: '#94a3b8', transform: showSuppliers ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▼</span>
-                    </button>
-                    {showSuppliers && (
-                      <div style={{ marginTop: 10 }}>
-                        {selectedSupplierIds.size > 0 && (
-                          <div style={{ fontSize: 11, color: '#0ea5a0', fontWeight: 600, marginBottom: 8 }}>
-                            {selectedSupplierIds.size}개 업체 선택됨
+                {/* ── L4 공급업체 추천 (별도 패널 오픈) ── */}
+                {(() => {
+                  const hasSuppliers = l4Suppliers.fixed.length > 0 || l4Suppliers.rotating.length > 0;
+                  const hasL4Options = l4Options.length > 1 && !l4Code;
+                  if (!hasSuppliers && !hasL4Options) return null;
+                  return (
+                    <div style={{ padding: '12px 0', marginTop: 12 }}>
+                      {/* L4 세분류 미선택 → 선택 칩 표시 */}
+                      {hasL4Options && !hasSuppliers && (
+                        <div>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: T.sub, marginBottom: 8 }}>공급업체 추천을 위해 세분류를 선택하세요</div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                            {l4Options.map(opt => (
+                              <button key={opt.code} onClick={() => { handleL4Select(opt.code); setPrRightVisible(false); setSupplierPanelVisible(true); }}
+                                style={{
+                                  padding: '8px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                                  border: '1.5px solid rgba(14,165,160,0.2)', background: 'rgba(14,165,160,0.04)',
+                                  color: '#0ea5a0', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s',
+                                }}
+                                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(14,165,160,0.1)'; }}
+                                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(14,165,160,0.04)'; }}
+                              >{opt.name}</button>
+                            ))}
                           </div>
-                        )}
-                        {[...l4Suppliers.fixed, ...l4Suppliers.rotating].map((s, idx) => {
-                          const sid = s.id || `${s.company}_${idx}`;
-                          const isSelected = selectedSupplierIds.has(sid);
-                          return (
-                            <div key={idx}
-                              onClick={() => {
-                                setSelectedSupplierIds(prev => {
-                                  const next = new Set(prev);
-                                  if (next.has(sid)) next.delete(sid); else next.add(sid);
-                                  return next;
-                                });
-                              }}
-                              style={{
-                                background: isSelected ? 'rgba(14,165,160,0.06)' : '#fff',
-                                borderRadius: 12, padding: '14px 16px', marginBottom: 8,
-                                border: `1.5px solid ${isSelected ? '#0ea5a0' : s.grade === 'S' || s.grade === 'A' ? 'rgba(14,165,160,0.15)' : '#e2e8f0'}`,
-                                boxShadow: '0 1px 3px rgba(0,0,0,0.04)', cursor: 'pointer', transition: 'all 0.15s',
-                              }}
-                            >
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                  <span style={{
-                                    width: 20, height: 20, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    fontSize: 12, fontWeight: 700, border: isSelected ? 'none' : '1.5px solid #cbd5e1',
-                                    background: isSelected ? '#0ea5a0' : '#fff', color: isSelected ? '#fff' : '#94a3b8',
-                                  }}>{isSelected ? '✓' : ''}</span>
-                                  <span style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>{s.company}</span>
-                                </div>
-                                <span style={{
-                                  padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 700,
-                                  color: GRADE_COLORS[s.grade] || '#6B7280', background: GRADE_BG[s.grade] || '#F3F4F6',
-                                }}>{s.grade} {s.grade_label?.split(' ')[0] || ''}</span>
-                              </div>
-                              <div style={{ marginBottom: 6 }}>
-                                {l4Suppliers.eval_criteria.map(c => {
-                                  const score = s[`score_${c.num}`] || 0;
-                                  return (
-                                    <div key={c.num} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                                      <span style={{ fontSize: 9, color: '#94a3b8', width: 90, flexShrink: 0, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{c.name}({c.weight_pct}%)</span>
-                                      <div style={{ flex: 1, height: 5, background: '#f1f5f9', borderRadius: 3, overflow: 'hidden' }}>
-                                        <div style={{ width: `${(score / 5) * 100}%`, height: '100%', borderRadius: 3, background: score >= 4 ? '#10b981' : score >= 3 ? '#f59e0b' : '#ef4444' }} />
-                                      </div>
-                                      <span style={{ fontSize: 9, color: '#64748b', width: 18, textAlign: 'right' }}>{score}</span>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f1f5f9', paddingTop: 6 }}>
-                                <span style={{ fontSize: 11, fontWeight: 700, color: '#0ea5a0' }}>종합 {s.weighted_score}점</span>
-                                {s.revenue_est && <span style={{ fontSize: 10, color: '#94a3b8' }}>{s.revenue_est}</span>}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                    {l4Loading && <div style={{ textAlign: 'center', padding: 20, color: '#94a3b8' }}>로딩 중...</div>}
-                  </div>
-                )}
+                        </div>
+                      )}
+                      {/* L4 선택 완료 → 공급업체 패널 오픈 버튼 */}
+                      {hasSuppliers && (
+                        <button
+                          onClick={() => { setPrRightVisible(false); setSupplierPanelVisible(true); }}
+                          style={{
+                            width: '100%', padding: '14px 16px', borderRadius: 10,
+                            border: '1.5px solid rgba(14,165,160,0.2)', background: 'rgba(14,165,160,0.04)',
+                            cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(14,165,160,0.08)'; e.currentTarget.style.borderColor = '#0ea5a0'; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(14,165,160,0.04)'; e.currentTarget.style.borderColor = 'rgba(14,165,160,0.2)'; }}
+                        >
+                          <span style={{ fontSize: 14, fontWeight: 700, color: '#0ea5a0' }}>추천 공급업체 보기</span>
+                          <span style={{ fontSize: 11, color: '#64748b' }}>
+                            {[...l4Suppliers.fixed, ...l4Suppliers.rotating].length}개사
+                          </span>
+                          <span style={{ fontSize: 12, color: '#0ea5a0' }}>→</span>
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
               </>
             )}
 
@@ -4368,7 +4329,7 @@ export default function ChatPage() {
       )}
 
       {/* ════ RIGHT: 공급업체 추천 패널 (PR 패널과 동일 스타일) ════ */}
-      {supplierPanelVisible && !phase.startsWith("pr_") && !rightVisible && (
+      {supplierPanelVisible && !prRightVisible && !rightVisible && !rfqRightVisible && !contractRightVisible && (
         <div style={{
           width:440, maxWidth:440, height:"85vh",
           display:"flex", flexDirection:"column",

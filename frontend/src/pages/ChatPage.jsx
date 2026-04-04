@@ -627,16 +627,16 @@ export default function ChatPage() {
     }
   };
 
-  const handleL4Select = (l4code) => {
+  const handleL4Select = (l4code, opts = {}) => {
     setL4Code(l4code);
     setL4ScopeType('nationwide');
     setL4ScopeValue(null);
     setSelectedSupplierIds(new Set());
-    // PR/RFQ/RFP/계약서 진행 중이면 공급업체 패널 열지 않음 (PR 완료 후 표시)
+    // PR/RFQ/RFP/계약서 진행 중이거나 PR 진입 직후면 패널 열지 않음
     const curPhase = phase;
     const isDocFilling = curPhase.startsWith("pr_") || curPhase.startsWith("rfq_") ||
                          curPhase === "filling" || curPhase.startsWith("contract_");
-    if (!isDocFilling) {
+    if (!isDocFilling && !opts.suppressPanel) {
       setSupplierPanelVisible(true);
     }
     fetchL4Suppliers(l4code);
@@ -1023,15 +1023,15 @@ export default function ChatPage() {
             if (meta.doc_type_required) setLastDocType(meta.doc_type_required);
             if (meta.rfp_type_hint) setLastRfpTypeHint(meta.rfp_type_hint);
             // PR 진입 경로에서는 L4 자동 선택 차단 (PR 완료 후 공급업체 표시)
+            // L4 메타 레벨 정보 — 데이터 항상 로드, PR 진입 시 패널만 차단
             const isPrEntry = meta.phase_trigger === "pr_agreed";
-            // L4 메타 레벨 정보 (meta 이벤트에 포함)
             if (meta.l4_options && meta.l4_options.length > 0) {
               setL4Options(meta.l4_options);
-              if (!isPrEntry && meta.l4_auto && meta.l4_code) {
-                handleL4Select(meta.l4_code);
+              if (meta.l4_auto && meta.l4_code) {
+                handleL4Select(meta.l4_code, { suppressPanel: isPrEntry });
               }
             }
-            // 분류 결과 저장 (다음 요청의 카테고리 필터용)
+            // 분류 결과 저장
             if (meta.classification) {
               const cls = { ...meta.classification };
               if (meta.bt_routing?.contract_type) cls.contract_type = meta.bt_routing.contract_type;
@@ -1042,8 +1042,8 @@ export default function ChatPage() {
               // L4 세분류 옵션 자동 로드 (classification 내 fallback)
               if (!meta.l4_options && meta.classification.l4_options && meta.classification.l4_options.length > 0) {
                 setL4Options(meta.classification.l4_options);
-                if (!isPrEntry && meta.classification.l4_auto && meta.classification.l4_code) {
-                  handleL4Select(meta.classification.l4_code);
+                if (meta.classification.l4_auto && meta.classification.l4_code) {
+                  handleL4Select(meta.classification.l4_code, { suppressPanel: isPrEntry });
                 }
               }
             }

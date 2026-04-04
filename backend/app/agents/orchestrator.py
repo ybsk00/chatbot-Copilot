@@ -490,7 +490,7 @@ class OrchestratorAgent(AgentBase):
                 yield self._sse("done", {})
                 return
 
-            # 일반 사용자 또는 2A_PR만 → 기존 PR 플로우 (L4는 PR 완료 후 표시)
+            # 일반 사용자 또는 2A_PR만 → 기존 PR 플로우
             yield self._sse("meta", {
                 "sources": [], "rag_score": 0,
                 "phase_trigger": "pr_agreed",
@@ -501,8 +501,9 @@ class OrchestratorAgent(AgentBase):
             yield self._sse("token", {
                 "content": "구매요청서 작성을 진행하겠습니다. 아래에서 구매 카테고리를 선택해 주십시오."
             })
-            # NOTE: pr_agreed 경로에서는 L4 이벤트 발사 안 함
-            # 공급업체 추천은 PR 저장 완료 후 프론트에서 표시
+            # L4 이벤트 발사 (프론트에서 패널 자동 오픈은 차단, 데이터만 로드)
+            for _l4_evt in self._emit_l4_events(ctx):
+                yield _l4_evt
             yield self._sse("done", {})
             return
 
@@ -781,7 +782,8 @@ class OrchestratorAgent(AgentBase):
                 yield self._sse("token", {
                     "content": "구매요청서 작성을 진행하겠습니다. 아래에서 구매 카테고리를 선택해 주십시오."
                 })
-                # NOTE: pr_agreed 경로에서는 L4 이벤트 발사 안 함
+                for _l4_evt in self._emit_l4_events(ctx):
+                    yield _l4_evt
                 yield self._sse("done", {})
                 logger.info(f"[Orchestrator] User auto-branch: pr_agreed (l3={l3_code}, cta={cta})")
                 return
@@ -813,11 +815,9 @@ class OrchestratorAgent(AgentBase):
                 })
                 guide_text = _user_guide if _user_guide else f"**{_l3_name}** 관련 구매를 진행할 수 있습니다."
                 yield self._sse("token", {"content": guide_text})
-                # pr_agreed 경로: L4 이벤트 발사 안 함 (PR 완료 후 표시)
-                # pr_blocked 경로: L4 이벤트 발사 (PR 없이 공급업체 안내)
-                if _pr_act == "blocked":
-                    for _l4_evt in self._emit_l4_events(ctx):
-                        yield _l4_evt
+                # L4 이벤트 항상 발사 (프론트에서 패널 자동 오픈만 차단)
+                for _l4_evt in self._emit_l4_events(ctx):
+                    yield _l4_evt
                 if _pr_act != "blocked":
                     yield self._sse("suggestions", {"items": ["구매요청서 작성하기"]})
                 yield self._sse("done", {})

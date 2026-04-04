@@ -559,9 +559,20 @@ export default function ChatPage() {
       setContractRightVisible(true);
       setPrRightVisible(false);
 
+      // 첫 번째 빈 필드 안내
+      const partyKeys = ["buyer_name","buyer_rep","buyer_addr","buyer_brn","supplier_name","supplier_rep","supplier_addr","supplier_brn"];
+      const artKeys = (tpl.key_articles || []).flatMap(ka => Object.keys(ka.fields || {}));
+      const firstEmpty = [...partyKeys, ...artKeys].find(k => !(autoFilled[k] || "").trim());
+      const firstLabel = firstEmpty
+        ? ((tpl.common_fields || {})[firstEmpty]?.label
+          || (tpl.key_articles || []).flatMap(ka => Object.entries(ka.fields || {})).find(([k]) => k === firstEmpty)?.[1]?.label
+          || firstEmpty)
+        : null;
+
       setMessages(prev => [...prev, {
         id: msgIdCounter++, role: "assistant",
         text: `구매요청서 내용을 기반으로 **${tpl.contract_name}**를 준비했습니다.\n당사자 정보와 핵심 계약조건을 확인해 주세요.`
+          + (firstLabel ? `\n\n첫 번째 입력 항목: **${firstLabel}**\n채팅으로 입력하거나 우측 패널에서 직접 입력하세요.` : ""),
       }]);
     } catch (e) {
       console.warn("Contract template load failed:", e);
@@ -811,6 +822,42 @@ export default function ChatPage() {
     });
 
     try {
+      if (phase === "contract_filling") {
+        // ── 계약서 필드 채팅 입력: 패널의 빈 필드에 순차 매핑 ──
+        // 1) 당사자 필드 중 빈 것 찾기
+        const partyKeys = ["buyer_name","buyer_rep","buyer_addr","buyer_brn","supplier_name","supplier_rep","supplier_addr","supplier_brn"];
+        // 2) 핵심 조항 필드 중 빈 것 찾기
+        const articleKeys = (contractTemplate?.key_articles || []).flatMap(ka => Object.keys(ka.fields || {}));
+        const allContractKeys = [...partyKeys, ...articleKeys];
+        const emptyKey = allContractKeys.find(k => !(contractFields[k] || "").trim());
+
+        if (emptyKey) {
+          // 빈 필드에 매핑
+          setContractFields(prev => ({ ...prev, [emptyKey]: text }));
+          const label = (contractTemplate?.common_fields || {})[emptyKey]?.label
+            || (contractTemplate?.key_articles || []).flatMap(ka => Object.entries(ka.fields || {})).find(([k]) => k === emptyKey)?.[1]?.label
+            || emptyKey;
+          // 다음 빈 필드 찾기
+          const nextEmpty = allContractKeys.find(k => k !== emptyKey && !(contractFields[k] || "").trim() && k !== emptyKey);
+          const nextLabel = nextEmpty
+            ? ((contractTemplate?.common_fields || {})[nextEmpty]?.label
+              || (contractTemplate?.key_articles || []).flatMap(ka => Object.entries(ka.fields || {})).find(([k]) => k === nextEmpty)?.[1]?.label
+              || nextEmpty)
+            : null;
+          setMessages(prev => [...prev, {
+            id: msgIdCounter++, role: "assistant",
+            text: `**${label}** 항목에 "${text}"을(를) 입력했습니다.` + (nextLabel ? `\n\n다음 입력 항목: **${nextLabel}**\n채팅으로 입력하거나 우측 패널에서 직접 입력하세요.` : "\n\n모든 항목이 입력되었습니다. 우측 패널에서 확인 후 저장하세요."),
+          }]);
+          if (!contractRightVisible) setContractRightVisible(true);
+        } else {
+          setMessages(prev => [...prev, {
+            id: msgIdCounter++, role: "assistant",
+            text: "모든 계약서 항목이 입력되었습니다. 우측 패널에서 내용을 확인하고 저장하세요.",
+          }]);
+        }
+        setIsTyping(false);
+        return;
+      }
       if (phase === "pr_filling" && activePrFieldKey) {
         // ── 자율답변 모드: 특정 필드에 직접 매핑 (백엔드 호출 없이 정확도 100%) ──
         const fieldLabel = prFields[activePrFieldKey]?.label || activePrFieldKey;

@@ -946,10 +946,12 @@ export default function ChatPage() {
             // doc_type_required 저장 (소싱담당자 분기용)
             if (meta.doc_type_required) setLastDocType(meta.doc_type_required);
             if (meta.rfp_type_hint) setLastRfpTypeHint(meta.rfp_type_hint);
+            // PR 진입 경로에서는 L4 자동 선택 차단 (PR 완료 후 공급업체 표시)
+            const isPrEntry = meta.phase_trigger === "pr_agreed";
             // L4 메타 레벨 정보 (meta 이벤트에 포함)
             if (meta.l4_options && meta.l4_options.length > 0) {
               setL4Options(meta.l4_options);
-              if (meta.l4_auto && meta.l4_code) {
+              if (!isPrEntry && meta.l4_auto && meta.l4_code) {
                 handleL4Select(meta.l4_code);
               }
             }
@@ -964,7 +966,7 @@ export default function ChatPage() {
               // L4 세분류 옵션 자동 로드 (classification 내 fallback)
               if (!meta.l4_options && meta.classification.l4_options && meta.classification.l4_options.length > 0) {
                 setL4Options(meta.classification.l4_options);
-                if (meta.classification.l4_auto && meta.classification.l4_code) {
+                if (!isPrEntry && meta.classification.l4_auto && meta.classification.l4_code) {
                   handleL4Select(meta.classification.l4_code);
                 }
               }

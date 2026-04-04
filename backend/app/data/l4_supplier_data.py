@@ -60,10 +60,18 @@ class L4SupplierStore:
                     "name": entry.name,
                 })
 
-            # supplier_eval_weights
-            res2 = sb.table("supplier_eval_weights").select("*").eq("is_active", True).execute()
+            # supplier_eval_weights (1175개 → 기본 limit 1000 초과, 페이지네이션)
+            all_weights = []
+            offset = 0
+            while True:
+                batch = sb.table("supplier_eval_weights").select("*").eq("is_active", True).range(offset, offset + 999).execute()
+                all_weights.extend(batch.data or [])
+                if len(batch.data or []) < 1000:
+                    break
+                offset += 1000
+            res2_data = all_weights
             self.eval_weights: dict[str, list[EvalCriterion]] = {}
-            for row in res2.data:
+            for row in res2_data:
                 self.eval_weights.setdefault(row["l4_code"], []).append(
                     EvalCriterion(
                         num=row["criterion_num"],

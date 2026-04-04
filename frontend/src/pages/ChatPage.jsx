@@ -2253,23 +2253,21 @@ export default function ChatPage() {
         >
           {emailSent ? <><IconCheck /> 발송 완료</> : <><IconSendMail size={13} /> RFP 발송</>}
         </button>
-      </div>
-      {lastClassification?.pr_action !== "blocked" && (
-        <div style={{ marginTop:8, display:"flex", gap:8 }}>
+        {lastClassification?.pr_action !== "blocked" && (
           <button onClick={() => convertToContract("rfp")} style={{
             flex:1, padding:"14px", borderRadius: T.r10, border:"none",
-            background: "linear-gradient(135deg, #059669, #10b981)",
+            background: T.gradPrimary,
             color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
             display:"flex", alignItems:"center", justifyContent:"center", gap:6,
-            transition:"all 0.3s", boxShadow: "0 2px 8px rgba(5,150,105,0.3)",
+            transition:"all 0.3s", boxShadow: T.shadowBlue,
           }}
             onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.02)"; }}
             onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
           >
-            <span style={{fontSize:14}}>📋</span> 계약서 작성
+            <span style={{fontSize:13}}>📋</span> 계약서 작성
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* RFP 신청 내역 */}
       {rfpHistory.length > 0 && (
@@ -2854,16 +2852,16 @@ export default function ChatPage() {
         )}
         {lastDocType !== "both" && lastClassification?.pr_action !== "blocked" && (
           <button onClick={() => convertToContract("rfq")} style={{
-            flex:"1 1 100%", padding:"14px", borderRadius: T.r10, border:"none",
-            background: "linear-gradient(135deg, #059669, #10b981)",
+            flex:1, padding:"14px", borderRadius: T.r10, border:"none",
+            background: T.gradPrimary,
             color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
             display:"flex", alignItems:"center", justifyContent:"center", gap:6,
-            transition:"all 0.3s", boxShadow: "0 2px 8px rgba(5,150,105,0.3)",
+            transition:"all 0.3s", boxShadow: T.shadowBlue,
           }}
             onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.02)"; }}
             onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
           >
-            <span style={{fontSize:14}}>📋</span> 계약서 작성
+            <span style={{fontSize:13}}>📋</span> 계약서 작성
           </button>
         )}
       </div>

@@ -8,6 +8,7 @@ import { PR_TO_RFP_MAPPING, getPrToRfpMapping } from "../data/fieldMapping";
 import { CATEGORY_FIELD_OPTIONS, getCategoryGroup } from "../data/categoryFieldOptions";
 import { downloadRfpPdf } from "../utils/rfpExport";
 import { downloadPrPdf } from "../utils/prExport";
+import { downloadContractPdf } from "../utils/contractExport";
 import { previewRfq, downloadRfqPdf } from "../utils/rfqExport";
 // BackgroundBlobs 제거 — 업무마켓9 임베드 시 외부 배경 불필요
 
@@ -4918,8 +4919,7 @@ export default function ChatPage() {
                   onMouseLeave={e => { e.currentTarget.style.background = "rgba(14,165,160,0.04)"; }}
                 ><IconPreview size={14} /> 미리보기</button>
                 <button onClick={() => {
-                  const baseUrl = import.meta.env.VITE_API_URL || "https://ip-assist-backend-1058034030780.asia-northeast3.run.app";
-                  if (contractRequestId) window.open(`${baseUrl}/contracts/view/${contractRequestId}`, "_blank");
+                  if (contractTemplate) downloadContractPdf(contractFields, contractTemplate);
                 }} style={{
                   flex:"1 1 45%", padding:"12px", borderRadius: T.r10,
                   border:`1px solid ${T.border}`, background: T.card,

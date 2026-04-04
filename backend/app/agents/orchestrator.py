@@ -887,8 +887,8 @@ class OrchestratorAgent(AgentBase):
             **_l4_meta,
         })
 
-        # L4 공급업체 추천 이벤트 (RAG 답변 경로에서도 emit)
-        if l3_code:
+        # L4 공급업체 추천 이벤트 — 소싱담당자 제외 (RFQ/RFP→계약서 직행)
+        if l3_code and ctx.user_role != "procurement":
             for evt in self._emit_l4_events(ctx):
                 yield evt
 

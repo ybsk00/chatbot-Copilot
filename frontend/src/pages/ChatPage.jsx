@@ -635,7 +635,8 @@ export default function ChatPage() {
     // PR/RFQ/RFP/계약서 진행 중이거나 PR 진입 직후면 패널 열지 않음
     const curPhase = phase;
     const isDocFilling = curPhase.startsWith("pr_") || curPhase.startsWith("rfq_") ||
-                         curPhase === "filling" || curPhase.startsWith("contract_");
+                         curPhase === "filling" || curPhase.startsWith("contract_") ||
+                         curPhase.startsWith("rfp_");
     if (!isDocFilling && !opts.suppressPanel) {
       setSupplierPanelVisible(true);
     }
@@ -983,7 +984,8 @@ export default function ChatPage() {
             ));
           },
           (meta) => {
-            // L4 전용 SSE 이벤트 처리
+            // L4 전용 SSE 이벤트 처리 — 소싱담당자는 공급업체 추천 불필요 (RFQ/RFP→계약서 직행)
+            if (meta._l4_event && userRoleRef.current === "procurement") return;
             if (meta._l4_event === "l4_select") {
               setL4Options(meta.options || []);
               // AI 안내 메시지 추가
@@ -1022,13 +1024,14 @@ export default function ChatPage() {
             // doc_type_required 저장 (소싱담당자 분기용)
             if (meta.doc_type_required) setLastDocType(meta.doc_type_required);
             if (meta.rfp_type_hint) setLastRfpTypeHint(meta.rfp_type_hint);
-            // PR 진입 경로에서는 L4 자동 선택 차단 (PR 완료 후 공급업체 표시)
-            // L4 메타 레벨 정보 — 데이터 항상 로드, PR 진입 시 패널만 차단
-            const isPrEntry = meta.phase_trigger === "pr_agreed";
-            if (meta.l4_options && meta.l4_options.length > 0) {
+            // 소싱담당자는 L4/공급업체 추천 완전 스킵 (RFQ/RFP→계약서 직행)
+            const isProcurement = userRoleRef.current === "procurement";
+            // PR/RFQ/RFP 진입 시 패널 자동 오픈 차단
+            const isDocEntry = ["pr_agreed", "rfq_agreed", "rfp_agreed"].includes(meta.phase_trigger);
+            if (!isProcurement && meta.l4_options && meta.l4_options.length > 0) {
               setL4Options(meta.l4_options);
               if (meta.l4_auto && meta.l4_code) {
-                handleL4Select(meta.l4_code, { suppressPanel: isPrEntry });
+                handleL4Select(meta.l4_code, { suppressPanel: isDocEntry });
               }
             }
             // 분류 결과 저장
@@ -1039,11 +1042,11 @@ export default function ChatPage() {
               if (meta.classification.rfp_type) {
                 setRecommendedRfp(meta.classification.rfp_type);
               }
-              // L4 세분류 옵션 자동 로드 (classification 내 fallback)
-              if (!meta.l4_options && meta.classification.l4_options && meta.classification.l4_options.length > 0) {
+              // L4 세분류 옵션 자동 로드 (classification 내 fallback) — 소싱담당자 제외
+              if (!isProcurement && !meta.l4_options && meta.classification.l4_options && meta.classification.l4_options.length > 0) {
                 setL4Options(meta.classification.l4_options);
                 if (meta.classification.l4_auto && meta.classification.l4_code) {
-                  handleL4Select(meta.classification.l4_code, { suppressPanel: isPrEntry });
+                  handleL4Select(meta.classification.l4_code, { suppressPanel: isDocEntry });
                 }
               }
             }
@@ -4329,7 +4332,7 @@ export default function ChatPage() {
       )}
 
       {/* ════ RIGHT: 공급업체 추천 패널 (PR 패널과 동일 스타일) ════ */}
-      {supplierPanelVisible && !prRightVisible && !rightVisible && !rfqRightVisible && !contractRightVisible && (
+      {supplierPanelVisible && userRole !== "procurement" && !prRightVisible && !rightVisible && !rfqRightVisible && !contractRightVisible && (
         <div style={{
           width:440, maxWidth:440, height:"85vh",
           display:"flex", flexDirection:"column",

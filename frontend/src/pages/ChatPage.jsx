@@ -274,6 +274,10 @@ export default function ChatPage() {
   const [rfqRequestId, setRfqRequestId]     = useState(null);
   const [dbRfqTemplates, setDbRfqTemplates] = useState(null);
   const [activeRfqFieldKey, setActiveRfqFieldKey] = useState(null);  // RFQ 자율답변 대상 필드
+  const [activeRfpFieldKey, setActiveRfpFieldKey] = useState(null);  // RFP 자율답변 대상 필드
+  const [rfpUserFilledKeys, setRfpUserFilledKeys] = useState(new Set());
+  const [rfpFillingTurns, setRfpFillingTurns] = useState(0);
+  const [rfpManualClosed, setRfpManualClosed] = useState(false);
   const [lastDocType, setLastDocType]       = useState(null);  // "rfq_only"|"rfp_only"|"both"|"none"
   const [lastRfpTypeHint, setLastRfpTypeHint] = useState(null);  // RFP 유형 힌트
   // L4 공급업체 추천
@@ -312,6 +316,14 @@ export default function ChatPage() {
   const total  = Object.keys(fields).length;
   const pct    = total > 0 ? Math.round(filled / total * 100) : 0;
 
+  // RFP 사용자 채움 추적 (PR/RFQ와 동일 패턴: 30%/3턴 자동오픈)
+  const RFP_SKIP_KEYS_CALC = new Set(["s1","s2","s3","s4","s5"]); // 발주기관 정보 제외
+  const RFP_AUTO_OPEN_PCT = 30;
+  const rfpRequiredFields = Object.entries(fields).filter(([k]) => !RFP_SKIP_KEYS_CALC.has(k));
+  const rfpRequiredTotal = rfpRequiredFields.length;
+  const rfpUserFilledPct = rfpRequiredTotal > 0
+    ? Math.round(rfpRequiredFields.filter(([k]) => rfpUserFilledKeys.has(k)).length / rfpRequiredTotal * 100) : 0;
+
   // PR 계산 — 필수 필드 기준 (c1~c5 제외: 추후 시스템 연동으로 자동 입력)
   const currentPrTemplate = prType ? getPrTemplate(prType) : null;
   const currentPrSections = currentPrTemplate?.sections || [];
@@ -343,6 +355,15 @@ export default function ChatPage() {
       }
     }
   }, [prUserFilledPct, prFillingTurns, phase, prRightVisible, prManualClosed]);
+
+  // RFP 패널 자동 오픈: 30% 이상 또는 3턴 이상 (PR/RFQ와 동일)
+  useEffect(() => {
+    if (phase === "filling" && !rightVisible && !rfpManualClosed) {
+      if (rfpUserFilledPct >= RFP_AUTO_OPEN_PCT || rfpFillingTurns >= 3) {
+        setRightVisible(true);
+      }
+    }
+  }, [rfpUserFilledPct, rfpFillingTurns, phase, rightVisible, rfpManualClosed]);
 
   // PR 패널 "작성 완료" 버튼 핸들러
   const handlePrManualComplete = () => {
@@ -400,6 +421,7 @@ export default function ChatPage() {
     if (!fills || !Object.keys(fills).length) return;
     const keys = new Set(Object.keys(fills));
     setJustFilled(keys);
+    setRfpUserFilledKeys(prev => new Set([...prev, ...Object.keys(fills)]));
     setFields(prev => {
       const next = { ...prev };
       Object.entries(fills).forEach(([k,v]) => {
@@ -771,17 +793,24 @@ export default function ChatPage() {
       templateFields[k] = { ...v };
     });
     setFields(templateFields);
-    setRightVisible(true);
-    setRfqRightVisible(false);  // RFQ 패널 닫기
-    setPrRightVisible(false);   // PR 패널 닫기
+    setRightVisible(false);      // 대화로 수집 후 30%/3턴 자동오픈 (PR/RFQ 동일)
+    setRfqRightVisible(false);
+    setPrRightVisible(false);
+    setRfpUserFilledKeys(new Set());
+    setRfpFillingTurns(0);
+    setRfpManualClosed(false);
+    setActiveRfpFieldKey(null);
     setPhase("filling");
 
     const tmpl = RFP_TEMPLATES[type];
-    const icon = RFP_TYPE_ICONS[type];
     setMessages(prev => [
       ...prev,
       { id: msgIdCounter++, role: "user", text: tmpl.label },
-      { id: msgIdCounter++, role: "assistant", text: `${tmpl.label} 제안요청서 작성을 시작하겠습니다.\n먼저 발주기관 정보를 알려주십시오.\n기관명, 담당부서, 담당자, 연락처, 이메일이 필요합니다.` }
+      {
+        id: msgIdCounter++, role: "assistant",
+        text: `${tmpl.label} 제안요청서 작성을 시작합니다.\n아래 항목들을 확인하시고, 채팅으로 내용을 알려주시면 자동으로 채워드립니다.`,
+        rfpQuickFill: true,
+      }
     ]);
   };
 
@@ -956,17 +985,32 @@ export default function ChatPage() {
           }
         }
       } else if (phase === "filling") {
-        const data = await api.chat(sessionId, text, null, history, phase, getFilledFields(), rfpType);
-        if (data.rfp_fields && Object.keys(data.rfp_fields).length > 0) {
-          applyFills(data.rfp_fields);
-        }
-        setMessages(prev => [...prev, {
-          id: msgIdCounter++, role: "assistant",
-          text: data.answer, sources: data.sources,
-          rag_score: data.rag_score, trigger: data.phase_trigger,
-        }]);
-        if (data.phase_trigger === "complete") {
-          setTimeout(() => setPhase("complete"), 800);
+        // RFP 자율답변 모드: activeRfpFieldKey가 있으면 직접 매핑 (PR/RFQ 동일)
+        if (activeRfpFieldKey && fields[activeRfpFieldKey]) {
+          applyFills({ [activeRfpFieldKey]: text });
+          setRfpFillingTurns(prev => prev + 1);
+          const fieldLabel = fields[activeRfpFieldKey]?.label || activeRfpFieldKey;
+          setActiveRfpFieldKey(null);
+          setMessages(prev => [...prev, {
+            id: msgIdCounter++, role: "assistant",
+            text: `**${fieldLabel}** 입력 완료. 다음 항목을 입력해 주세요.`,
+            rfpInlineTabs: true,
+          }]);
+        } else {
+          setRfpFillingTurns(prev => prev + 1);
+          const data = await api.chat(sessionId, text, null, history, phase, getFilledFields(), rfpType);
+          if (data.rfp_fields && Object.keys(data.rfp_fields).length > 0) {
+            applyFills(data.rfp_fields);
+          }
+          setMessages(prev => [...prev, {
+            id: msgIdCounter++, role: "assistant",
+            text: data.answer, sources: data.sources,
+            rag_score: data.rag_score, trigger: data.phase_trigger,
+            rfpInlineTabs: true,
+          }]);
+          if (data.phase_trigger === "complete") {
+            setTimeout(() => setPhase("complete"), 800);
+          }
         }
       } else {
         const aiMsgId = msgIdCounter++;
@@ -2313,6 +2357,111 @@ export default function ChatPage() {
   const rfqTotal = Object.values(rfqFields).filter(f => f.zone !== "supplier").length;
   const rfqPct = rfqTotal > 0 ? Math.round(rfqFilled / rfqTotal * 100) : 0;
 
+  // ── RFP 인라인 탭/퀵필 (PR/RFQ와 동일 패턴) ──
+  const RFP_SKIP_KEYS = new Set(["s1","s2","s3","s4","s5"]); // 발주기관 정보 → 인라인탭 제외
+
+  const renderRfpInlineTabs = () => {
+    if (!rfpType || !fields || Object.keys(fields).length === 0) return null;
+    const unconfirmed = Object.entries(fields)
+      .filter(([k, f]) => !RFP_SKIP_KEYS.has(k) && !rfpUserFilledKeys.has(k));
+    if (unconfirmed.length === 0) return null;
+    const withOpts = unconfirmed.filter(([k, f]) => getRfpFieldOptions(k, f).length > 0);
+    const [fk, f] = withOpts.length > 0 ? withOpts[0] : unconfirmed[0];
+    const opts = getRfpFieldOptions(fk, f);
+    const currentVal = (f.value || "").trim();
+    return (
+      <div style={{ marginTop:10 }}>
+        <div style={{ fontSize:10, fontWeight:600, color: T.sub, marginBottom:6 }}>
+          다음 항목을 입력해 주세요 ({unconfirmed.length}개 남음)
+        </div>
+        <div style={{ background:"rgba(6,182,212,0.04)", border:"1px solid rgba(6,182,212,0.12)", borderRadius:10, padding:"8px 12px" }}>
+          <div style={{ fontSize:11, fontWeight:700, color: T.primary, marginBottom:5, display:"flex", alignItems:"center", gap:4 }}>
+            {f.label}
+            {currentVal && <span style={{ fontSize:10, fontWeight:500, color: T.sub, marginLeft:"auto" }}>현재: {currentVal}</span>}
+          </div>
+          <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
+            {opts.map((opt, i) => (
+              <button key={i} onMouseDown={(e) => {
+                e.preventDefault(); e.stopPropagation();
+                applyFills({ [fk]: opt });
+                setRfpFillingTurns(prev => prev + 1);
+                setMessages(prev => [...prev, { id: msgIdCounter++, role:"assistant", text:`**${f.label}**: ${opt}`, rfpInlineTabs:true, isQuickFillConfirm:true }]);
+              }} style={{
+                padding:"5px 11px", borderRadius:14, fontSize:11, fontWeight:600,
+                border:`1px solid ${opt===currentVal ? T.primary : "rgba(6,182,212,0.2)"}`,
+                background: opt===currentVal ? "rgba(14,165,160,0.1)" : "rgba(255,255,255,0.8)",
+                color: opt===currentVal ? T.primary : T.text,
+                cursor:"pointer", fontFamily:"inherit", transition:"all 0.15s",
+              }}
+                onMouseEnter={e => { e.currentTarget.style.background="rgba(6,182,212,0.1)"; e.currentTarget.style.borderColor=T.primary; }}
+                onMouseLeave={e => { e.currentTarget.style.background=opt===currentVal?"rgba(14,165,160,0.1)":"rgba(255,255,255,0.8)"; e.currentTarget.style.borderColor=opt===currentVal?T.primary:"rgba(6,182,212,0.2)"; }}
+              >{opt}</button>
+            ))}
+            <button onMouseDown={(e) => {
+              e.preventDefault(); e.stopPropagation();
+              setActiveRfpFieldKey(fk);
+              inputRef.current?.focus();
+            }} style={{
+              padding:"5px 11px", borderRadius:14, fontSize:11, fontWeight:600,
+              border:`1px dashed ${activeRfpFieldKey===fk ? T.primary : "rgba(100,116,139,0.3)"}`,
+              background: activeRfpFieldKey===fk ? "rgba(14,165,160,0.08)" : "transparent",
+              color: activeRfpFieldKey===fk ? T.primary : T.muted,
+              cursor:"pointer", fontFamily:"inherit", transition:"all 0.15s",
+            }}>직접 입력</button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderRfpQuickFillCards = () => {
+    if (!rfpType || !fields || Object.keys(fields).length === 0) return null;
+    const unfilledFields = Object.entries(fields)
+      .filter(([k, f]) => !RFP_SKIP_KEYS.has(k) && !(f.value || "").trim());
+    if (unfilledFields.length === 0) return null;
+    const withOpts = unfilledFields.filter(([k, f]) => getRfpFieldOptions(k, f).length > 0);
+    const [fk, f] = withOpts.length > 0 ? withOpts[0] : unfilledFields[0];
+    const opts = getRfpFieldOptions(fk, f);
+    return (
+      <div style={{ marginTop:12 }}>
+        <div style={{ fontSize:10, color: T.sub, marginBottom:6 }}>필수 항목 {unfilledFields.length}개 남음</div>
+        <div style={{ background:"rgba(6,182,212,0.04)", border:"1px solid rgba(6,182,212,0.12)", borderRadius:10, padding:"10px 14px" }}>
+          <div style={{ fontSize:11, fontWeight:700, color: T.primary, marginBottom:6, display:"flex", alignItems:"center", gap:4 }}>
+            {f.label}
+          </div>
+          <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+            {opts.map((opt, i) => (
+              <button key={i} onMouseDown={(e) => {
+                e.preventDefault(); e.stopPropagation();
+                applyFills({ [fk]: opt });
+                setRfpFillingTurns(prev => prev + 1);
+                setMessages(prev => [...prev, { id: msgIdCounter++, role:"assistant", text:`**${f.label}**: ${opt}`, rfpInlineTabs:true, isQuickFillConfirm:true }]);
+              }} style={{
+                padding:"6px 12px", borderRadius:16, fontSize:11, fontWeight:600,
+                border:"1px solid rgba(6,182,212,0.2)", background:"rgba(255,255,255,0.8)",
+                color: T.text, cursor:"pointer", fontFamily:"inherit", transition:"all 0.15s",
+              }}
+                onMouseEnter={e => { e.currentTarget.style.background="rgba(6,182,212,0.1)"; e.currentTarget.style.borderColor=T.primary; }}
+                onMouseLeave={e => { e.currentTarget.style.background="rgba(255,255,255,0.8)"; e.currentTarget.style.borderColor="rgba(6,182,212,0.2)"; }}
+              >{opt}</button>
+            ))}
+            <button onMouseDown={(e) => {
+              e.preventDefault(); e.stopPropagation();
+              setActiveRfpFieldKey(fk);
+              inputRef.current?.focus();
+            }} style={{
+              padding:"6px 12px", borderRadius:16, fontSize:11, fontWeight:600,
+              border:`1px dashed ${activeRfpFieldKey===fk ? T.primary : "rgba(100,116,139,0.3)"}`,
+              background: activeRfpFieldKey===fk ? "rgba(14,165,160,0.08)" : "transparent",
+              color: activeRfpFieldKey===fk ? T.primary : T.muted,
+              cursor:"pointer", fontFamily:"inherit", transition:"all 0.15s",
+            }}>직접 입력</button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // RFQ 완성도 계산 — rq1~rq5 제외 (PR의 c1~c5 제외와 동일 패턴: 추후 시스템 연동으로 자동 입력)
   const RFQ_SKIP_KEYS_CALC = new Set(["rq1","rq2","rq3","rq4","rq5"]);
   const rfqRequiredFilled = Object.entries(rfqFields).filter(([k, f]) => f.zone !== "supplier" && f.required !== false && !RFQ_SKIP_KEYS_CALC.has(k) && (f.value || "").trim()).length;
@@ -3475,6 +3624,12 @@ export default function ChatPage() {
 
                 {/* PR 인라인 탭 — 마지막 prQuickFill/prInlineTabs 메시지에만 표시 (퀵필카드도 인라인탭으로 통일) */}
                 {(msg.prQuickFill || msg.prInlineTabs) && phase === "pr_filling" && mi === messages.findLastIndex(m => m.prQuickFill || m.prInlineTabs) && renderPrInlineTabs()}
+
+                {/* RFP 퀵필 카드 — 마지막 rfpQuickFill 메시지에만 표시 */}
+                {msg.rfpQuickFill && phase === "filling" && mi === messages.findLastIndex(m => m.rfpQuickFill) && renderRfpQuickFillCards()}
+
+                {/* RFP 인라인 탭 — 마지막 rfpInlineTabs 메시지에만 표시 */}
+                {msg.rfpInlineTabs && phase === "filling" && mi === messages.findLastIndex(m => m.rfpInlineTabs) && renderRfpInlineTabs()}
 
                 {/* RFP 유형 선택 카드 */}
                 {msg.rfpTypeSelect && !rfpType && renderRfpTypeSelector()}

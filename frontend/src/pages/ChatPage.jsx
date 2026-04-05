@@ -1070,12 +1070,13 @@ export default function ChatPage() {
             if (meta.rfp_type_hint) setLastRfpTypeHint(meta.rfp_type_hint);
             // 소싱담당자는 L4/공급업체 추천 완전 스킵 (RFQ/RFP→계약서 직행)
             const isProcurement = userRoleRef.current === "procurement";
-            // PR/RFQ/RFP 진입 시 패널 자동 오픈 차단
+            // L4 자동 선택 시 패널 억제: 문서 진입 OR chat 단계 (사용자 클릭만 패널 오픈)
             const isDocEntry = ["pr_agreed", "rfq_agreed", "rfp_agreed"].includes(meta.phase_trigger);
+            const suppressL4Panel = isDocEntry || !meta.phase_trigger; // chat 단계(phase_trigger=null)도 억제
             if (!isProcurement && meta.l4_options && meta.l4_options.length > 0) {
               setL4Options(meta.l4_options);
               if (meta.l4_auto && meta.l4_code) {
-                handleL4Select(meta.l4_code, { suppressPanel: isDocEntry });
+                handleL4Select(meta.l4_code, { suppressPanel: suppressL4Panel });
               }
             }
             // 분류 결과 저장
@@ -1090,7 +1091,7 @@ export default function ChatPage() {
               if (!isProcurement && !meta.l4_options && meta.classification.l4_options && meta.classification.l4_options.length > 0) {
                 setL4Options(meta.classification.l4_options);
                 if (meta.classification.l4_auto && meta.classification.l4_code) {
-                  handleL4Select(meta.classification.l4_code, { suppressPanel: isDocEntry });
+                  handleL4Select(meta.classification.l4_code, { suppressPanel: suppressL4Panel });
                 }
               }
             }

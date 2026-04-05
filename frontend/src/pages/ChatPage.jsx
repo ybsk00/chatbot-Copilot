@@ -3479,6 +3479,42 @@ export default function ChatPage() {
                                 convertToContract();
                                 return;
                               }
+                              // 카탈로그/주관부서 버튼: 안내 메시지 표시
+                              const _dept = bt.dept && bt.dept !== "—" ? bt.dept : "";
+                              const _l3Name = msg.classification?.l3_name || btn;
+                              if (b1 === "A_카탈로그직접발주") {
+                                setMessages(prev => [...prev,
+                                  { id: msgIdCounter++, role: "user", text: btn },
+                                  { id: msgIdCounter++, role: "assistant",
+                                    text: `**${_l3Name}** 카탈로그 발주가 접수되었습니다.\nBSM 시스템 → ${_dept || "총무팀"} 메뉴 → **${btn}**에서 수량을 선택하고 발주를 완료해 주세요.\n\n단가계약 품목으로 별도 승인 없이 자동 처리됩니다.` },
+                                ]);
+                                return;
+                              }
+                              if (b1 === "B_주관부서신청") {
+                                setMessages(prev => [...prev,
+                                  { id: msgIdCounter++, role: "user", text: btn },
+                                  { id: msgIdCounter++, role: "assistant",
+                                    text: `**${_l3Name}** 신청이 ${_dept || "담당부서"}로 전달되었습니다.\nBSM 시스템 → ${_dept || "담당부서"} 메뉴에서 **${btn}** 신청을 진행해 주세요.\n\n${_dept ? `${_dept}에서 검토 후 처리됩니다.` : "주관부서에서 검토 후 처리됩니다."}` },
+                                ]);
+                                return;
+                              }
+                              // 유사품 추천 / URL 구매대행
+                              if (btn === "유사품 추천") {
+                                setMessages(prev => [...prev,
+                                  { id: msgIdCounter++, role: "user", text: btn },
+                                  { id: msgIdCounter++, role: "assistant",
+                                    text: `**${_l3Name}**과 유사한 품목을 확인 중입니다.\n같은 카테고리 내 대체 가능한 품목이 있으면 안내드리겠습니다.` },
+                                ]);
+                                return;
+                              }
+                              if (btn === "URL 구매대행 요청") {
+                                setMessages(prev => [...prev,
+                                  { id: msgIdCounter++, role: "user", text: btn },
+                                  { id: msgIdCounter++, role: "assistant",
+                                    text: "구매대행 요청을 위해 **구매 희망 URL**을 입력해 주세요.\n외부 쇼핑몰 URL을 입력하시면 구매대행 절차를 안내드립니다." },
+                                ]);
+                                return;
+                              }
                               // L4 옵션이 있으면 공급업체 패널 오픈, 없으면 기존 동작
                               if (l4Options.length > 0 || l4Suppliers.fixed.length > 0 || l4Suppliers.rotating.length > 0) {
                                 setSupplierPanelVisible(true);

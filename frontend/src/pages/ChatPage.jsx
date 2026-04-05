@@ -2300,7 +2300,9 @@ export default function ChatPage() {
         >
           {emailSent ? <><IconCheck /> 발송 완료</> : <><IconSendMail size={13} /> RFP 발송</>}
         </button>
-        {lastClassification?.pr_action !== "blocked" && (
+      </div>
+      {lastClassification?.pr_action !== "blocked" && (
+        <div style={{ marginTop:8, display:"flex", gap:8 }}>
           <button onClick={() => convertToContract("rfp")} style={{
             flex:1, padding:"14px", borderRadius: T.r10, border:"none",
             background: T.gradPrimary,
@@ -2313,8 +2315,8 @@ export default function ChatPage() {
           >
             <span style={{fontSize:13}}>📋</span> 계약서 작성
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* RFP 신청 내역 */}
       {rfpHistory.length > 0 && (
